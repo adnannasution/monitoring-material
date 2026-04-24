@@ -867,6 +867,255 @@ def delete_order(row_id: int, request: Request):
     return {"ok": True}
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# TRACKING — JOIN semua tabel di PostgreSQL, 1 baris per taex
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking")
+def get_tracking(request: Request,
+                 page: int = 1, limit: int = 100,
+                 q: str = "", status: str = "",
+                 plant: str = "", order_by: str = "t.id",
+                 order_dir: str = "ASC"):
+    check_api_key(request)
+
+    limit  = min(5000, max(1, limit))
+    page   = max(1, page)
+    offset = (page - 1) * limit
+
+    # ── WHERE ──
+    conds, params = [], []
+
+    if q:
+        conds.append("""(
+            t.material ILIKE %s OR t.material_description ILIKE %s
+            OR t."order" ILIKE %s OR t.equipment ILIKE %s
+            OR t.pr ILIKE %s OR po.po ILIKE %s
+            OR t.reservno ILIKE %s
+        )""")
+        p = f"%{q}%"; params.extend([p]*7)
+
+    if plant:
+        conds.append("t.plant = %s"); params.append(plant)
+
+    # Status filter — dihitung setelah JOIN
+    status_cond = ""
+    if status == "no-pr":
+        status_cond = "AND (t.pr IS NULL OR t.pr = '')"
+    elif status == "pr-created":
+        status_cond = "AND (t.pr IS NOT NULL AND t.pr != '') AND (po.po IS NULL OR po.po = '')"
+    elif status == "po-created":
+        status_cond = "AND (po.po IS NOT NULL AND po.po != '') AND COALESCE(po_agg.qty_delivered, 0) = 0"
+    elif status == "partial":
+        status_cond = "AND COALESCE(po_agg.qty_delivered, 0) > 0 AND COALESCE(po_agg.qty_delivered, 0) < COALESCE(po_agg.po_quantity, 0)"
+    elif status == "complete":
+        status_cond = "AND COALESCE(po_agg.qty_delivered, 0) >= COALESCE(po_agg.po_quantity, 0) AND COALESCE(po_agg.po_quantity, 0) > 0"
+
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+
+    # ── SAFE SORT ──
+    safe_cols = {
+        "t.id","t.plant","t.equipment","t.order","t.reservno","t.revision",
+        "t.material","t.itm","t.material_description","t.qty_reqmts",
+        "t.qty_stock","t.pr","t.qty_pr","t.reqmts_date",
+        "wo.description","wo.basic_start_date","wo.basic_finish_date",
+    }
+    safe_ob  = order_by if order_by in safe_cols else "t.id"
+    safe_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
+
+    # ── MAIN QUERY ──
+    # PO diagregasi per purchreq supaya 1 baris taex = 1 baris hasil
+    sql_base = f"""
+        FROM taex_reservasi t
+        LEFT JOIN work_order wo
+               ON wo."order" = t."order"
+        LEFT JOIN sap_pr sp
+               ON sp.pr = t.pr
+              AND (sp.d IS NULL OR sp.d = '')
+        LEFT JOIN LATERAL (
+            SELECT
+                po.po,
+                po.po_item,
+                po.doc_date,
+                po.deliv_date,
+                po.crcy,
+                SUM(po.po_quantity)   AS po_quantity,
+                SUM(po.qty_delivered) AS qty_delivered,
+                SUM(po.net_price)     AS net_price
+            FROM sap_po po
+            WHERE po.purchreq = t.pr
+              AND (po.d IS NULL OR po.d = '')
+            GROUP BY po.po, po.po_item, po.doc_date, po.deliv_date, po.crcy
+            ORDER BY po.po LIMIT 1
+        ) po_agg ON true
+        {where}
+        {status_cond}
+    """
+
+    count_sql = f"SELECT COUNT(*) AS c {sql_base}"
+    count_res = query(count_sql, params)
+    total = int(count_res[0]["c"])
+
+    data_sql = f"""
+        SELECT
+            t.id,
+            t.plant,         t.equipment,      t."order"          AS order_val,
+            t.reservno,      t.revision,        t.material,
+            t.itm,           t.material_description,
+            t.qty_reqmts,    t.qty_stock,
+            t.pr,            t.item             AS pr_item,
+            t.qty_pr,
+            t.cost_ctrs,     t.sloc,
+            t.del,           t.fis,             t.ict,             t.pg,
+            t.recipient,     t.unloading_point, t.reqmts_date,
+            t.qty_f_avail_check, t.qty_withdrawn,
+            t.uom,           t.gl_acct,
+            t.res_price,     t.res_per,         t.res_curr,
+            -- Work Order
+            wo.description,  wo.superior_order, wo.notification,
+            wo.created_on,   wo.system_status,  wo.user_status,
+            wo.funct_location, wo.location,     wo.wbs_ord_header,
+            wo.cost_center,  wo.total_plan_cost, wo.total_act_cost,
+            wo.planner_group, wo.main_work_ctr,
+            wo.entry_by,     wo.changed_by,
+            wo.basic_start_date, wo.basic_finish_date, wo.actual_release,
+            -- SAP PR
+            sp.req_date,
+            -- PO (aggregated)
+            po_agg.po           AS po_num,
+            po_agg.po_item,
+            po_agg.doc_date,
+            po_agg.deliv_date,
+            po_agg.crcy,
+            po_agg.po_quantity,
+            po_agg.qty_delivered,
+            po_agg.net_price
+        {sql_base}
+        ORDER BY {safe_ob} {safe_dir}
+        LIMIT %s OFFSET %s
+    """
+
+    rows = query(data_sql, params + [limit, offset])
+
+    def calc_status(r):
+        has_pr  = bool(r.get("pr"))
+        has_po  = bool(r.get("po_num"))
+        qty_po  = float(r.get("po_quantity") or 0)
+        qty_del = float(r.get("qty_delivered") or 0)
+        if not has_pr:             return "no-pr"
+        if not has_po:             return "pr-created"
+        if qty_del <= 0:           return "po-created"
+        if qty_del < qty_po:       return "partial"
+        return "complete"
+
+    data = []
+    for r in rows:
+        st = calc_status(r)
+        data.append({
+            # ── TA-ex ──
+            "ID":                  r["id"],
+            "Plant":               r["plant"],
+            "Equipment":           r["equipment"],
+            "Order":               r["order_val"],
+            "Reservno":            r["reservno"],
+            "Revision":            r["revision"],
+            "Material":            r["material"],
+            "Itm":                 r["itm"],
+            "Material_Description":r["material_description"],
+            "Qty_Reqmts":          _n(r["qty_reqmts"]),
+            "Qty_Stock":           _n(r["qty_stock"]),
+            "PR":                  r["pr"],
+            "PR_Item":             r["pr_item"],
+            "Qty_PR":              _n(r["qty_pr"]),
+            "Cost_Ctrs":           r["cost_ctrs"],
+            "SLoc":                r["sloc"],
+            "Del":                 r["del"],
+            "FIs":                 r["fis"],
+            "Ict":                 r["ict"],
+            "PG":                  r["pg"],
+            "Recipient":           r["recipient"],
+            "Unloading_point":     r["unloading_point"],
+            "Reqmts_Date":         r["reqmts_date"],
+            "Qty_f_avail_check":   _n(r["qty_f_avail_check"]),
+            "Qty_Withdrawn":       _n(r["qty_withdrawn"]),
+            "UoM":                 r["uom"],
+            "GL_Acct":             r["gl_acct"],
+            "Res_Price":           _n(r["res_price"]),
+            "Res_per":             _n(r["res_per"]),
+            "Res_Curr":            r["res_curr"],
+            # ── Work Order ──
+            "Description":         r["description"],
+            "Superior_Order":      r["superior_order"],
+            "Notification":        r["notification"],
+            "Created_On":          str(r["created_on"]) if r["created_on"] else None,
+            "System_Status":       r["system_status"],
+            "User_Status":         r["user_status"],
+            "FunctLocation":       r["funct_location"],
+            "Location":            r["location"],
+            "WBS_Ord_header":      r["wbs_ord_header"],
+            "CostCenter":          r["cost_center"],
+            "Total_Plan_Cost":     _n(r["total_plan_cost"]),
+            "Total_Act_Cost":      _n(r["total_act_cost"]),
+            "Planner_Group":       r["planner_group"],
+            "MainWorkCtr":         r["main_work_ctr"],
+            "Entry_by":            r["entry_by"],
+            "Changed_by":          r["changed_by"],
+            "Basic_start_date":    r["basic_start_date"],
+            "Basic_finish_date":   r["basic_finish_date"],
+            "Actual_Release":      r["actual_release"],
+            # ── SAP PR ──
+            "Req_Date":            r["req_date"],
+            # ── PO ──
+            "PO_num":              r["po_num"],
+            "PO_Item":             r["po_item"],
+            "Doc_Date":            r["doc_date"],
+            "Deliv_Date":          r["deliv_date"],
+            "Crcy":                r["crcy"],
+            "PO_Quantity":         _n(r["po_quantity"]),
+            "Qty_Delivered":       _n(r["qty_delivered"]),
+            "Net_Price":           _n(r["net_price"]),
+            # ── Status ──
+            "_status":             st,
+        })
+
+    # ── Summary counts ──
+    summary_sql = f"""
+        SELECT
+            COUNT(*)                                                       AS total,
+            COUNT(DISTINCT t."order")                                      AS total_orders,
+            SUM(CASE WHEN t.pr IS NOT NULL AND t.pr!='' THEN 1 ELSE 0 END) AS has_pr,
+            SUM(CASE WHEN po_agg.po IS NOT NULL AND po_agg.po!='' THEN 1 ELSE 0 END) AS has_po,
+            SUM(CASE WHEN COALESCE(po_agg.qty_delivered,0)>0
+                      AND COALESCE(po_agg.qty_delivered,0)<COALESCE(po_agg.po_quantity,0)
+                     THEN 1 ELSE 0 END)                                    AS partial,
+            SUM(CASE WHEN COALESCE(po_agg.qty_delivered,0)>=COALESCE(po_agg.po_quantity,0)
+                      AND COALESCE(po_agg.po_quantity,0)>0
+                     THEN 1 ELSE 0 END)                                    AS complete,
+            SUM(CASE WHEN t.pr IS NULL OR t.pr='' THEN 1 ELSE 0 END)      AS no_pr,
+            COALESCE(SUM(po_agg.net_price),0)                             AS total_nilai
+        {sql_base}
+    """
+    summary_res = query(summary_sql, params)
+    s = summary_res[0] if summary_res else {}
+
+    return jsonify({
+        "data": data,
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+        },
+        "summary": {
+            "total":        int(s.get("total") or 0),
+            "totalOrders":  int(s.get("total_orders") or 0),
+            "hasPR":        int(s.get("has_pr") or 0),
+            "hasPO":        int(s.get("has_po") or 0),
+            "partial":      int(s.get("partial") or 0),
+            "complete":     int(s.get("complete") or 0),
+            "noPR":         int(s.get("no_pr") or 0),
+            "totalNilai":   float(s.get("total_nilai") or 0),
+        },
+    })
+
 # ═══════════════════════════════════════════════════════════════
 # AUDIT — server-side JOIN taex vs prisma
 # ═══════════════════════════════════════════════════════════════

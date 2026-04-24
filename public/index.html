@@ -700,7 +700,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <select id="pr-filterOrder"><option value="">Semua</option></select>
     <button class="btn btn-search" onclick="prismaReservasiApplyFilter()">Cari</button>
     <button class="btn btn-reset" onclick="prismaReservasiResetFilter()">Reset</button>
-    <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Get from TA-ex</button>
+    <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Sinkron ke TA-ex</button>
     <button class="btn btn-warning" onclick="openKertasKerjaModal()" style="margin-left:8px">📝 Buat Kertas Kerja</button>
     <button class="btn btn-export" onclick="exportPrismaExcel()" style="margin-left:4px">📤 Export Excel</button>
     <button class="col-toggle-btn" onclick="toggleColPanel('prisma')" style="margin-left:4px">⚙ Kolom</button>
@@ -727,8 +727,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <label><input type="checkbox" data-tab="prisma" data-col="15" onchange="applyColVisibility('prisma')"> Reqmts Date</label>
     <label><input type="checkbox" data-tab="prisma" data-col="16" onchange="applyColVisibility('prisma')" checked> Qty Reqmts</label>
     <label><input type="checkbox" data-tab="prisma" data-col="17" onchange="applyColVisibility('prisma')"> UoM</label>
-    <label><input type="checkbox" data-tab="prisma" data-col="18" onchange="applyColVisibility('prisma')" checked> PR</label>
-    <label><input type="checkbox" data-tab="prisma" data-col="19" onchange="applyColVisibility('prisma')"> Item</label>
+    <label><input type="checkbox" data-tab="prisma" data-col="18" onchange="applyColVisibility('prisma')" checked> PR Prisma</label>
+    <label><input type="checkbox" data-tab="prisma" data-col="19" onchange="applyColVisibility('prisma')"> Item Prisma</label>
     <label><input type="checkbox" data-tab="prisma" data-col="20" onchange="applyColVisibility('prisma')" checked> Qty Stock Onhand</label>
     <label><input type="checkbox" data-tab="prisma" data-col="21" onchange="applyColVisibility('prisma')" checked> Qty dari PR</label>
     <label><input type="checkbox" data-tab="prisma" data-col="22" onchange="applyColVisibility('prisma')" checked> Code Kertas Kerja</label>
@@ -738,7 +738,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <div class="empty-icon">📋</div>
     <h3>Belum ada data Reservasi</h3>
     <p>Klik tombol di bawah untuk mengambil data dari TA-ex Reservasi.</p>
-    <button class="btn btn-purple" onclick="syncWithTaex()" style="padding:8px 24px;font-size:13px">🔄 Get from TA-ex Reservasi</button>
+    <button class="btn btn-purple" onclick="syncWithTaex()" style="padding:8px 24px;font-size:13px">🔄 Sinkron dari TA-ex Reservasi</button>
   </div>
   <div class="table-container" id="pr-table-wrap" style="display:none">
   <div class="table-wrap">
@@ -1652,9 +1652,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
           <label>Planner Group</label>
           <select id="kk-pg-type" onchange="kkOnPGTypeChange()">
             <option value="">-- Pilih Planner Group --</option>
-            <option value="TA">TA</option>
-            <option value="OH">OH</option>
-            <option value="Rutin">Rutin</option>
+            <option value="TA">TA &nbsp;(PG akhiran T)</option>
+            <option value="OH">OH &nbsp;(PG akhiran O)</option>
+            <option value="Rutin">Rutin &nbsp;(PG akhiran R)</option>
             <option value="All">All &nbsp;(Semua PG)</option>
           </select>
         </div>
@@ -2096,7 +2096,7 @@ function switchApp(app) {
   renderPage(app);
 }
 
-function renderAll() { renderTaex(); fetchAndRenderPrisma(); renderKK(); renderSummary(); renderKumpulan(); renderSAP(); renderOrder(); renderPo(); renderTracking(); }
+function renderAll() { renderTaex(); fetchAndRenderPrisma(); renderKK(); renderSummary(); renderKumpulan(); renderSAP(); renderOrder(); renderPo(); fetchAndRenderTracking(); }
 function renderPage(app) {
   if (app==='taex') renderTaex();
   else if (app==='prisma-reservasi') { if (!prFiltered.length) fetchAndRenderPrisma(); }
@@ -2106,7 +2106,7 @@ function renderPage(app) {
   else if (app==='pr') { if (!sapFiltered.length) fetchAndRenderSAP(); }
   else if (app==='order') renderOrder();
   else if (app==='po') { if (!poFiltered.length) fetchAndRenderPo(); }
-  else if (app==='tracking') renderTracking();
+  else if (app==='tracking') fetchAndRenderTracking();
   else if (app==='audit') fetchAndRenderAudit();
 }
 
@@ -4101,13 +4101,14 @@ function setTrkView(mode) {
   renderTracking();
 }
 
-function trkSort(key) { setSort('trk', key); renderTracking(); }
-function trkApplyFilter() { resetPg('trk'); renderTracking(); }
+function trkSort(key) { setSort('trk', key); fetchAndRenderTracking(); }
+function trkApplyFilter() { resetPg('trk'); fetchAndRenderTracking(); }
 function trkResetFilter() {
   document.getElementById('trk-search').value = '';
   document.getElementById('trk-filterStatus').value = '';
   document.getElementById('trk-filterPlant').value = '';
-  renderTracking();
+  resetPg('trk');
+  fetchAndRenderTracking();
 }
 
 // ── STATUS LOGIC ──
@@ -4154,37 +4155,43 @@ function buildTrackingData() {
   const orderMap = {};
   state.orderData.forEach(o => { if (o.Order) orderMap[String(o.Order)] = o; });
 
+  // PR: map by nomor PR (untuk enrich data PR dari taex.PR)
   const prMap = {};
   state.prData.forEach(p => { if (p.PR) prMap[String(p.PR)] = p; });
 
+  // PO: map by Purchreq (= nomor PR di taex) — filter baris PO yang D kosong saja
   const poMap = {};
   state.poData.forEach(p => {
-    if (p.Purchreq) {
+    if (p.Purchreq && (!p.D || String(p.D).trim() === '')) {
       const k = String(p.Purchreq);
       if (!poMap[k]) poMap[k] = [];
       poMap[k].push(p);
     }
   });
 
-  const hasVal = v => v !== null && v !== undefined && String(v).trim() !== '';
+  // PR: filter hanya PR yang D kosong (aktif)
+  const prMapActive = {};
+  state.prData.forEach(p => {
+    if (p.PR && (!p.D || String(p.D).trim() === '')) prMapActive[String(p.PR)] = p;
+  });
 
   const rows = taexFiltered
     .filter(t => t.Material && String(t.Material).trim() !== '')
     .map(t => {
       const orderKey = String(t.Order || '');
       const prKey    = String(t.PR    || '');
-      const ord = orderMap[orderKey] || {};
-      const pr  = prMap[prKey]       || {};
-      const pos = poMap[prKey]       || [];
-      const po  = pos[0]             || {};
+      const ord = orderMap[orderKey]       || {};
+      // Pakai prMapActive untuk enrich — kalau PR ada tapi D terisi, tetap muncul tapi tanpa enrich PR
+      const pr  = prMapActive[prKey]       || prMap[prKey] || {};
+      const pos = poMap[prKey]             || [];
+      const po  = pos[0]                   || {};
 
-      // Filter: D pada PR atau PO tidak boleh ada isian
-      if (hasVal(pr.D)) return null;
-      if (pos.some(p => hasVal(p.D))) return null;
+      // JANGAN filter/skip baris — semua baris taex harus muncul di tracking
+      // Baris tanpa PR = status "Belum PR", baris tanpa PO = status "PR Created", dst
 
-      const totalDelivered = pos.reduce((s, p) => s + (p.Qty_Delivered || 0), 0);
-      const totalPOQty     = pos.reduce((s, p) => s + (p.PO_Quantity   || 0), 0);
-      const totalNetPrice  = pos.reduce((s, p) => s + (p.Net_Price     || 0), 0);
+      const totalDelivered = pos.reduce((s, p) => s + (Number(p.Qty_Delivered) || 0), 0);
+      const totalPOQty     = pos.reduce((s, p) => s + (Number(p.PO_Quantity)   || 0), 0);
+      const totalNetPrice  = pos.reduce((s, p) => s + (Number(p.Net_Price)     || 0), 0);
 
       const enriched = {
         // ── TA-ex (semua kolom, preferensi TA-ex untuk overlap) ──
@@ -4200,7 +4207,7 @@ function buildTrackingData() {
         Qty_Stock:          t.Qty_Stock,
         PR:                 t.PR || '',
         PR_Item:            t.Item || '',
-        Qty_PR:             pr.Qty_PR ?? t.Qty_PR ?? null,
+        Qty_PR:             t.Qty_PR ?? null,  // dari taex langsung (sudah per baris, bukan summary PR)
         Cost_Ctrs:          t.Cost_Ctrs || '',
         SLoc:               t.SLoc || '',
         Del:                t.Del || '',
@@ -4299,43 +4306,66 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-function renderTracking() {
-  const q      = (document.getElementById('trk-search').value || '').toLowerCase();
-  const fStat  = document.getElementById('trk-filterStatus').value;
-  const fPlant = document.getElementById('trk-filterPlant').value;
+let trkServerMeta = { total:0, page:1, totalPages:1, limit:100 };
+let trkServerData  = [];
+let trkSummary     = {};
 
-  const allRows = buildTrackingData();
+async function fetchAndRenderTracking() {
+  const q      = (document.getElementById('trk-search')?.value || '').trim();
+  const fStat  = document.getElementById('trk-filterStatus')?.value || '';
+  const fPlant = document.getElementById('trk-filterPlant')?.value || '';
+  const pg     = getPg('trk');
+  const sort   = getSort('trk');
 
-  // Populate plant filter
-  const plantSel = document.getElementById('trk-filterPlant');
-  const curPlant = plantSel.value;
-  const plants   = [...new Set(allRows.map(r => r.Plant).filter(Boolean))].sort();
-  plantSel.innerHTML = '<option value="">Semua</option>' + plants.map(p => `<option value="${p}" ${p===curPlant?'selected':''}>${p}</option>`).join('');
-
-  // Filter items
-  let filtered = allRows.filter(r => {
-    const mq = !q || Object.values(r).some(v => v && String(v).toLowerCase().includes(q));
-    const ms = !fStat  || r._status === fStat;
-    const mp = !fPlant || r.Plant   === fPlant;
-    return mq && ms && mp;
+  const params = new URLSearchParams({
+    page:      pg.page,
+    limit:     pg.size,
+    q,
+    status:    fStat,
+    plant:     fPlant,
+    order_by:  sort.key  || 't.id',
+    order_dir: sort.dir  || 'ASC',
   });
 
-  // Update summary cards
-  updateTrackingCards(allRows);
-
-  // Sort flat rows
-  trkFiltered = applySort(filtered, 'trk');
-
   const tbody = document.getElementById('trk-tbody');
-  if (!trkFiltered.length) {
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat data tracking...</td></tr>';
+
+  try {
+    const res = await apiFetch(`/tracking?${params}`);
+    trkServerData = res.data || [];
+    trkServerMeta = res.pagination || trkServerMeta;
+    trkSummary    = res.summary    || {};
+
+    // Update cards
+    updateTrackingCards(trkSummary);
+
+    // Populate plant filter
+    const plantSel = document.getElementById('trk-filterPlant');
+    if (plantSel && !plantSel.dataset.populated) {
+      // Ambil distinct plant dari data yang masuk
+      const plants = [...new Set(trkServerData.map(r => r.Plant).filter(Boolean))].sort();
+      const curPlant = plantSel.value;
+      plantSel.innerHTML = '<option value="">Semua</option>' + plants.map(p =>
+        `<option value="${p}" ${p===curPlant?'selected':''}>${p}</option>`).join('');
+    }
+
+    renderTracking();
+  } catch(e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat tracking: ${e.message}</td></tr>`;
+  }
+}
+
+function renderTracking() {
+  // Gunakan data dari server (fetchAndRenderTracking)
+  const rows = trkServerData;
+  const tbody = document.getElementById('trk-tbody');
+
+  if (!rows.length) {
     tbody.innerHTML = '<tr class="loading-row"><td colspan="58">Tidak ada data tracking. Pastikan data TA-ex, Order, PR, dan PO sudah diupload.</td></tr>';
     document.getElementById('trk-rowCount').textContent = '0 item';
-    renderPagination('trk-pagination','trk',0,1,1,100,renderTracking);
+    renderPagination('trk-pagination','trk',0,1,1,100,fetchAndRenderTracking);
     return;
   }
-
-  const pg   = paginate(trkFiltered, 'trk');
-  const rows = pg.rows;
   const html = [];
 
   rows.forEach(item => {
@@ -4403,8 +4433,11 @@ function renderTracking() {
   });
 
   tbody.innerHTML = html.join('');
-  document.getElementById('trk-rowCount').textContent = trkFiltered.length + ' item';
-  renderPagination('trk-pagination','trk',pg.total,pg.page,pg.totalPages,pg.size,renderTracking);
+  document.getElementById('trk-rowCount').textContent = (trkServerMeta.total || rows.length) + ' item';
+  renderPagination('trk-pagination','trk',
+    trkServerMeta.total, trkServerMeta.page,
+    trkServerMeta.totalPages, trkServerMeta.limit,
+    fetchAndRenderTracking);
   reapplyColAfterRender('trk');
 }
 
@@ -4419,27 +4452,35 @@ function toggleTrkL2(l2key) {
   renderTracking();
 }
 
-function updateTrackingCards(rows) {
-  const orders   = [...new Set(rows.map(r => r.Order).filter(Boolean))];
-  const hasPR    = rows.filter(r => r.PR).length;
-  const hasPO    = rows.filter(r => r.PO).length;
-  const partial  = rows.filter(r => r._status === 'partial').length;
-  const complete = rows.filter(r => r._status === 'complete').length;
-  const noPR     = rows.filter(r => r._status === 'no-pr').length;
-  const totalNilai = rows.reduce((s, r) => s + (r.Net_Price || 0), 0);
+function updateTrackingCards(summary) {
+  // Terima summary object dari server { total, totalOrders, hasPR, hasPO, partial, complete, noPR, totalNilai }
+  // Fallback ke array jika dipanggil dengan rows (backward compat)
+  let s = summary;
+  if (Array.isArray(summary)) {
+    s = {
+      total:       summary.length,
+      totalOrders: [...new Set(summary.map(r => r.Order).filter(Boolean))].length,
+      hasPR:       summary.filter(r => r.PR).length,
+      hasPO:       summary.filter(r => r.PO_num || r.PO).length,
+      partial:     summary.filter(r => r._status === 'partial').length,
+      complete:    summary.filter(r => r._status === 'complete').length,
+      noPR:        summary.filter(r => r._status === 'no-pr').length,
+      totalNilai:  summary.reduce((acc, r) => acc + (r.Net_Price || 0), 0),
+    };
+  }
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('trk-total-order',    orders.length);
-  set('trk-total-material', rows.length);
-  set('trk-total-pr',       hasPR);
-  set('trk-total-po',       hasPO);
-  set('trk-total-partial',  partial);
-  set('trk-total-complete', complete);
-  set('trk-total-noPR',     noPR);
-  set('trk-total-nilai',    'Rp ' + totalNilai.toLocaleString('id-ID'));
+  set('trk-total-order',    s.totalOrders  || 0);
+  set('trk-total-material', s.total        || 0);
+  set('trk-total-pr',       s.hasPR        || 0);
+  set('trk-total-po',       s.hasPO        || 0);
+  set('trk-total-partial',  s.partial      || 0);
+  set('trk-total-complete', s.complete     || 0);
+  set('trk-total-noPR',     s.noPR         || 0);
+  set('trk-total-nilai',    'Rp ' + (s.totalNilai || 0).toLocaleString('id-ID'));
 }
 
 function exportTrackingExcel() {
-  const rows = buildTrackingData();
+  const rows = trkServerData;
   if (!rows.length) { toast('Tidak ada data untuk diekspor', 'err'); return; }
   const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
     Plant:                r.Plant||'',
