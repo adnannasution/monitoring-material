@@ -3277,18 +3277,15 @@ async function submitPR() {
   showLoading('Sinkronisasi PR dari SAP PR...', true);
   setSyncStatus('loading', '⏳ Sinkronisasi PR ke server...');
   try {
-    // Gunakan endpoint server-side — tidak return data taex, tab TA-ex tidak terganggu
+    // Endpoint server-side: update kumpulan + prisma + taex di DB, tidak return semua data taex
     const res = await apiFetch('/kumpulan/sync-pr', { method: 'POST', body: {} });
 
     if (!res.ok) throw new Error(res.msg || 'Gagal sinkron');
 
-    // Update state kumpulan dari response server (bukan seluruh taex)
+    // Update state kumpulan dari response server
     if (res.kumpulanData) {
       state.kumpulanData = res.kumpulanData;
     }
-
-    // Invalidate prisma cache supaya re-fetch saat pindah tab
-    invalidatePrismaCache();
 
     hideLoading();
     closeModal('modal-pr');
@@ -3297,9 +3294,15 @@ async function submitPR() {
     setSyncStatus('ok', `✅ Singkron PR selesai · ${matchCount} material diupdate · ${new Date().toLocaleTimeString('id-ID')}`);
     toast(`Singkron PR selesai! ${matchCount} material diupdate.`, 'ok');
 
-    // Render ulang kumpulan saja — JANGAN fetchAndRenderTaex()
     populateFilters();
-    renderKumpulan();
+
+    // Refresh semua tab yang terpengaruh secara paralel — tanpa reset pagination
+    // fetchAndRenderTaex() hanya fetch halaman yang sedang aktif (tidak load semua)
+    await Promise.all([
+      fetchAndRenderKumpulan(),  // tab kumpulan: tampilkan data terbaru
+      fetchAndRenderTaex(),      // tab taex: refresh halaman aktif saja (PR, Item, Qty_PR terupdate)
+      fetchAndRenderPrisma(),    // tab prisma: PR_Prisma, Item_Prisma terupdate
+    ]);
 
   } catch(e) {
     hideLoading();
