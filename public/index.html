@@ -2932,13 +2932,15 @@ async function syncWithTaex() {
   const isIctL = v => v && String(v).trim() === 'L';
 
   const eligible = allTaex.filter(r => {
-    if (hasX(r.Del) || hasX(r.FIs)) return false; // rule 1: Del atau FIs ada X → skip
-    if (!isIctL(r.Ict)) return false;              // rule 2: Ict bukan 'L' → skip
+    if (hasX(r.Del) || hasX(r.FIs)) return false;      // rule 1: Del atau FIs ada X → skip
+    if (!isIctL(r.Ict)) return false;                  // rule 2: Ict bukan 'L' → skip
+    if (!r.Qty_Reqmts || Number(r.Qty_Reqmts) <= 0) return false; // rule 3: Qty_Reqmts = 0 → skip
     return true;
   });
 
-  const skippedX   = allTaex.filter(r => hasX(r.Del) || hasX(r.FIs)).length;
-  const skippedIct = allTaex.filter(r => !hasX(r.Del) && !hasX(r.FIs) && !isIctL(r.Ict)).length;
+  const skippedX    = allTaex.filter(r => hasX(r.Del) || hasX(r.FIs)).length;
+  const skippedIct  = allTaex.filter(r => !hasX(r.Del) && !hasX(r.FIs) && !isIctL(r.Ict)).length;
+  const skippedQty  = allTaex.filter(r => !hasX(r.Del) && !hasX(r.FIs) && isIctL(r.Ict) && (!r.Qty_Reqmts || Number(r.Qty_Reqmts) <= 0)).length;
 
   if (!eligible.length) {
     toast(`Tidak ada data yang memenuhi syarat (Del/FIs bukan X dan Ict=L)`, 'err');
@@ -3013,12 +3015,13 @@ async function syncWithTaex() {
     if (delFisUpdated > 0)   msg += ` · ${delFisUpdated} Del/FIs diupdate`;
     if (skippedX > 0)        msg += ` · ${skippedX} diskip (Del/FIs=X)`;
     if (skippedIct > 0)      msg += ` · ${skippedIct} diskip (Ict≠L)`;
+    if (skippedQty > 0)      msg += ` · ${skippedQty} diskip (Qty=0)`;
     if (skippedExisting > 0) msg += ` · ${skippedExisting} diskip (sudah ada)`;
     setSyncStatus('ok', msg + ` · ${new Date().toLocaleTimeString('id-ID')}`);
     let toastMsg = `Sinkronisasi selesai! ${newRows.length} baris baru ditambahkan`;
     if (delFisUpdated > 0)   toastMsg += `, ${delFisUpdated} Del/FIs diupdate`;
     if (skippedExisting > 0) toastMsg += `, ${skippedExisting} sudah ada dilewati`;
-    if (skippedX + skippedIct > 0) toastMsg += `, ${skippedX+skippedIct} diskip aturan`;
+    if (skippedX + skippedIct + skippedQty > 0) toastMsg += `, ${skippedX+skippedIct+skippedQty} diskip aturan`;
     toast(toastMsg + '.', 'ok');
   } catch(e) {
     hideLoading();
@@ -3270,60 +3273,34 @@ function openPRModal() {
 
 async function submitPR() {
   if (!state.prData.length) { toast('Belum ada data SAP PR!', 'err'); return; }
-  showLoading('Memuat data PRISMA...', true);
-  try { await ensurePrismaLoaded(); } catch(e) { hideLoading(); return; }
-  hideLoading();
-
-  // Cocokkan prData ke kumpulanData by Material + Tracking
-  let matchCount = 0;
-  state.kumpulanData = state.kumpulanData.map(k => {
-    const prItem = state.prData.find(p => p.Material === k.Material && (p.TrackingNo === k.CodeTracking || p.Tracking === k.CodeTracking));
-    if (prItem) { matchCount++; return { ...k, Qty_PR: prItem.Qty_PR, Qty_To_PR: Math.max(0,(k.Qty_Req||0)-(k.Qty_Stock||0)-(prItem.Qty_PR||0)) }; }
-    return k;
-  });
-
-  if (!matchCount) { toast('Tidak ada material yang cocok untuk disinkron!', 'err'); return; }
-
-  // Update prismaReservasi dengan nomor PR dari SAP PR
-  state.prismaReservasiData = state.prismaReservasiData.map(r => {
-    const prItem = state.prData.find(p => p.Material === r.Material && (p.TrackingNo === r.CodeKertasKerja || p.Tracking === r.CodeKertasKerja));
-    if (prItem) return { ...r, PR_Prisma: prItem.PR, Item_Prisma: prItem.Item, Qty_PR_Prisma: prItem.Qty_PR };
-    return r;
-  });
-
-  // Update taex dengan nomor PR dari prismaReservasi — hanya halaman saat ini di-update lokal
-  // Server akan di-update via apiPut dengan data dari prisma yang sudah di-sync
-  const updatedTaexPage = (state.taexCurrentPage || []).map(tr => {
-    const matchingRows = state.prismaReservasiData.filter(r => r.Order===tr.Order && r.Material===tr.Material && r.PR_Prisma);
-    const match = matchingRows.find(r => r.Itm === tr.Itm) || matchingRows[0];
-    if (match) return {
-      ...tr,
-      PR: match.PR_Prisma,
-      Item: match.Item_Prisma,
-      Qty_PR: match.Qty_PR_Prisma,
-      Qty_Stock: match.Qty_StockOnhand !== null ? match.Qty_StockOnhand : tr.Qty_Stock,
-    };
-    return tr;
-  });
-  state.taexCurrentPage = updatedTaexPage;
 
   showLoading('Sinkronisasi PR dari SAP PR...', true);
   setSyncStatus('loading', '⏳ Sinkronisasi PR ke server...');
   try {
-    await apiPut('/kumpulan', state.kumpulanData);
-    await apiPut('/prisma', state.prismaReservasiData);
-    invalidatePrismaCache();
-    // Taex: save hanya baris yang berubah di halaman saat ini
-    if (state.taexCurrentPage && state.taexCurrentPage.length) {
-      await apiPut('/taex', state.taexCurrentPage);
+    // Gunakan endpoint server-side — tidak return data taex, tab TA-ex tidak terganggu
+    const res = await apiFetch('/kumpulan/sync-pr', { method: 'POST', body: {} });
+
+    if (!res.ok) throw new Error(res.msg || 'Gagal sinkron');
+
+    // Update state kumpulan dari response server (bukan seluruh taex)
+    if (res.kumpulanData) {
+      state.kumpulanData = res.kumpulanData;
     }
+
+    // Invalidate prisma cache supaya re-fetch saat pindah tab
+    invalidatePrismaCache();
+
     hideLoading();
     closeModal('modal-pr');
+
+    const matchCount = res.matched || 0;
     setSyncStatus('ok', `✅ Singkron PR selesai · ${matchCount} material diupdate · ${new Date().toLocaleTimeString('id-ID')}`);
     toast(`Singkron PR selesai! ${matchCount} material diupdate.`, 'ok');
+
+    // Render ulang kumpulan saja — JANGAN fetchAndRenderTaex()
     populateFilters();
-    renderAll();
-    fetchAndRenderTaex(); // refresh taex dari server
+    renderKumpulan();
+
   } catch(e) {
     hideLoading();
     setSyncStatus('err', '❌ Gagal singkron PR: ' + e.message);

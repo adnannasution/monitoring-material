@@ -539,6 +539,153 @@ async def put_prisma(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+# SINKRON TA-EX → PRISMA (server-side, lebih cepat dari client-side)
+# ═══════════════════════════════════════════════════════════════
+@app.post("/api/prisma/sync-from-taex")
+def sync_prisma_from_taex(request: Request):
+    """
+    Sinkron data dari TA-ex ke PRISMA dengan aturan:
+    - ICt = 'L'
+    - Del bukan 'X'
+    - FIs bukan 'X'
+    - qty_reqmts > 0  ← baris dengan qty 0 tidak ditarik
+    Hanya tambah baris baru (tidak timpa yang sudah ada).
+    """
+    check_api_key(request)
+
+    # Ambil semua dari taex dengan filter server-side
+    all_taex = query("""
+        SELECT * FROM taex_reservasi
+        WHERE UPPER(COALESCE(ict,'')) = 'L'
+          AND UPPER(COALESCE(del,'')) != 'X'
+          AND UPPER(COALESCE(fis,'')) != 'X'
+          AND COALESCE(qty_reqmts, 0) > 0
+    """)
+
+    if not all_taex:
+        return {"ok": True, "added": 0, "skipped": 0,
+                "msg": "Tidak ada data TA-ex yang memenuhi syarat (ICt=L, Del≠X, FIs≠X, Qty>0)"}
+
+    # Ambil existing prisma untuk cek duplikat
+    existing = query('SELECT "order", material, itm FROM prisma_reservasi')
+    exist_set = {(r["order"], r["material"], r["itm"]) for r in existing}
+
+    new_rows = [t for t in all_taex
+                if (t["order"], t["material"], t["itm"]) not in exist_set]
+    skip_count = len(all_taex) - len(new_rows)
+
+    if new_rows:
+        from psycopg2.extras import execute_values
+        from database import get_conn, release_conn
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                execute_values(cur, """
+                    INSERT INTO prisma_reservasi
+                    (plant, equipment, revision, "order", reservno, itm, material,
+                     material_description, del, fis, ict, pg, recipient, unloading_point,
+                     reqmts_date, qty_reqmts, uom)
+                    VALUES %s
+                """, [(
+                    t["plant"], t["equipment"], t["revision"], t["order"],
+                    t["reservno"], t["itm"], t["material"], t["material_description"],
+                    t["del"], t["fis"], t["ict"], t["pg"], t["recipient"],
+                    t["unloading_point"], t["reqmts_date"], t["qty_reqmts"], t["uom"]
+                ) for t in new_rows])
+            conn.commit()
+        finally:
+            release_conn(conn)
+
+    total_prisma = query("SELECT COUNT(*) AS c FROM prisma_reservasi")[0]["c"]
+    return {
+        "ok": True,
+        "added": len(new_rows),
+        "skipped": skip_count,
+        "total": int(total_prisma),
+        "msg": f"✅ {len(new_rows):,} baris baru ditambahkan, {skip_count:,} sudah ada atau dilewati"
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# SINKRON PR → KUMPULAN SUMMARY (server-side, tidak return data taex)
+# ═══════════════════════════════════════════════════════════════
+@app.post("/api/kumpulan/sync-pr")
+def sync_kumpulan_pr(request: Request):
+    """
+    Sinkron nomor PR dari SAP PR ke Kumpulan Summary.
+    Match by: material + (tracking_no atau tracking) = code_tracking
+    Return HANYA hasil sinkron — tidak return data taex agar tab TA-ex tidak terganggu.
+    """
+    check_api_key(request)
+
+    kumpulan_rows = query("SELECT * FROM kumpulan_summary")
+    pr_rows       = query("SELECT * FROM sap_pr")
+
+    if not kumpulan_rows:
+        return {"ok": True, "matched": 0, "msg": "Kumpulan Summary kosong"}
+
+    from database import get_conn, release_conn
+    conn = get_conn()
+    matched_count = 0
+    preview = []
+
+    try:
+        with conn.cursor() as cur:
+            for k in kumpulan_rows:
+                pr_item = next((
+                    p for p in pr_rows
+                    if p["material"] == k["material"]
+                    and (p["tracking_no"] == k["code_tracking"]
+                         or p["tracking"]  == k["code_tracking"])
+                ), None)
+
+                if not pr_item:
+                    continue
+
+                matched_count += 1
+                qty_to_pr = max(0,
+                    float(k["qty_req"] or 0)
+                    - float(k["qty_stock"] or 0)
+                    - float(pr_item["qty_pr"] or 0)
+                )
+
+                cur.execute("""
+                    UPDATE kumpulan_summary
+                    SET qty_pr=%s, qty_to_pr=%s, updated_at=NOW()
+                    WHERE id=%s
+                """, (pr_item["qty_pr"], qty_to_pr, k["id"]))
+
+                cur.execute("""
+                    UPDATE prisma_reservasi
+                    SET pr_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
+                    WHERE material=%s AND code_kertas_kerja=%s
+                """, (pr_item["pr"], pr_item["qty_pr"],
+                      k["material"], k["code_tracking"]))
+
+                preview.append({
+                    "Material": k["material"],
+                    "Deskripsi": k["material_description"],
+                    "PR": pr_item["pr"],
+                    "Qty_PR": float(pr_item["qty_pr"] or 0),
+                    "Tracking": k["code_tracking"],
+                })
+
+        conn.commit()
+    finally:
+        release_conn(conn)
+
+    # Return hanya data kumpulan yang terupdate — BUKAN data taex
+    updated_kumpulan = query("SELECT * FROM kumpulan_summary ORDER BY id")
+    return jsonify({
+        "ok": True,
+        "matched": matched_count,
+        "preview": preview,
+        "kumpulanData": [map_kumpulan(r) for r in updated_kumpulan],
+        "msg": f"✅ {matched_count} material PR tersinkron"
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
 # KUMPULAN
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/kumpulan")
