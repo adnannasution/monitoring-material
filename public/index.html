@@ -700,7 +700,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <select id="pr-filterOrder"><option value="">Semua</option></select>
     <button class="btn btn-search" onclick="prismaReservasiApplyFilter()">Cari</button>
     <button class="btn btn-reset" onclick="prismaReservasiResetFilter()">Reset</button>
-    <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Sinkron ke TA-ex</button>
+    <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Get from TA-ex</button>
     <button class="btn btn-warning" onclick="openKertasKerjaModal()" style="margin-left:8px">📝 Buat Kertas Kerja</button>
     <button class="btn btn-export" onclick="exportPrismaExcel()" style="margin-left:4px">📤 Export Excel</button>
     <button class="col-toggle-btn" onclick="toggleColPanel('prisma')" style="margin-left:4px">⚙ Kolom</button>
@@ -727,8 +727,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <label><input type="checkbox" data-tab="prisma" data-col="15" onchange="applyColVisibility('prisma')"> Reqmts Date</label>
     <label><input type="checkbox" data-tab="prisma" data-col="16" onchange="applyColVisibility('prisma')" checked> Qty Reqmts</label>
     <label><input type="checkbox" data-tab="prisma" data-col="17" onchange="applyColVisibility('prisma')"> UoM</label>
-    <label><input type="checkbox" data-tab="prisma" data-col="18" onchange="applyColVisibility('prisma')" checked> PR Prisma</label>
-    <label><input type="checkbox" data-tab="prisma" data-col="19" onchange="applyColVisibility('prisma')"> Item Prisma</label>
+    <label><input type="checkbox" data-tab="prisma" data-col="18" onchange="applyColVisibility('prisma')" checked> PR</label>
+    <label><input type="checkbox" data-tab="prisma" data-col="19" onchange="applyColVisibility('prisma')"> Item</label>
     <label><input type="checkbox" data-tab="prisma" data-col="20" onchange="applyColVisibility('prisma')" checked> Qty Stock Onhand</label>
     <label><input type="checkbox" data-tab="prisma" data-col="21" onchange="applyColVisibility('prisma')" checked> Qty dari PR</label>
     <label><input type="checkbox" data-tab="prisma" data-col="22" onchange="applyColVisibility('prisma')" checked> Code Kertas Kerja</label>
@@ -738,7 +738,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <div class="empty-icon">📋</div>
     <h3>Belum ada data Reservasi</h3>
     <p>Klik tombol di bawah untuk mengambil data dari TA-ex Reservasi.</p>
-    <button class="btn btn-purple" onclick="syncWithTaex()" style="padding:8px 24px;font-size:13px">🔄 Sinkron dari TA-ex Reservasi</button>
+    <button class="btn btn-purple" onclick="syncWithTaex()" style="padding:8px 24px;font-size:13px">🔄 Get from TA-ex Reservasi</button>
   </div>
   <div class="table-container" id="pr-table-wrap" style="display:none">
   <div class="table-wrap">
@@ -1652,9 +1652,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
           <label>Planner Group</label>
           <select id="kk-pg-type" onchange="kkOnPGTypeChange()">
             <option value="">-- Pilih Planner Group --</option>
-            <option value="TA">TA &nbsp;(PG akhiran T)</option>
-            <option value="OH">OH &nbsp;(PG akhiran O)</option>
-            <option value="Rutin">Rutin &nbsp;(PG akhiran R)</option>
+            <option value="TA">TA</option>
+            <option value="OH">OH</option>
+            <option value="Rutin">Rutin</option>
             <option value="All">All &nbsp;(Semua PG)</option>
           </select>
         </div>
