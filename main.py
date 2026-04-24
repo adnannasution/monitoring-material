@@ -1262,6 +1262,234 @@ def reset_all(request: Request):
     return {"ok": True}
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# CHATBOT API — Endpoint khusus untuk chatbot external
+# API Key terpisah: CHATBOT_API_KEY
+# Base URL: /chatbot/tracking
+# ═══════════════════════════════════════════════════════════════
+
+CHATBOT_API_KEY = os.getenv("CHATBOT_API_KEY", "5cRtu21X6O1VHJbE2JVfcKinfSknxgTX56EPS5NIGuY")
+
+def check_chatbot_key(request: Request):
+    key = request.headers.get("x-chatbot-key") or request.query_params.get("chatbot_key")
+    if key != CHATBOT_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized: chatbot API key tidak valid")
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# CHATBOT API — POST /chatbot/query
+# Chatbot kirim SQL → PRISMA eksekusi → return JSON
+# Auth: header x-chatbot-key
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/chatbot/query")
+async def chatbot_query(request: Request):
+    """
+    Endpoint untuk chatbot mengirim query SQL dan mendapat hasilnya.
+
+    Request body:
+    {
+        "sql": "SELECT material, qty_reqmts FROM taex_reservasi WHERE pr IS NULL LIMIT 10"
+    }
+
+    Auth: header x-chatbot-key atau query param chatbot_key
+
+    Aturan keamanan:
+    - Hanya SELECT yang diizinkan
+    - Tabel yang boleh di-query: taex_reservasi, prisma_reservasi,
+      kumpulan_summary, sap_pr, sap_po, work_order
+    - LIMIT wajib ada, max 500 baris
+    - Query berbahaya (DROP, DELETE, UPDATE, INSERT, TRUNCATE) ditolak
+    """
+    check_chatbot_key(request)
+
+    body = await request.json()
+    sql  = (body.get("sql") or "").strip()
+
+    if not sql:
+        raise HTTPException(400, "Body harus berisi field 'sql'")
+
+    # ── SECURITY: hanya SELECT ──
+    sql_upper = sql.upper()
+    FORBIDDEN = ["DROP","DELETE","UPDATE","INSERT","TRUNCATE","ALTER","CREATE",
+                 "GRANT","REVOKE","EXEC","EXECUTE","COPY","pg_","information_schema"]
+    for word in FORBIDDEN:
+        if word.upper() in sql_upper:
+            raise HTTPException(403, f"Query tidak diizinkan: mengandung '{word}'")
+
+    if not sql_upper.lstrip().startswith("SELECT"):
+        raise HTTPException(403, "Hanya query SELECT yang diizinkan")
+
+    # ── SECURITY: tabel yang diizinkan ──
+    ALLOWED_TABLES = {
+        "taex_reservasi", "prisma_reservasi", "kumpulan_summary",
+        "sap_pr", "sap_po", "work_order"
+    }
+    import re
+    tables_in_query = set(re.findall(r'(?:FROM|JOIN)\s+([\w\"]+)', sql, re.IGNORECASE))
+    tables_clean    = {t.strip('"').lower() for t in tables_in_query}
+    disallowed      = tables_clean - ALLOWED_TABLES
+    if disallowed:
+        raise HTTPException(403, f"Tabel tidak diizinkan: {', '.join(disallowed)}")
+
+    # ── SECURITY: wajib ada LIMIT, max 500 ──
+    limit_match = re.search(r'LIMIT\s+(\d+)', sql, re.IGNORECASE)
+    if not limit_match:
+        raise HTTPException(400, "Query harus mengandung LIMIT (maksimal 500)")
+    if int(limit_match.group(1)) > 500:
+        raise HTTPException(400, "LIMIT maksimal 500 baris")
+
+    # ── EKSEKUSI ──
+    try:
+        rows = query(sql)
+    except Exception as e:
+        raise HTTPException(400, f"Query error: {str(e)}")
+
+    # Konversi ke list of dict
+    import decimal, datetime as dt
+    def clean(v):
+        if isinstance(v, decimal.Decimal): return float(v)
+        if isinstance(v, (dt.datetime, dt.date)): return str(v)
+        return v
+
+    data = [{k: clean(v) for k, v in dict(r).items()} for r in rows]
+
+    return jsonify({
+        "ok":      True,
+        "sql":     sql,
+        "rows":    len(data),
+        "columns": list(data[0].keys()) if data else [],
+        "data":    data,
+    })
+
+
+@app.get("/chatbot/schema")
+def chatbot_schema(request: Request):
+    """
+    Return schema tabel tracking yang boleh di-query chatbot.
+    Berguna untuk LangChain SQLDatabaseChain / PromptTemplate.
+    """
+    check_chatbot_key(request)
+    return {
+        "allowed_tables": {
+            "taex_reservasi": {
+                "description": "Data reservasi material TA-ex (sumber utama tracking)",
+                "columns": {
+                    "id":"serial PK","plant":"kode plant","equipment":"kode equipment",
+                    "order":"nomor work order","reservno":"nomor reservasi",
+                    "revision":"kode revisi","material":"kode material",
+                    "itm":"nomor item","material_description":"deskripsi material",
+                    "qty_reqmts":"qty kebutuhan","qty_stock":"qty stock onhand",
+                    "pr":"nomor purchase request","item":"item PR",
+                    "qty_pr":"qty PR (per baris, hasil sinkron)",
+                    "del":"deletion indicator","fis":"FIs indicator",
+                    "ict":"ICt indicator (L=masuk PRISMA)",
+                    "pg":"planner group","recipient":"penerima",
+                    "unloading_point":"unloading point","reqmts_date":"tanggal kebutuhan",
+                    "qty_f_avail_check":"qty available check",
+                    "qty_withdrawn":"qty withdrawn","uom":"satuan",
+                    "gl_acct":"GL account","res_price":"harga reservasi",
+                    "res_per":"per satuan","res_curr":"mata uang",
+                }
+            },
+            "prisma_reservasi": {
+                "description": "Data reservasi PRISMA (subset taex dengan ICt=L)",
+                "columns": {
+                    "id":"serial PK","plant":"kode plant","equipment":"kode equipment",
+                    "revision":"revisi","order":"nomor work order",
+                    "reservno":"nomor reservasi","itm":"nomor item",
+                    "material":"kode material","material_description":"deskripsi material",
+                    "del":"deletion","fis":"FIs","ict":"ICt","pg":"planner group",
+                    "recipient":"penerima","unloading_point":"unloading point",
+                    "reqmts_date":"tanggal kebutuhan","qty_reqmts":"qty kebutuhan",
+                    "uom":"satuan","pr_prisma":"nomor PR","item_prisma":"item PR",
+                    "qty_pr_prisma":"qty PR per baris",
+                    "qty_stock_onhand":"stock onhand (diisi saat kertas kerja)",
+                    "code_kertas_kerja":"kode kertas kerja",
+                }
+            },
+            "kumpulan_summary": {
+                "description": "Ringkasan per material dari kertas kerja",
+                "columns": {
+                    "id":"serial PK","plant":"plant","equipment":"equipment",
+                    "revision":"revisi","order":"work order","reservno":"reservasi",
+                    "itm":"item","material":"kode material",
+                    "material_description":"deskripsi","qty_req":"total qty kebutuhan",
+                    "qty_stock":"total qty stock","qty_pr":"qty PR (dari SAP PR)",
+                    "qty_to_pr":"qty yang masih perlu di-PR","code_tracking":"kode tracking/KK",
+                }
+            },
+            "sap_pr": {
+                "description": "Data Purchase Request dari SAP",
+                "columns": {
+                    "id":"serial PK","plant":"plant","pr":"nomor PR","item":"item PR",
+                    "material":"kode material","material_description":"deskripsi",
+                    "d":"deletion flag","r":"release indicator","pgr":"planner group",
+                    "s":"status","tracking_no":"nomor tracking","qty_pr":"qty PR",
+                    "un":"satuan","req_date":"tanggal kebutuhan",
+                    "valn_price":"harga valuasi","pr_curr":"mata uang",
+                    "pr_per":"per satuan","release_date":"tanggal release",
+                    "tracking":"kode tracking",
+                }
+            },
+            "sap_po": {
+                "description": "Data Purchase Order dari SAP",
+                "columns": {
+                    "id":"serial PK","plnt":"plant","purchreq":"nomor PR (FK ke sap_pr.pr)",
+                    "item":"item","material":"kode material","short_text":"deskripsi",
+                    "po":"nomor PO","po_item":"item PO","d":"deletion flag",
+                    "dci":"DCI","pgr":"planner group","doc_date":"tanggal PO",
+                    "po_quantity":"qty PO","qty_delivered":"qty terkirim",
+                    "deliv_date":"tanggal delivery","oun":"satuan",
+                    "net_price":"harga neto","crcy":"mata uang","per":"per satuan",
+                }
+            },
+            "work_order": {
+                "description": "Data Work Order dari SAP",
+                "columns": {
+                    "id":"serial PK","plant":"plant","order":"nomor work order",
+                    "superior_order":"order induk","notification":"notifikasi",
+                    "created_on":"tanggal buat","description":"deskripsi WO",
+                    "revision":"revisi","equipment":"kode equipment",
+                    "system_status":"status sistem","user_status":"status user",
+                    "funct_location":"functional location","location":"lokasi",
+                    "wbs_ord_header":"WBS order header","cost_center":"cost center",
+                    "total_plan_cost":"total biaya rencana",
+                    "total_act_cost":"total biaya aktual",
+                    "planner_group":"planner group","main_work_ctr":"main work center",
+                    "entry_by":"dibuat oleh","changed_by":"diubah oleh",
+                    "basic_start_date":"tanggal mulai rencana",
+                    "basic_finish_date":"tanggal selesai rencana",
+                    "actual_release":"tanggal release aktual",
+                }
+            },
+        },
+        "join_hints": {
+            "taex_ke_workorder":  'taex_reservasi t JOIN work_order wo ON wo."order" = t."order"',
+            "taex_ke_sap_pr":     "taex_reservasi t JOIN sap_pr sp ON sp.pr = t.pr",
+            "taex_ke_sap_po":     "taex_reservasi t JOIN sap_po po ON po.purchreq = t.pr",
+            "prisma_ke_kumpulan": "prisma_reservasi p JOIN kumpulan_summary k ON k.code_tracking = p.code_kertas_kerja AND k.material = p.material",
+        },
+        "status_logic": {
+            "no-pr":      "t.pr IS NULL OR t.pr = ''",
+            "pr-created": "t.pr IS NOT NULL AND (po.po IS NULL OR po.po = '')",
+            "po-created": "po.po IS NOT NULL AND qty_delivered = 0",
+            "partial":    "qty_delivered > 0 AND qty_delivered < po_quantity",
+            "complete":   "qty_delivered >= po_quantity AND po_quantity > 0",
+        },
+        "security": {
+            "allowed_statements": ["SELECT only"],
+            "max_limit":          500,
+            "forbidden_keywords": ["DROP","DELETE","UPDATE","INSERT","TRUNCATE","ALTER","CREATE"],
+        }
+    }
+
+
+
+
+
 # ═══════════════════════════════════════════════════════════════
 # SPA FALLBACK
 # ═══════════════════════════════════════════════════════════════
