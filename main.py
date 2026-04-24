@@ -663,16 +663,20 @@ def sync_kumpulan_pr(request: Request):
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
 
-                # ── Update TAEX: kolom PR, Item, Qty_PR ──
-                # Join via prisma untuk dapat order+itm yang tepat
+                # ── Update TAEX: PR, Item, Qty_PR + Qty_Stock dari qty_stock_onhand prisma ──
+                # qty_stock di taex diisi dari qty_stock_onhand di prisma (match by order+material+itm)
                 cur.execute("""
                     UPDATE taex_reservasi t
-                    SET pr=%s, item=%s, qty_pr=%s, updated_at=NOW()
+                    SET pr       = %s,
+                        item     = %s,
+                        qty_pr   = %s,
+                        qty_stock = COALESCE(p.qty_stock_onhand, t.qty_stock),
+                        updated_at = NOW()
                     FROM prisma_reservasi p
-                    WHERE t.material  = p.material
-                      AND t."order"   = p."order"
-                      AND t.itm       = p.itm
-                      AND p.material  = %s
+                    WHERE t.material = p.material
+                      AND t."order" = p."order"
+                      AND t.itm     = p.itm
+                      AND p.material = %s
                       AND p.code_kertas_kerja = %s
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
