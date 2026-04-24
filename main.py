@@ -655,30 +655,36 @@ def sync_kumpulan_pr(request: Request):
                     WHERE id=%s
                 """, (pr_item["qty_pr"], qty_to_pr, k["id"]))
 
-                # ── Update PRISMA: pr_prisma, item_prisma, qty_pr_prisma ──
+                # ── Update PRISMA per baris: pr_prisma, item_prisma ──
+                # qty_pr_prisma per baris = MAX(0, qty_reqmts - qty_stock_onhand)
+                # karena SAP PR qty adalah total summary, bukan per baris detail
                 cur.execute("""
                     UPDATE prisma_reservasi
-                    SET pr_prisma=%s, item_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
-                    WHERE material=%s AND code_kertas_kerja=%s
-                """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
+                    SET pr_prisma   = %s,
+                        item_prisma = %s,
+                        qty_pr_prisma = GREATEST(0, COALESCE(qty_reqmts,0) - COALESCE(qty_stock_onhand,0)),
+                        updated_at  = NOW()
+                    WHERE material = %s AND code_kertas_kerja = %s
+                """, (pr_item["pr"], pr_item["item"],
                       k["material"], k["code_tracking"]))
 
-                # ── Update TAEX: PR, Item, Qty_PR + Qty_Stock dari qty_stock_onhand prisma ──
-                # qty_stock di taex diisi dari qty_stock_onhand di prisma (match by order+material+itm)
+                # ── Update TAEX per baris: PR, Item ──
+                # qty_pr taex = MAX(0, qty_reqmts - qty_stock_onhand) per baris (dari prisma)
+                # qty_stock  = qty_stock_onhand dari prisma (yang diisi saat kertas kerja)
                 cur.execute("""
                     UPDATE taex_reservasi t
-                    SET pr       = %s,
-                        item     = %s,
-                        qty_pr   = %s,
+                    SET pr        = %s,
+                        item      = %s,
+                        qty_pr    = GREATEST(0, COALESCE(p.qty_reqmts,0) - COALESCE(p.qty_stock_onhand,0)),
                         qty_stock = COALESCE(p.qty_stock_onhand, t.qty_stock),
                         updated_at = NOW()
                     FROM prisma_reservasi p
-                    WHERE t.material = p.material
-                      AND t."order" = p."order"
-                      AND t.itm     = p.itm
-                      AND p.material = %s
+                    WHERE t.material  = p.material
+                      AND t."order"  = p."order"
+                      AND t.itm       = p.itm
+                      AND p.material  = %s
                       AND p.code_kertas_kerja = %s
-                """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
+                """, (pr_item["pr"], pr_item["item"],
                       k["material"], k["code_tracking"]))
 
                 preview.append({
@@ -686,7 +692,7 @@ def sync_kumpulan_pr(request: Request):
                     "Deskripsi": k["material_description"],
                     "PR":        pr_item["pr"],
                     "Item":      pr_item["item"],
-                    "Qty_PR":    float(pr_item["qty_pr"] or 0),
+                    "Qty_PR_SAP": float(pr_item["qty_pr"] or 0),
                     "Tracking":  k["code_tracking"],
                 })
 
