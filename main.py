@@ -927,11 +927,23 @@ def get_tracking(request: Request,
     # PO diagregasi per purchreq supaya 1 baris taex = 1 baris hasil
     sql_base = f"""
         FROM taex_reservasi t
-        LEFT JOIN work_order wo
-               ON wo."order" = t."order"
-        LEFT JOIN sap_pr sp
-               ON sp.pr = t.pr
+        -- Work Order: 1 order = 1 baris (join by order number, unik)
+        LEFT JOIN LATERAL (
+            SELECT *
+            FROM work_order wo
+            WHERE wo."order" = t."order"
+            LIMIT 1
+        ) wo ON true
+        -- SAP PR: ambil 1 baris saja per PR+item (match by pr + item)
+        LEFT JOIN LATERAL (
+            SELECT sp.req_date
+            FROM sap_pr sp
+            WHERE sp.pr = t.pr
+              AND (sp.item = t.item OR t.item IS NULL OR t.item = '')
               AND (sp.d IS NULL OR sp.d = '')
+            LIMIT 1
+        ) sp ON true
+        -- PO: agregasi semua PO yang purchreq = PR taex, ambil 1 PO teratas
         LEFT JOIN LATERAL (
             SELECT
                 po.po,
