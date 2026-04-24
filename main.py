@@ -655,33 +655,49 @@ def sync_kumpulan_pr(request: Request):
                     WHERE id=%s
                 """, (pr_item["qty_pr"], qty_to_pr, k["id"]))
 
+                # ── Update PRISMA: pr_prisma, item_prisma, qty_pr_prisma ──
                 cur.execute("""
                     UPDATE prisma_reservasi
-                    SET pr_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
+                    SET pr_prisma=%s, item_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
                     WHERE material=%s AND code_kertas_kerja=%s
-                """, (pr_item["pr"], pr_item["qty_pr"],
+                """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
+                      k["material"], k["code_tracking"]))
+
+                # ── Update TAEX: kolom PR, Item, Qty_PR ──
+                # Join via prisma untuk dapat order+itm yang tepat
+                cur.execute("""
+                    UPDATE taex_reservasi t
+                    SET pr=%s, item=%s, qty_pr=%s, updated_at=NOW()
+                    FROM prisma_reservasi p
+                    WHERE t.material  = p.material
+                      AND t."order"   = p."order"
+                      AND t.itm       = p.itm
+                      AND p.material  = %s
+                      AND p.code_kertas_kerja = %s
+                """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
 
                 preview.append({
-                    "Material": k["material"],
+                    "Material":  k["material"],
                     "Deskripsi": k["material_description"],
-                    "PR": pr_item["pr"],
-                    "Qty_PR": float(pr_item["qty_pr"] or 0),
-                    "Tracking": k["code_tracking"],
+                    "PR":        pr_item["pr"],
+                    "Item":      pr_item["item"],
+                    "Qty_PR":    float(pr_item["qty_pr"] or 0),
+                    "Tracking":  k["code_tracking"],
                 })
 
         conn.commit()
     finally:
         release_conn(conn)
 
-    # Return hanya data kumpulan yang terupdate — BUKAN data taex
+    # Return kumpulan yang terupdate — BUKAN semua data taex (tab TA-ex tidak reset)
     updated_kumpulan = query("SELECT * FROM kumpulan_summary ORDER BY id")
     return jsonify({
         "ok": True,
         "matched": matched_count,
         "preview": preview,
         "kumpulanData": [map_kumpulan(r) for r in updated_kumpulan],
-        "msg": f"✅ {matched_count} material PR tersinkron"
+        "msg": f"✅ {matched_count} material PR tersinkron — kumpulan + prisma + taex diupdate"
     })
 
 
