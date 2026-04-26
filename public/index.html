@@ -2096,7 +2096,7 @@ function switchApp(app) {
   renderPage(app);
 }
 
-function renderAll() { renderTaex(); fetchAndRenderPrisma(); renderKK(); renderSummary(); renderKumpulan(); renderSAP(); renderOrder(); renderPo(); fetchAndRenderTracking(); }
+function renderAll() { renderTaex(); fetchAndRenderPrisma(); renderKK(); renderSummary(); renderKumpulan(); renderSAP(); renderOrder(); renderPo(); renderTracking(); }
 function renderPage(app) {
   if (app==='taex') renderTaex();
   else if (app==='prisma-reservasi') { if (!prFiltered.length) fetchAndRenderPrisma(); }
@@ -2106,7 +2106,7 @@ function renderPage(app) {
   else if (app==='pr') { if (!sapFiltered.length) fetchAndRenderSAP(); }
   else if (app==='order') renderOrder();
   else if (app==='po') { if (!poFiltered.length) fetchAndRenderPo(); }
-  else if (app==='tracking') fetchAndRenderTracking();
+  else if (app==='tracking') renderTracking();
   else if (app==='audit') fetchAndRenderAudit();
 }
 
@@ -4101,14 +4101,13 @@ function setTrkView(mode) {
   renderTracking();
 }
 
-function trkSort(key) { setSort('trk', key); fetchAndRenderTracking(); }
-function trkApplyFilter() { resetPg('trk'); fetchAndRenderTracking(); }
+function trkSort(key) { setSort('trk', key); renderTracking(); }
+function trkApplyFilter() { resetPg('trk'); renderTracking(); }
 function trkResetFilter() {
   document.getElementById('trk-search').value = '';
   document.getElementById('trk-filterStatus').value = '';
   document.getElementById('trk-filterPlant').value = '';
-  resetPg('trk');
-  fetchAndRenderTracking();
+  renderTracking();
 }
 
 // ── STATUS LOGIC ──
@@ -4155,43 +4154,37 @@ function buildTrackingData() {
   const orderMap = {};
   state.orderData.forEach(o => { if (o.Order) orderMap[String(o.Order)] = o; });
 
-  // PR: map by nomor PR (untuk enrich data PR dari taex.PR)
   const prMap = {};
   state.prData.forEach(p => { if (p.PR) prMap[String(p.PR)] = p; });
 
-  // PO: map by Purchreq (= nomor PR di taex) — filter baris PO yang D kosong saja
   const poMap = {};
   state.poData.forEach(p => {
-    if (p.Purchreq && (!p.D || String(p.D).trim() === '')) {
+    if (p.Purchreq) {
       const k = String(p.Purchreq);
       if (!poMap[k]) poMap[k] = [];
       poMap[k].push(p);
     }
   });
 
-  // PR: filter hanya PR yang D kosong (aktif)
-  const prMapActive = {};
-  state.prData.forEach(p => {
-    if (p.PR && (!p.D || String(p.D).trim() === '')) prMapActive[String(p.PR)] = p;
-  });
+  const hasVal = v => v !== null && v !== undefined && String(v).trim() !== '';
 
   const rows = taexFiltered
     .filter(t => t.Material && String(t.Material).trim() !== '')
     .map(t => {
       const orderKey = String(t.Order || '');
       const prKey    = String(t.PR    || '');
-      const ord = orderMap[orderKey]       || {};
-      // Pakai prMapActive untuk enrich — kalau PR ada tapi D terisi, tetap muncul tapi tanpa enrich PR
-      const pr  = prMapActive[prKey]       || prMap[prKey] || {};
-      const pos = poMap[prKey]             || [];
-      const po  = pos[0]                   || {};
+      const ord = orderMap[orderKey] || {};
+      const pr  = prMap[prKey]       || {};
+      const pos = poMap[prKey]       || [];
+      const po  = pos[0]             || {};
 
-      // JANGAN filter/skip baris — semua baris taex harus muncul di tracking
-      // Baris tanpa PR = status "Belum PR", baris tanpa PO = status "PR Created", dst
+      // Filter: D pada PR atau PO tidak boleh ada isian
+      if (hasVal(pr.D)) return null;
+      if (pos.some(p => hasVal(p.D))) return null;
 
-      const totalDelivered = pos.reduce((s, p) => s + (Number(p.Qty_Delivered) || 0), 0);
-      const totalPOQty     = pos.reduce((s, p) => s + (Number(p.PO_Quantity)   || 0), 0);
-      const totalNetPrice  = pos.reduce((s, p) => s + (Number(p.Net_Price)     || 0), 0);
+      const totalDelivered = pos.reduce((s, p) => s + (p.Qty_Delivered || 0), 0);
+      const totalPOQty     = pos.reduce((s, p) => s + (p.PO_Quantity   || 0), 0);
+      const totalNetPrice  = pos.reduce((s, p) => s + (p.Net_Price     || 0), 0);
 
       const enriched = {
         // ── TA-ex (semua kolom, preferensi TA-ex untuk overlap) ──
@@ -4207,7 +4200,7 @@ function buildTrackingData() {
         Qty_Stock:          t.Qty_Stock,
         PR:                 t.PR || '',
         PR_Item:            t.Item || '',
-        Qty_PR:             t.Qty_PR ?? null,  // dari taex langsung (sudah per baris, bukan summary PR)
+        Qty_PR:             pr.Qty_PR ?? t.Qty_PR ?? null,
         Cost_Ctrs:          t.Cost_Ctrs || '',
         SLoc:               t.SLoc || '',
         Del:                t.Del || '',
@@ -4306,66 +4299,43 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-let trkServerMeta = { total:0, page:1, totalPages:1, limit:100 };
-let trkServerData  = [];
-let trkSummary     = {};
+function renderTracking() {
+  const q      = (document.getElementById('trk-search').value || '').toLowerCase();
+  const fStat  = document.getElementById('trk-filterStatus').value;
+  const fPlant = document.getElementById('trk-filterPlant').value;
 
-async function fetchAndRenderTracking() {
-  const q      = (document.getElementById('trk-search')?.value || '').trim();
-  const fStat  = document.getElementById('trk-filterStatus')?.value || '';
-  const fPlant = document.getElementById('trk-filterPlant')?.value || '';
-  const pg     = getPg('trk');
-  const sort   = getSort('trk');
+  const allRows = buildTrackingData();
 
-  const params = new URLSearchParams({
-    page:      pg.page,
-    limit:     pg.size,
-    q,
-    status:    fStat,
-    plant:     fPlant,
-    order_by:  sort.key  || 't.id',
-    order_dir: sort.dir  || 'ASC',
+  // Populate plant filter
+  const plantSel = document.getElementById('trk-filterPlant');
+  const curPlant = plantSel.value;
+  const plants   = [...new Set(allRows.map(r => r.Plant).filter(Boolean))].sort();
+  plantSel.innerHTML = '<option value="">Semua</option>' + plants.map(p => `<option value="${p}" ${p===curPlant?'selected':''}>${p}</option>`).join('');
+
+  // Filter items
+  let filtered = allRows.filter(r => {
+    const mq = !q || Object.values(r).some(v => v && String(v).toLowerCase().includes(q));
+    const ms = !fStat  || r._status === fStat;
+    const mp = !fPlant || r.Plant   === fPlant;
+    return mq && ms && mp;
   });
 
+  // Update summary cards
+  updateTrackingCards(allRows);
+
+  // Sort flat rows
+  trkFiltered = applySort(filtered, 'trk');
+
   const tbody = document.getElementById('trk-tbody');
-  tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat data tracking...</td></tr>';
-
-  try {
-    const res = await apiFetch(`/tracking?${params}`);
-    trkServerData = res.data || [];
-    trkServerMeta = res.pagination || trkServerMeta;
-    trkSummary    = res.summary    || {};
-
-    // Update cards
-    updateTrackingCards(trkSummary);
-
-    // Populate plant filter
-    const plantSel = document.getElementById('trk-filterPlant');
-    if (plantSel && !plantSel.dataset.populated) {
-      // Ambil distinct plant dari data yang masuk
-      const plants = [...new Set(trkServerData.map(r => r.Plant).filter(Boolean))].sort();
-      const curPlant = plantSel.value;
-      plantSel.innerHTML = '<option value="">Semua</option>' + plants.map(p =>
-        `<option value="${p}" ${p===curPlant?'selected':''}>${p}</option>`).join('');
-    }
-
-    renderTracking();
-  } catch(e) {
-    tbody.innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat tracking: ${e.message}</td></tr>`;
-  }
-}
-
-function renderTracking() {
-  // Gunakan data dari server (fetchAndRenderTracking)
-  const rows = trkServerData;
-  const tbody = document.getElementById('trk-tbody');
-
-  if (!rows.length) {
+  if (!trkFiltered.length) {
     tbody.innerHTML = '<tr class="loading-row"><td colspan="58">Tidak ada data tracking. Pastikan data TA-ex, Order, PR, dan PO sudah diupload.</td></tr>';
     document.getElementById('trk-rowCount').textContent = '0 item';
-    renderPagination('trk-pagination','trk',0,1,1,100,fetchAndRenderTracking);
+    renderPagination('trk-pagination','trk',0,1,1,100,renderTracking);
     return;
   }
+
+  const pg   = paginate(trkFiltered, 'trk');
+  const rows = pg.rows;
   const html = [];
 
   rows.forEach(item => {
@@ -4433,11 +4403,8 @@ function renderTracking() {
   });
 
   tbody.innerHTML = html.join('');
-  document.getElementById('trk-rowCount').textContent = (trkServerMeta.total || rows.length) + ' item';
-  renderPagination('trk-pagination','trk',
-    trkServerMeta.total, trkServerMeta.page,
-    trkServerMeta.totalPages, trkServerMeta.limit,
-    fetchAndRenderTracking);
+  document.getElementById('trk-rowCount').textContent = trkFiltered.length + ' item';
+  renderPagination('trk-pagination','trk',pg.total,pg.page,pg.totalPages,pg.size,renderTracking);
   reapplyColAfterRender('trk');
 }
 
@@ -4452,35 +4419,27 @@ function toggleTrkL2(l2key) {
   renderTracking();
 }
 
-function updateTrackingCards(summary) {
-  // Terima summary object dari server { total, totalOrders, hasPR, hasPO, partial, complete, noPR, totalNilai }
-  // Fallback ke array jika dipanggil dengan rows (backward compat)
-  let s = summary;
-  if (Array.isArray(summary)) {
-    s = {
-      total:       summary.length,
-      totalOrders: [...new Set(summary.map(r => r.Order).filter(Boolean))].length,
-      hasPR:       summary.filter(r => r.PR).length,
-      hasPO:       summary.filter(r => r.PO_num || r.PO).length,
-      partial:     summary.filter(r => r._status === 'partial').length,
-      complete:    summary.filter(r => r._status === 'complete').length,
-      noPR:        summary.filter(r => r._status === 'no-pr').length,
-      totalNilai:  summary.reduce((acc, r) => acc + (r.Net_Price || 0), 0),
-    };
-  }
+function updateTrackingCards(rows) {
+  const orders   = [...new Set(rows.map(r => r.Order).filter(Boolean))];
+  const hasPR    = rows.filter(r => r.PR).length;
+  const hasPO    = rows.filter(r => r.PO).length;
+  const partial  = rows.filter(r => r._status === 'partial').length;
+  const complete = rows.filter(r => r._status === 'complete').length;
+  const noPR     = rows.filter(r => r._status === 'no-pr').length;
+  const totalNilai = rows.reduce((s, r) => s + (r.Net_Price || 0), 0);
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('trk-total-order',    s.totalOrders  || 0);
-  set('trk-total-material', s.total        || 0);
-  set('trk-total-pr',       s.hasPR        || 0);
-  set('trk-total-po',       s.hasPO        || 0);
-  set('trk-total-partial',  s.partial      || 0);
-  set('trk-total-complete', s.complete     || 0);
-  set('trk-total-noPR',     s.noPR         || 0);
-  set('trk-total-nilai',    'Rp ' + (s.totalNilai || 0).toLocaleString('id-ID'));
+  set('trk-total-order',    orders.length);
+  set('trk-total-material', rows.length);
+  set('trk-total-pr',       hasPR);
+  set('trk-total-po',       hasPO);
+  set('trk-total-partial',  partial);
+  set('trk-total-complete', complete);
+  set('trk-total-noPR',     noPR);
+  set('trk-total-nilai',    'Rp ' + totalNilai.toLocaleString('id-ID'));
 }
 
 function exportTrackingExcel() {
-  const rows = trkServerData;
+  const rows = buildTrackingData();
   if (!rows.length) { toast('Tidak ada data untuk diekspor', 'err'); return; }
   const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
     Plant:                r.Plant||'',
