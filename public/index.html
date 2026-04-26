@@ -4200,7 +4200,7 @@ function buildTrackingData() {
         Qty_Stock:          t.Qty_Stock,
         PR:                 t.PR || '',
         PR_Item:            t.Item || '',
-        Qty_PR:             pr.Qty_PR ?? t.Qty_PR ?? null,
+        Qty_PR: t.Qty_PR ?? null,
         Cost_Ctrs:          t.Cost_Ctrs || '',
         SLoc:               t.SLoc || '',
         Del:                t.Del || '',
