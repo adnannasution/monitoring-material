@@ -862,6 +862,360 @@ def delete_order(row_id: int, request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+# TRACKING VIEW — berbasis taex_reservasi sebagai sumber utama
+# Detail gabungan: taex + sap_pr + sap_po + kumpulan_summary
+# Qty PR, Stock, PO semuanya diambil dari taex (bukan dari sap_pr langsung)
+# karena taex sudah merupakan gabungan dari beberapa material/reservasi
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking")
+def get_tracking(
+    request: Request,
+    page: int = 1, limit: int = 100,
+    q: str = "",
+    order_val: str = "",
+    material: str = "",
+    pr: str = "",
+    po: str = "",
+    status: str = "",   # "with_pr", "without_pr", "with_po", "without_po"
+    order_by: str = "t.id", order_dir: str = "ASC",
+):
+    """
+    Tracking view berbasis taex_reservasi.
+
+    Sumber kebenaran data:
+    - Qty_Reqmts, Qty_Stock, Qty_PR, Qty_Deliv  → dari taex_reservasi (sudah terupdate via sync-pr)
+    - PR, PO, PO_Date, Delivery_Date            → dari taex_reservasi
+    - Tracking, TrackingNo, Valn_price          → join sap_pr (match by taex.pr = sap_pr.pr AND taex.material = sap_pr.material)
+    - PO detail (Doc_Date, Net_Price, Crcy)     → join sap_po (match by taex.po = sap_po.po AND taex.material = sap_po.material)
+    - CodeTracking (kumpulan)                    → join kumpulan_summary (match by taex.material + taex.order)
+
+    Dengan demikian Qty_PR di tracking = Qty_PR di taex (bukan SUM dari sap_pr),
+    karena taex sudah merupakan breakdown per reservasi/material.
+    """
+    check_api_key(request)
+    limit  = min(5000, max(1, limit))
+    offset = (page - 1) * limit
+
+    conds, params = [], []
+
+    if q:
+        conds.append("""(
+            t.material          ILIKE %s OR
+            t.material_description ILIKE %s OR
+            t."order"           ILIKE %s OR
+            t.equipment         ILIKE %s OR
+            t.pr                ILIKE %s OR
+            t.po                ILIKE %s OR
+            t.reservno          ILIKE %s OR
+            COALESCE(sp.tracking,'')    ILIKE %s OR
+            COALESCE(sp.tracking_no,'') ILIKE %s OR
+            COALESCE(k.code_tracking,'') ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 10)
+
+    if order_val:
+        conds.append('t."order" ILIKE %s'); params.append(f"%{order_val}%")
+    if material:
+        conds.append("t.material ILIKE %s"); params.append(f"%{material}%")
+    if pr:
+        conds.append("t.pr ILIKE %s"); params.append(f"%{pr}%")
+    if po:
+        conds.append("t.po ILIKE %s"); params.append(f"%{po}%")
+
+    # Filter status PR/PO
+    if status == "with_pr":
+        conds.append("t.pr IS NOT NULL AND t.pr <> ''")
+    elif status == "without_pr":
+        conds.append("(t.pr IS NULL OR t.pr = '')")
+    elif status == "with_po":
+        conds.append("t.po IS NOT NULL AND t.po <> ''")
+    elif status == "without_po":
+        conds.append("(t.po IS NULL OR t.po = '')")
+
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+
+    # Kolom sortable yang aman
+    SORTABLE = {
+        "t.id", "t.plant", "t.equipment", 't."order"', "t.material",
+        "t.itm", "t.qty_reqmts", "t.qty_stock", "t.pr", "t.qty_pr",
+        "t.po", "t.qty_deliv", "t.delivery_date", "t.reqmts_date",
+        "t.res_price", "sp.tracking", "sp.tracking_no",
+    }
+    safe_ob  = order_by if order_by in SORTABLE else "t.id"
+    safe_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
+
+    # ── JOIN utama: taex sebagai driving table ──
+    base_sql = """
+        FROM taex_reservasi t
+        -- sap_pr: ambil semua kolom, match by pr + material
+        LEFT JOIN LATERAL (
+            SELECT sp.plant     AS pr_plant,
+                   sp.pr        AS pr_pr,
+                   sp.item      AS pr_item,
+                   sp.material  AS pr_material,
+                   sp.material_description AS pr_material_description,
+                   sp.d         AS pr_d,
+                   sp.r         AS pr_r,
+                   sp.pgr       AS pr_pgr,
+                   sp.s         AS pr_s,
+                   sp.tracking_no,
+                   sp.qty_pr    AS pr_qty_pr,
+                   sp.un        AS pr_un,
+                   sp.req_date,
+                   sp.valn_price,
+                   sp.pr_curr,
+                   sp.pr_per,
+                   sp.release_date,
+                   sp.tracking
+            FROM sap_pr sp
+            WHERE sp.pr = t.pr
+              AND sp.material = t.material
+            ORDER BY sp.id
+            LIMIT 1
+        ) sp ON TRUE
+        -- sap_po: ambil semua kolom, match by po + material
+        LEFT JOIN LATERAL (
+            SELECT po.plnt          AS po_plnt,
+                   po.purchreq      AS po_purchreq,
+                   po.item          AS po_item,
+                   po.material      AS po_material,
+                   po.short_text    AS po_short_text,
+                   po.po            AS po_po,
+                   po.po_item       AS po_po_item,
+                   po.d             AS po_d,
+                   po.dci           AS po_dci,
+                   po.pgr           AS po_pgr,
+                   po.doc_date      AS po_doc_date,
+                   po.po_quantity   AS po_quantity,
+                   po.qty_delivered AS po_qty_delivered,
+                   po.deliv_date    AS po_deliv_date,
+                   po.oun           AS po_oun,
+                   po.net_price     AS po_net_price,
+                   po.crcy          AS po_crcy,
+                   po.per           AS po_per
+            FROM sap_po po
+            WHERE po.po = t.po
+              AND po.material = t.material
+            ORDER BY po.id
+            LIMIT 1
+        ) po ON TRUE
+        -- work_order: kolom yang relevan untuk tracking progress reservasi
+        LEFT JOIN LATERAL (
+            SELECT wo.description,
+                   wo.system_status,
+                   wo.user_status,
+                   wo.basic_start_date,
+                   wo.basic_finish_date,
+                   wo.actual_release,
+                   wo.notification,
+                   wo.funct_location,
+                   wo.planner_group,
+                   wo.main_work_ctr
+            FROM work_order wo
+            WHERE wo."order" = t."order"
+            ORDER BY wo.id
+            LIMIT 1
+        ) wo ON TRUE
+    """
+
+    count_res = query(f"SELECT COUNT(*) AS c {base_sql} {where}", params)
+    data_res  = query(
+        f"""SELECT
+            -- ── Semua kolom taex_reservasi ──
+            t.id,
+            t.plant, t.equipment, t."order", t.revision, t.reservno,
+            t.material, t.itm, t.material_description,
+            t.qty_reqmts, t.qty_stock, t.qty_pr, t.qty_deliv,
+            t.qty_f_avail_check, t.qty_withdrawn,
+            t.pr, t.item, t.cost_ctrs,
+            t.po, t.po_date, t.delivery_date,
+            t.sloc, t.del, t.fis, t.ict, t.pg,
+            t.recipient, t.unloading_point, t.reqmts_date,
+            t.uom, t.gl_acct, t.res_price, t.res_per, t.res_curr,
+            -- ── Semua kolom sap_pr ──
+            sp.pr_plant, sp.pr_pr, sp.pr_item, sp.pr_material,
+            sp.pr_material_description, sp.pr_d, sp.pr_r, sp.pr_pgr, sp.pr_s,
+            sp.tracking_no, sp.pr_qty_pr, sp.pr_un,
+            sp.req_date, sp.valn_price, sp.pr_curr, sp.pr_per,
+            sp.release_date, sp.tracking,
+            -- ── Semua kolom sap_po ──
+            po.po_plnt, po.po_purchreq, po.po_item, po.po_material,
+            po.po_short_text, po.po_po, po.po_po_item,
+            po.po_d, po.po_dci, po.po_pgr,
+            po.po_doc_date, po.po_quantity, po.po_qty_delivered,
+            po.po_deliv_date, po.po_oun,
+            po.po_net_price, po.po_crcy, po.po_per,
+            -- ── Kolom work_order yang relevan untuk tracking progress ──
+            wo.description      AS wo_description,
+            wo.system_status    AS wo_system_status,
+            wo.user_status      AS wo_user_status,
+            wo.basic_start_date AS wo_basic_start_date,
+            wo.basic_finish_date AS wo_basic_finish_date,
+            wo.actual_release   AS wo_actual_release,
+            wo.notification     AS wo_notification,
+            wo.funct_location   AS wo_funct_location,
+            wo.planner_group    AS wo_planner_group,
+            wo.main_work_ctr    AS wo_main_work_ctr
+        {base_sql} {where}
+        ORDER BY {safe_ob} {safe_dir}
+        LIMIT %s OFFSET %s
+        """,
+        params + [limit, offset],
+    )
+
+    def map_tracking(r):
+        return {
+            # ── taex_reservasi — semua kolom ──
+            "ID":                   r["id"],
+            "Plant":                r["plant"],
+            "Equipment":            r["equipment"],
+            "Order":                r["order"],
+            "Revision":             r["revision"],
+            "Reservno":             r["reservno"],
+            "Material":             r["material"],
+            "Itm":                  r["itm"],
+            "Material_Description": r["material_description"],
+            "Qty_Reqmts":           _n(r["qty_reqmts"]),
+            "Qty_Stock":            _n(r["qty_stock"]),
+            "Qty_PR":               _n(r["qty_pr"]),
+            "Qty_Deliv":            _n(r["qty_deliv"]),
+            "Qty_f_avail_check":    _n(r["qty_f_avail_check"]),
+            "Qty_Withdrawn":        _n(r["qty_withdrawn"]),
+            "PR":                   r["pr"],
+            "Item":                 r["item"],
+            "Cost_Ctrs":            r["cost_ctrs"],
+            "PO":                   r["po"],
+            "PO_Date":              r["po_date"],
+            "Delivery_Date":        r["delivery_date"],
+            "SLoc":                 r["sloc"],
+            "Del":                  r["del"],
+            "FIs":                  r["fis"],
+            "Ict":                  r["ict"],
+            "PG":                   r["pg"],
+            "Recipient":            r["recipient"],
+            "Unloading_point":      r["unloading_point"],
+            "Reqmts_Date":          r["reqmts_date"],
+            "UoM":                  r["uom"],
+            "GL_Acct":              r["gl_acct"],
+            "Res_Price":            _n(r["res_price"]),
+            "Res_per":              _n(r["res_per"]),
+            "Res_Curr":             r["res_curr"],
+            # ── sap_pr — semua kolom ──
+            "PR_Plant":             r["pr_plant"],
+            "PR_PR":                r["pr_pr"],
+            "PR_Item":              r["pr_item"],
+            "PR_Material":          r["pr_material"],
+            "PR_Material_Desc":     r["pr_material_description"],
+            "PR_D":                 r["pr_d"],
+            "PR_R":                 r["pr_r"],
+            "PR_PGr":               r["pr_pgr"],
+            "PR_S":                 r["pr_s"],
+            "TrackingNo":           r["tracking_no"],
+            "PR_Qty_PR":            _n(r["pr_qty_pr"]),
+            "PR_Un":                r["pr_un"],
+            "Req_Date":             r["req_date"],
+            "Valn_price":           _n(r["valn_price"]),
+            "PR_Curr":              r["pr_curr"],
+            "PR_Per":               _n(r["pr_per"]),
+            "Release_Date":         r["release_date"],
+            "Tracking":             r["tracking"],
+            # ── sap_po — semua kolom ──
+            "PO_Plnt":              r["po_plnt"],
+            "PO_Purchreq":          r["po_purchreq"],
+            "PO_Item":              r["po_item"],
+            "PO_Material":          r["po_material"],
+            "PO_Short_Text":        r["po_short_text"],
+            "PO_PO":                r["po_po"],
+            "PO_PO_Item":           r["po_po_item"],
+            "PO_D":                 r["po_d"],
+            "PO_DCI":               r["po_dci"],
+            "PO_PGr":               r["po_pgr"],
+            "PO_Doc_Date":          r["po_doc_date"],
+            "PO_Quantity":          _n(r["po_quantity"]),
+            "PO_Qty_Delivered":     _n(r["po_qty_delivered"]),
+            "PO_Deliv_Date":        r["po_deliv_date"],
+            "PO_OUn":               r["po_oun"],
+            "PO_Net_Price":         _n(r["po_net_price"]),
+            "PO_Crcy":              r["po_crcy"],
+            "PO_Per":               _n(r["po_per"]),
+            # ── work_order — kolom relevan untuk progress tracking ──
+            "WO_Description":       r["wo_description"],
+            "WO_System_Status":     r["wo_system_status"],
+            "WO_User_Status":       r["wo_user_status"],
+            "WO_Basic_Start":       r["wo_basic_start_date"],
+            "WO_Basic_Finish":      r["wo_basic_finish_date"],
+            "WO_Actual_Release":    r["wo_actual_release"],
+            "WO_Notification":      r["wo_notification"],
+            "WO_Funct_Location":    r["wo_funct_location"],
+            "WO_Planner_Group":     r["wo_planner_group"],
+            "WO_Main_Work_Ctr":     r["wo_main_work_ctr"],
+        }
+
+    total = int(count_res[0]["c"])
+    return jsonify({
+        "data": [map_tracking(r) for r in data_res],
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+            "hasMore": offset + limit < total,
+        },
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRACKING SUMMARY — ringkasan per PR/Tracking dari taex
+# (digunakan untuk card summary di halaman tracking)
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking/summary")
+def get_tracking_summary(request: Request):
+    """
+    Ringkasan tracking berbasis taex_reservasi:
+    - Total material, total Qty_Reqmts, total Qty_Stock, total Qty_PR, total Qty_Deliv
+    - Digroup per PR (bukan per sap_pr row)
+    - Karena taex sudah 1 baris per reservasi/material, SUM di sini adalah benar
+    """
+    check_api_key(request)
+
+    summary = query("""
+        SELECT
+            COALESCE(t.pr, '(Tanpa PR)')  AS pr,
+            COUNT(*)                        AS jumlah_material,
+            SUM(COALESCE(t.qty_reqmts, 0)) AS total_reqmts,
+            SUM(COALESCE(t.qty_stock,  0)) AS total_stock,
+            SUM(COALESCE(t.qty_pr,     0)) AS total_qty_pr,
+            SUM(COALESCE(t.qty_deliv,  0)) AS total_deliv,
+            -- Cek apakah ada PO
+            COUNT(CASE WHEN t.po IS NOT NULL AND t.po <> '' THEN 1 END) AS with_po,
+            COUNT(CASE WHEN t.po IS NULL OR t.po = ''       THEN 1 END) AS without_po,
+            -- Tracking info dari sap_pr (ambil salah satu yang match)
+            (SELECT sp.tracking
+             FROM sap_pr sp
+             WHERE sp.pr = t.pr
+             LIMIT 1) AS tracking,
+            (SELECT sp.tracking_no
+             FROM sap_pr sp
+             WHERE sp.pr = t.pr
+             LIMIT 1) AS tracking_no
+        FROM taex_reservasi t
+        GROUP BY t.pr
+        ORDER BY t.pr NULLS LAST
+    """)
+
+    return jsonify([{
+        "PR":             r["pr"],
+        "JumlahMaterial": int(r["jumlah_material"]),
+        "Total_Reqmts":   _n(r["total_reqmts"]),
+        "Total_Stock":    _n(r["total_stock"]),
+        "Total_Qty_PR":   _n(r["total_qty_pr"]),
+        "Total_Deliv":    _n(r["total_deliv"]),
+        "With_PO":        int(r["with_po"]),
+        "Without_PO":     int(r["without_po"]),
+        "Tracking":       r["tracking"] or "",
+        "TrackingNo":     r["tracking_no"] or "",
+    } for r in summary])
+
+
+# ═══════════════════════════════════════════════════════════════
 # AUDIT — server-side JOIN taex vs prisma
 # ═══════════════════════════════════════════════════════════════
 AUDIT_COLS = [
