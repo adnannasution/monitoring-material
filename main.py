@@ -1350,6 +1350,385 @@ def reset_all(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+# CHATBOT API — Endpoint khusus untuk chatbot external
+# API Key terpisah: CHATBOT_API_KEY
+# Base URL: /chatbot/tracking
+# ═══════════════════════════════════════════════════════════════
+
+CHATBOT_API_KEY = os.getenv("CHATBOT_API_KEY", "5cRtu21X6O1VHJbE2JVfcKinfSknxgTX56EPS5NIGuY")
+
+def check_chatbot_key(request: Request):
+    key = request.headers.get("x-chatbot-key") or request.query_params.get("chatbot_key")
+    if key != CHATBOT_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized: chatbot API key tidak valid")
+
+
+@app.get("/chatbot/tracking")
+def chatbot_tracking_simple(
+    request: Request,
+    status:       str  = "",
+    plant:        str  = "",
+    order:        str  = "",
+    equipment:    str  = "",
+    material:     str  = "",
+    q:            str  = "",
+    summary_only: bool = False,
+    page:         int  = 1,
+    limit:        int  = 50,
+):
+    """
+    Jalur SEDERHANA — chatbot kirim filter, PRISMA yang query.
+    Tidak perlu LLM generate SQL.
+
+    Filter tersedia:
+    - status: no-pr | pr-created | po-created | partial | complete
+    - plant, order, equipment, material, q (search bebas)
+    - summary_only=true → return ringkasan bukan detail baris
+    - page, limit (max 200)
+
+    Auth: header x-chatbot-key atau query param chatbot_key
+    """
+    check_chatbot_key(request)
+
+    limit  = min(200, max(1, limit))
+    offset = (page - 1) * limit
+
+    conds, params = [], []
+
+    if q:
+        conds.append("""(
+            t.material ILIKE %s OR t.material_description ILIKE %s
+            OR t."order" ILIKE %s OR t.equipment ILIKE %s
+            OR t.pr ILIKE %s OR t.reservno ILIKE %s
+        )""")
+        p = f"%{q}%"; params.extend([p]*6)
+
+    if plant:
+        conds.append("t.plant = %s"); params.append(plant)
+    if order:
+        conds.append('t."order" = %s'); params.append(order)
+    if material:
+        conds.append("t.material ILIKE %s"); params.append(f"%{material}%")
+    if equipment:
+        conds.append("t.equipment ILIKE %s"); params.append(f"%{equipment}%")
+
+    status_cond = ""
+    if status == "no-pr":
+        status_cond = "AND (t.pr IS NULL OR t.pr = '')"
+    elif status == "pr-created":
+        status_cond = "AND (t.pr IS NOT NULL AND t.pr != '') AND (po_agg.po IS NULL OR po_agg.po = '')"
+    elif status == "po-created":
+        status_cond = "AND (po_agg.po IS NOT NULL AND po_agg.po != '') AND COALESCE(po_agg.qty_delivered,0) = 0"
+    elif status == "partial":
+        status_cond = "AND COALESCE(po_agg.qty_delivered,0) > 0 AND COALESCE(po_agg.qty_delivered,0) < COALESCE(po_agg.po_quantity,0)"
+    elif status == "complete":
+        status_cond = "AND COALESCE(po_agg.qty_delivered,0) >= COALESCE(po_agg.po_quantity,0) AND COALESCE(po_agg.po_quantity,0) > 0"
+
+    sql_base = f"""
+        FROM taex_reservasi t
+        LEFT JOIN LATERAL (
+            SELECT * FROM work_order wo WHERE wo."order" = t."order" LIMIT 1
+        ) wo ON true
+        LEFT JOIN LATERAL (
+            SELECT sp.req_date FROM sap_pr sp
+            WHERE sp.pr = t.pr AND (sp.d IS NULL OR sp.d = '') LIMIT 1
+        ) sp ON true
+        LEFT JOIN LATERAL (
+            SELECT
+                po.po, po.doc_date, po.deliv_date, po.crcy,
+                SUM(po.po_quantity)   AS po_quantity,
+                SUM(po.qty_delivered) AS qty_delivered,
+                SUM(po.net_price)     AS net_price
+            FROM sap_po po
+            WHERE po.purchreq = t.pr AND (po.d IS NULL OR po.d = '')
+            GROUP BY po.po, po.doc_date, po.deliv_date, po.crcy
+            ORDER BY po.po LIMIT 1
+        ) po_agg ON true
+        WHERE t.material IS NOT NULL AND t.material != ''
+        {("AND " + " AND ".join(conds)) if conds else ""}
+        {status_cond}
+    """
+
+    def calc_status(r):
+        has_pr  = bool(r.get("pr"))
+        has_po  = bool(r.get("po_num"))
+        qty_po  = float(r.get("po_quantity") or 0)
+        qty_del = float(r.get("qty_delivered") or 0)
+        if not has_pr:         return "no-pr"
+        if not has_po:         return "pr-created"
+        if qty_del <= 0:       return "po-created"
+        if qty_del < qty_po:   return "partial"
+        return "complete"
+
+    if summary_only:
+        summary_sql = f"""
+            SELECT
+                COUNT(*)                                                              AS total_material,
+                COUNT(DISTINCT t."order")                                             AS total_order,
+                COUNT(DISTINCT t.equipment)                                           AS total_equipment,
+                SUM(CASE WHEN t.pr IS NULL OR t.pr='' THEN 1 ELSE 0 END)           AS no_pr,
+                SUM(CASE WHEN t.pr IS NOT NULL AND t.pr!=''
+                          AND (po_agg.po IS NULL OR po_agg.po='') THEN 1 ELSE 0 END) AS pr_created,
+                SUM(CASE WHEN po_agg.po IS NOT NULL AND po_agg.po!=''
+                          AND COALESCE(po_agg.qty_delivered,0)=0 THEN 1 ELSE 0 END)  AS po_created,
+                SUM(CASE WHEN COALESCE(po_agg.qty_delivered,0)>0
+                          AND COALESCE(po_agg.qty_delivered,0)<COALESCE(po_agg.po_quantity,0)
+                         THEN 1 ELSE 0 END)                                           AS partial,
+                SUM(CASE WHEN COALESCE(po_agg.qty_delivered,0)>=COALESCE(po_agg.po_quantity,0)
+                          AND COALESCE(po_agg.po_quantity,0)>0 THEN 1 ELSE 0 END)    AS complete,
+                COALESCE(SUM(t.qty_reqmts),0)                                         AS total_qty_reqmts,
+                COALESCE(SUM(t.qty_pr),0)                                             AS total_qty_pr,
+                COALESCE(SUM(po_agg.net_price),0)                                     AS total_nilai_po
+            {sql_base}
+        """
+        s = query(summary_sql, params)[0]
+        return jsonify({
+            "mode": "summary",
+            "filter": {"status":status,"plant":plant,"order":order,
+                       "equipment":equipment,"material":material,"q":q},
+            "summary": {
+                "total_material":    int(s["total_material"] or 0),
+                "total_order":       int(s["total_order"] or 0),
+                "total_equipment":   int(s["total_equipment"] or 0),
+                "no_pr":             int(s["no_pr"] or 0),
+                "pr_created":        int(s["pr_created"] or 0),
+                "po_created":        int(s["po_created"] or 0),
+                "partial_delivery":  int(s["partial"] or 0),
+                "complete":          int(s["complete"] or 0),
+                "total_qty_reqmts":  float(s["total_qty_reqmts"] or 0),
+                "total_qty_pr":      float(s["total_qty_pr"] or 0),
+                "total_nilai_po_idr":float(s["total_nilai_po"] or 0),
+            }
+        })
+
+    # Detail mode
+    count_res = query(f"SELECT COUNT(*) AS c {sql_base}", params)
+    total = int(count_res[0]["c"])
+
+    data_sql = f"""
+        SELECT
+            t.plant, t.equipment, t."order" AS order_val,
+            t.reservno, t.material, t.itm, t.material_description,
+            t.qty_reqmts, t.qty_stock, t.pr, t.item AS pr_item, t.qty_pr,
+            t.del, t.fis, t.ict, t.pg, t.reqmts_date, t.uom,
+            wo.description AS order_desc, wo.system_status, wo.planner_group,
+            wo.basic_start_date, wo.basic_finish_date,
+            sp.req_date,
+            po_agg.po AS po_num, po_agg.po_quantity, po_agg.qty_delivered,
+            po_agg.deliv_date, po_agg.net_price, po_agg.crcy
+        {sql_base}
+        ORDER BY t.id
+        LIMIT %s OFFSET %s
+    """
+    rows = query(data_sql, params + [limit, offset])
+
+    data = []
+    for r in rows:
+        data.append({
+            "plant":               r["plant"],
+            "equipment":           r["equipment"],
+            "order":               r["order_val"],
+            "reservno":            r["reservno"],
+            "material":            r["material"],
+            "itm":                 r["itm"],
+            "material_description":r["material_description"],
+            "qty_reqmts":          _n(r["qty_reqmts"]),
+            "qty_stock":           _n(r["qty_stock"]),
+            "pr":                  r["pr"],
+            "pr_item":             r["pr_item"],
+            "qty_pr":              _n(r["qty_pr"]),
+            "uom":                 r["uom"],
+            "reqmts_date":         r["reqmts_date"],
+            "order_desc":          r["order_desc"],
+            "system_status":       r["system_status"],
+            "planner_group":       r["planner_group"],
+            "basic_start_date":    r["basic_start_date"],
+            "basic_finish_date":   r["basic_finish_date"],
+            "req_date":            r["req_date"],
+            "po_num":              r["po_num"],
+            "po_quantity":         _n(r["po_quantity"]),
+            "qty_delivered":       _n(r["qty_delivered"]),
+            "deliv_date":          r["deliv_date"],
+            "net_price":           _n(r["net_price"]),
+            "crcy":                r["crcy"],
+            "status":              calc_status(r),
+        })
+
+    return jsonify({
+        "mode": "detail",
+        "filter": {"status":status,"plant":plant,"order":order,
+                   "equipment":equipment,"material":material,"q":q},
+        "pagination": {
+            "page":page, "limit":limit,
+            "total":total, "total_pages": max(1,-(-total//limit)),
+        },
+        "data": data,
+    })
+
+
+@app.post("/chatbot/query")
+async def chatbot_query(request: Request):
+    """
+    Endpoint untuk chatbot mengirim query SQL dan mendapat hasilnya.
+
+    Request body:
+    {
+        "sql": "SELECT material, qty_reqmts FROM taex_reservasi WHERE pr IS NULL LIMIT 10"
+    }
+
+    Auth: header x-chatbot-key atau query param chatbot_key
+
+    Aturan keamanan:
+    - Hanya SELECT yang diizinkan
+    - Tabel yang boleh di-query: taex_reservasi, prisma_reservasi,
+      kumpulan_summary, sap_pr, sap_po, work_order
+    - LIMIT wajib ada, max 500 baris
+    - Query berbahaya (DROP, DELETE, UPDATE, INSERT, TRUNCATE) ditolak
+    """
+    check_chatbot_key(request)
+
+    body = await request.json()
+    sql  = (body.get("sql") or "").strip()
+
+    if not sql:
+        raise HTTPException(400, "Body harus berisi field 'sql'")
+
+    sql_upper = sql.upper()
+    FORBIDDEN = ["DROP","DELETE","UPDATE","INSERT","TRUNCATE","ALTER","CREATE",
+                 "GRANT","REVOKE","EXEC","EXECUTE","COPY","pg_","information_schema"]
+    for word in FORBIDDEN:
+        if word.upper() in sql_upper:
+            raise HTTPException(403, f"Query tidak diizinkan: mengandung '{word}'")
+
+    if not sql_upper.lstrip().startswith("SELECT"):
+        raise HTTPException(403, "Hanya query SELECT yang diizinkan")
+
+    ALLOWED_TABLES = {
+        "taex_reservasi", "prisma_reservasi", "kumpulan_summary",
+        "sap_pr", "sap_po", "work_order"
+    }
+    import re
+    tables_in_query = set(re.findall(r'(?:FROM|JOIN)\s+([\w\"]+)', sql, re.IGNORECASE))
+    tables_clean    = {t.strip('"').lower() for t in tables_in_query}
+    disallowed      = tables_clean - ALLOWED_TABLES
+    if disallowed:
+        raise HTTPException(403, f"Tabel tidak diizinkan: {', '.join(disallowed)}")
+
+    limit_match = re.search(r'LIMIT\s+(\d+)', sql, re.IGNORECASE)
+    if not limit_match:
+        raise HTTPException(400, "Query harus mengandung LIMIT (maksimal 500)")
+    if int(limit_match.group(1)) > 500:
+        raise HTTPException(400, "LIMIT maksimal 500 baris")
+
+    try:
+        rows = query(sql)
+    except Exception as e:
+        raise HTTPException(400, f"Query error: {str(e)}")
+
+    import decimal, datetime as dt
+    def clean(v):
+        if isinstance(v, decimal.Decimal): return float(v)
+        if isinstance(v, (dt.datetime, dt.date)): return str(v)
+        return v
+
+    data = [{k: clean(v) for k, v in dict(r).items()} for r in rows]
+
+    return jsonify({
+        "ok":      True,
+        "sql":     sql,
+        "rows":    len(data),
+        "columns": list(data[0].keys()) if data else [],
+        "data":    data,
+    })
+
+
+@app.get("/chatbot/schema")
+def chatbot_schema(request: Request):
+    """
+    Fetch schema langsung dari PostgreSQL information_schema.
+    Return nama kolom, tipe data, dan nullable untuk semua tabel yang diizinkan.
+    Dipanggil chatbot sekali saat startup untuk build prompt otomatis.
+    """
+    check_chatbot_key(request)
+
+    ALLOWED_TABLES = [
+        "taex_reservasi", "prisma_reservasi", "kumpulan_summary",
+        "sap_pr", "sap_po", "work_order"
+    ]
+
+    rows = query("""
+        SELECT
+            table_name, column_name, data_type,
+            is_nullable, column_default, ordinal_position
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = ANY(%s)
+        ORDER BY table_name, ordinal_position
+    """, (ALLOWED_TABLES,))
+
+    tables = {}
+    for r in rows:
+        tbl = r["table_name"]
+        if tbl not in tables:
+            tables[tbl] = {"columns": [], "column_names": []}
+        tables[tbl]["columns"].append({
+            "name":     r["column_name"],
+            "type":     r["data_type"],
+            "nullable": r["is_nullable"] == "YES",
+            "default":  r["column_default"],
+        })
+        tables[tbl]["column_names"].append(r["column_name"])
+
+    TABLE_DESC = {
+        "taex_reservasi":   "Data reservasi material TA-ex (sumber utama tracking procurement)",
+        "prisma_reservasi": "Subset taex aktif (ict=L), berisi status kertas kerja dan PR",
+        "kumpulan_summary": "Ringkasan kebutuhan material per kertas kerja (code_tracking)",
+        "sap_pr":           "Purchase Request dari SAP (join ke taex via pr=pr)",
+        "sap_po":           "Purchase Order dari SAP (join ke taex via purchreq=pr)",
+        "work_order":       "Work Order SAP (join ke taex via order=order)",
+    }
+
+    result = {}
+    for tbl in ALLOWED_TABLES:
+        if tbl in tables:
+            result[tbl] = {
+                "description":  TABLE_DESC.get(tbl, ""),
+                "columns":      tables[tbl]["columns"],
+                "column_names": tables[tbl]["column_names"],
+            }
+
+    return jsonify({
+        "allowed_tables": list(result.keys()),
+        "tables":         result,
+        "join_hints": {
+            "taex_ke_workorder":  'taex_reservasi t JOIN work_order wo ON wo."order" = t."order"',
+            "taex_ke_sap_pr":     "taex_reservasi t JOIN sap_pr sp ON sp.pr = t.pr",
+            "taex_ke_sap_po":     "taex_reservasi t JOIN sap_po po ON po.purchreq = t.pr",
+            "prisma_ke_kumpulan": "prisma_reservasi p JOIN kumpulan_summary k ON k.code_tracking = p.code_kertas_kerja AND k.material = p.material",
+        },
+        "status_logic": {
+            "no-pr":      "pr IS NULL OR pr = ''",
+            "pr-created": "pr IS NOT NULL AND pr != '' AND po belum ada",
+            "po-created": "po ada AND qty_delivered = 0",
+            "partial":    "qty_delivered > 0 AND qty_delivered < po_quantity",
+            "complete":   "qty_delivered >= po_quantity AND po_quantity > 0",
+        },
+        "important_notes": [
+            "Kolom 'order' adalah reserved word PostgreSQL — WAJIB ditulis dengan tanda kutip: \"order\"",
+            "Selalu gunakan LIMIT maksimal 500",
+            "Join PO ke taex: sap_po.purchreq = taex_reservasi.pr",
+            "Join PR ke taex: sap_pr.pr = taex_reservasi.pr",
+            "Join WO ke taex: work_order.\"order\" = taex_reservasi.\"order\"",
+        ],
+        "security": {
+            "allowed_statements": ["SELECT only"],
+            "max_limit":          500,
+            "forbidden_keywords": ["DROP","DELETE","UPDATE","INSERT","TRUNCATE","ALTER","CREATE"],
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
 # SPA FALLBACK
 # ═══════════════════════════════════════════════════════════════
 @app.get("/{full_path:path}")
