@@ -10,9 +10,10 @@ import json
 import os
 import time
 import uuid
+import hashlib
 import threading
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Any, Optional
 
 import pandas as pd
@@ -74,7 +75,87 @@ def check_api_key(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized: API key tidak valid")
 
 
-# ─── UPLOAD JOB PROGRESS ────────────────────────────────────────
+# ─── USER AUTH ───────────────────────────────────────────────────
+def _hash_password(password: str) -> str:
+    import os
+    salt = os.urandom(16).hex()
+    h    = hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+    return f"{h}:{salt}"
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        h, salt = stored.split(":")
+        return hashlib.sha256(f"{password}{salt}".encode()).hexdigest() == h
+    except Exception:
+        return False
+
+def _create_session(user_id: int) -> str:
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    expires = datetime.utcnow() + timedelta(days=7)
+    execute(
+        "INSERT INTO user_sessions (token, user_id, expires_at) VALUES (%s, %s, %s)",
+        (token, user_id, expires)
+    )
+    return token
+
+def get_current_user(request: Request) -> dict:
+    """Ambil user dari token. Raise 401 jika tidak valid."""
+    token = (request.headers.get("x-auth-token") or
+             request.query_params.get("token") or "")
+    if not token:
+        raise HTTPException(401, "Login diperlukan")
+    row = query_one("""
+        SELECT u.id, u.username, u.plant_code, u.pg_role, u.is_admin, u.is_active
+        FROM user_sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = %s AND s.expires_at > NOW()
+    """, (token,))
+    if not row:
+        raise HTTPException(401, "Sesi tidak valid atau sudah habis")
+    if not row["is_active"]:
+        raise HTTPException(403, "Akun dinonaktifkan")
+    return dict(row)
+
+def require_admin(request: Request) -> dict:
+    user = get_current_user(request)
+    if not user["is_admin"]:
+        raise HTTPException(403, "Akses admin diperlukan")
+    return user
+
+# ── PG Filter mapping ─────────────────────────────────────────
+PG_SUFFIX = { "TA": "T", "OH": "O", "Rutin": "R" }
+
+def plant_clause(user: dict, col: str = "plant") -> tuple:
+    """Return (sql_clause, params) untuk filter plant."""
+    if user["is_admin"] or not user["plant_code"]:
+        return ("1=1", [])
+    return (f"{col} = %s", [user["plant_code"]])
+
+def pg_clause(user: dict, col: str = "pg") -> tuple:
+    """Return (sql_clause, params) untuk filter PG."""
+    if user["is_admin"]:
+        return ("1=1", [])
+    suffix = PG_SUFFIX.get(user["pg_role"])
+    if not suffix:
+        return ("1=1", [])
+    return (f"{col} LIKE %s", [f"%{suffix}"])
+
+def apply_filters(user: dict, base_clauses: list, base_params: list,
+                  plant_col: str = "plant", pg_col: str = None) -> tuple:
+    """Gabungkan base clauses dengan filter plant+pg user."""
+    clauses = list(base_clauses)
+    params  = list(base_params)
+    pc, pp = plant_clause(user, plant_col)
+    clauses.append(pc); params.extend(pp)
+    if pg_col:
+        gc, gp = pg_clause(user, pg_col)
+        clauses.append(gc); params.extend(gp)
+    return clauses, params
+
+# ── Kertas kerja prefix ───────────────────────────────────────
+KK_PREFIX = { "TA": "TA", "OH": "OH", "Rutin": "RT", "Admin": "AD" }
+
+
 _jobs: dict = {}
 _jobs_lock = threading.Lock()
 
@@ -419,7 +500,12 @@ async def upload_excel(upload_type: str, request: Request,
 @app.get("/api/taex")
 def get_taex(request: Request):
     check_api_key(request)
-    rows = query("SELECT * FROM taex_reservasi ORDER BY id")
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "pg");       clauses.append(gc); params.extend(gp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM taex_reservasi WHERE {where} ORDER BY id", params)
     return jsonify([map_taex(r) for r in rows])
 
 @app.post("/api/taex")
@@ -493,7 +579,12 @@ def delete_taex(row_id: int, request: Request):
 @app.get("/api/prisma")
 def get_prisma(request: Request):
     check_api_key(request)
-    rows = query("SELECT * FROM prisma_reservasi ORDER BY id")
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "pg");       clauses.append(gc); params.extend(gp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM prisma_reservasi WHERE {where} ORDER BY id", params)
     return jsonify([map_prisma(r) for r in rows])
 
 @app.get("/api/prisma/meta")
@@ -744,7 +835,12 @@ async def put_kumpulan(request: Request):
 @app.get("/api/pr")
 def get_pr(request: Request):
     check_api_key(request)
-    rows = query("SELECT * FROM sap_pr ORDER BY id")
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "pgr");      clauses.append(gc); params.extend(gp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM sap_pr WHERE {where} ORDER BY id", params)
     return jsonify([map_sap(r) for r in rows])
 
 @app.put("/api/pr")
@@ -800,7 +896,12 @@ async def append_pr(request: Request):
 @app.get("/api/po")
 def get_po(request: Request):
     check_api_key(request)
-    rows = query("SELECT * FROM sap_po ORDER BY id")
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plnt"); clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "pgr");     clauses.append(gc); params.extend(gp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM sap_po WHERE {where} ORDER BY id", params)
     return jsonify([map_po(r) for r in rows])
 
 @app.put("/api/po")
@@ -854,7 +955,12 @@ async def append_po(request: Request):
 @app.get("/api/order")
 def get_order(request: Request):
     check_api_key(request)
-    rows = query("SELECT * FROM work_order ORDER BY id")
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant");        clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "planner_group");   clauses.append(gc); params.extend(gp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM work_order WHERE {where} ORDER BY id", params)
     return jsonify([map_order(r) for r in rows])
 
 @app.put("/api/order")
@@ -1765,10 +1871,14 @@ def map_project(r):
 @app.get("/api/project")
 def get_project(request: Request, plant: str = None):
     check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["is_deleted=0"], []
     if plant:
-        rows = query("SELECT * FROM project WHERE is_deleted=0 AND plant=%s ORDER BY project_number", (plant,))
+        clauses.append("plant=%s"); params.append(plant)
     else:
-        rows = query("SELECT * FROM project WHERE is_deleted=0 ORDER BY project_number")
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM project WHERE {where} ORDER BY project_number", params)
     return jsonify([map_project(r) for r in rows])
 
 @app.post("/api/project/replace")
@@ -1815,18 +1925,16 @@ def map_job_list(r):
 @app.get("/api/joblist")
 def get_job_list(request: Request, project_id: str = None, plant: str = None):
     check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["is_deleted=0"], []
     if project_id:
-        rows = query(
-            "SELECT * FROM job_list WHERE is_deleted=0 AND project_id=%s ORDER BY no_joblist",
-            (project_id,)
-        )
+        clauses.append("project_id=%s"); params.append(project_id)
     elif plant:
-        rows = query(
-            "SELECT * FROM job_list WHERE is_deleted=0 AND plant=%s ORDER BY no_joblist",
-            (plant,)
-        )
+        clauses.append("plant=%s"); params.append(plant)
     else:
-        rows = query("SELECT * FROM job_list WHERE is_deleted=0 ORDER BY no_joblist")
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM job_list WHERE {where} ORDER BY no_joblist", params)
     return jsonify([map_job_list(r) for r in rows])
 
 @app.post("/api/joblist/replace")
@@ -1888,22 +1996,20 @@ def map_job_detail(r):
 def get_job_detail(request: Request, joblist_id: str = None, plant: str = None,
                    page: int = 1, limit: int = 500):
     check_api_key(request)
+    user = get_current_user(request)
     offset = (page - 1) * limit
+    clauses, params = ["is_deleted=0"], []
     if joblist_id:
-        rows = query(
-            "SELECT * FROM job_detail WHERE is_deleted=0 AND joblist_id=%s ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
-            (joblist_id, limit, offset)
-        )
+        clauses.append("joblist_id=%s"); params.append(joblist_id)
     elif plant:
-        rows = query(
-            "SELECT * FROM job_detail WHERE is_deleted=0 AND plant=%s ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
-            (plant, limit, offset)
-        )
+        clauses.append("plant=%s"); params.append(plant)
     else:
-        rows = query(
-            "SELECT * FROM job_detail WHERE is_deleted=0 ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
-            (limit, offset)
-        )
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(
+        f"SELECT * FROM job_detail WHERE {where} ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
+        params + [limit, offset]
+    )
     return jsonify([map_job_detail(r) for r in rows])
 
 @app.post("/api/jobdetail/replace")
@@ -2132,10 +2238,13 @@ def map_equipment(r):
 def get_equipment(request: Request, plant: str = None, disiplin: str = None,
                   q: str = None, page: int = 1, limit: int = 500):
     check_api_key(request)
+    user = get_current_user(request)
     clauses = ["is_deleted=0"]
     params = []
     if plant:
         clauses.append("plant=%s"); params.append(plant)
+    else:
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
     if disiplin:
         clauses.append("disiplin=%s"); params.append(disiplin)
     if q:
@@ -2223,9 +2332,12 @@ def get_tracking_joblist(
     q: str = None,
 ):
     check_api_key(request)
+    user = get_current_user(request)
 
     clauses = ["wo.is_deleted = 0"]
     params  = []
+    pc, pp = plant_clause(user, "jl.plant"); clauses.append(pc); params.extend(pp)
+    gc, gp = pg_clause(user, "wo.planner_group"); clauses.append(gc); params.extend(gp)
 
     if project:
         clauses.append("p.project_number = %s"); params.append(project)
@@ -2433,6 +2545,159 @@ def get_tracking_joblist(
         result.append(d)
 
     return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════
+# AUTH ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+@app.post("/api/auth/login")
+async def login(request: Request):
+    body = await request.json()
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    user = query_one("SELECT * FROM users WHERE username=%s AND is_active=TRUE", (username,))
+    if not user or not _verify_password(password, user["password_hash"]):
+        raise HTTPException(401, "Username atau password salah")
+    token = _create_session(user["id"])
+    return jsonify({
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "plant_code": user["plant_code"],
+            "pg_role": user["pg_role"],
+            "is_admin": user["is_admin"],
+        }
+    })
+
+@app.post("/api/auth/logout")
+def logout(request: Request):
+    token = request.headers.get("x-auth-token", "")
+    if token:
+        execute("DELETE FROM user_sessions WHERE token=%s", (token,))
+    return {"ok": True}
+
+@app.get("/api/auth/me")
+def me(request: Request):
+    user = get_current_user(request)
+    return jsonify(user)
+
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN — PLANT MASTER
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/admin/plants")
+def admin_get_plants(request: Request):
+    require_admin(request)
+    rows = query("SELECT * FROM plants ORDER BY plant_code")
+    return jsonify([dict(r) for r in rows])
+
+@app.post("/api/admin/plants")
+async def admin_create_plant(request: Request):
+    require_admin(request)
+    body = await request.json()
+    code = body.get("plant_code", "").strip().upper()
+    name = body.get("plant_name", "").strip()
+    if not code:
+        raise HTTPException(400, "plant_code wajib diisi")
+    execute(
+        "INSERT INTO plants (plant_code, plant_name) VALUES (%s, %s) ON CONFLICT (plant_code) DO UPDATE SET plant_name=%s",
+        (code, name, name)
+    )
+    return {"ok": True, "plant_code": code}
+
+@app.delete("/api/admin/plants/{code}")
+def admin_delete_plant(code: str, request: Request):
+    require_admin(request)
+    execute("DELETE FROM plants WHERE plant_code=%s", (code,))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN — USER MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/admin/users")
+def admin_get_users(request: Request):
+    require_admin(request)
+    rows = query("""
+        SELECT id, username, plant_code, pg_role, is_admin, is_active, created_at
+        FROM users ORDER BY created_at DESC
+    """)
+    return jsonify([dict(r) for r in rows])
+
+@app.post("/api/admin/users")
+async def admin_create_user(request: Request):
+    require_admin(request)
+    body     = await request.json()
+    username = body.get("username", "").strip()
+    password = body.get("password", "").strip()
+    plant    = body.get("plant_code") or None
+    pg_role  = body.get("pg_role", "TA")
+    is_admin = bool(body.get("is_admin", False))
+
+    if not username or not password:
+        raise HTTPException(400, "username dan password wajib")
+    if len(password) < 6:
+        raise HTTPException(400, "Password minimal 6 karakter")
+
+    pw_hash = _hash_password(password)
+    try:
+        execute(
+            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES (%s,%s,%s,%s,%s)",
+            (username, pw_hash, plant, pg_role, is_admin)
+        )
+    except Exception as e:
+        if "unique" in str(e).lower():
+            raise HTTPException(400, "Username sudah digunakan")
+        raise e
+    return {"ok": True}
+
+@app.put("/api/admin/users/{user_id}")
+async def admin_update_user(user_id: int, request: Request):
+    require_admin(request)
+    body     = await request.json()
+    sets     = []
+    params   = []
+
+    if "plant_code" in body:
+        sets.append("plant_code=%s"); params.append(body["plant_code"] or None)
+    if "pg_role" in body:
+        sets.append("pg_role=%s"); params.append(body["pg_role"])
+    if "is_admin" in body:
+        sets.append("is_admin=%s"); params.append(bool(body["is_admin"]))
+    if "is_active" in body:
+        sets.append("is_active=%s"); params.append(bool(body["is_active"]))
+    if "password" in body and body["password"]:
+        if len(body["password"]) < 6:
+            raise HTTPException(400, "Password minimal 6 karakter")
+        sets.append("password_hash=%s"); params.append(_hash_password(body["password"]))
+
+    if not sets:
+        raise HTTPException(400, "Tidak ada field yang diupdate")
+
+    params.append(user_id)
+    execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", params)
+    # Hapus session user jika dinonaktifkan
+    if body.get("is_active") == False:
+        execute("DELETE FROM user_sessions WHERE user_id=%s", (user_id,))
+    return {"ok": True}
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(user_id: int, request: Request):
+    require_admin(request)
+    execute("DELETE FROM users WHERE id=%s AND is_admin=FALSE", (user_id,))
+    return {"ok": True}
+
+@app.get("/api/admin/pg-options")
+def pg_options(request: Request):
+    """List PG role options untuk dropdown."""
+    get_current_user(request)
+    return jsonify([
+        {"value": "TA",    "label": "TA (Turnaround)"},
+        {"value": "OH",    "label": "OH (Overhaul)"},
+        {"value": "Rutin", "label": "Rutin"},
+        {"value": "Admin", "label": "Admin"},
+    ])
 
 
 @app.get("/{full_path:path}")

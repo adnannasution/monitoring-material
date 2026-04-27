@@ -518,4 +518,47 @@ def migrate():
         except Exception:
             pass
 
+    # ── Auth tables ──────────────────────────────────────────
+    execute("""
+        CREATE TABLE IF NOT EXISTS plants (
+            plant_code  TEXT PRIMARY KEY,
+            plant_name  TEXT,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id            SERIAL PRIMARY KEY,
+            username      TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            plant_code    TEXT REFERENCES plants(plant_code),
+            pg_role       TEXT NOT NULL DEFAULT 'TA',
+            is_admin      BOOLEAN DEFAULT FALSE,
+            is_active     BOOLEAN DEFAULT TRUE,
+            created_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token       TEXT PRIMARY KEY,
+            user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    # Seed default admin jika belum ada
+    existing = query_one("SELECT id FROM users WHERE username='admin'")
+    if not existing:
+        import hashlib, os
+        salt = os.urandom(16).hex()
+        pw   = hashlib.sha256(f"Admin@123{salt}".encode()).hexdigest()
+        execute(
+            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES (%s, %s, NULL, 'Admin', TRUE)",
+            (f"admin", f"{pw}:{salt}")
+        )
+        print("✅ Default admin created: admin / Admin@123")
+
     print("✅ Migration complete")

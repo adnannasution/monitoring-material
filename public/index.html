@@ -561,6 +561,126 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 </head>
 <body>
 
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- LOGIN PAGE -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="login-page" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1a3a6b 0%,#1a56db 100%);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:32px;margin-bottom:8px">🔒</div>
+      <h2 style="margin:0;font-size:20px;color:#1a3a6b">PRISMA · TA-ex System</h2>
+      <p style="margin:6px 0 0;font-size:12px;color:#6b7280">Masuk untuk melanjutkan</p>
+    </div>
+    <div id="login-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px 12px;font-size:12px;color:#dc2626;margin-bottom:16px"></div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Username</label>
+      <input id="login-username" type="text" placeholder="Masukkan username" autocomplete="username"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;outline:none"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Password</label>
+      <input id="login-password" type="password" placeholder="Masukkan password" autocomplete="current-password"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;outline:none"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button onclick="doLogin()" id="login-btn"
+      style="width:100%;padding:11px;background:#1a56db;color:white;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">
+      Masuk
+    </button>
+    <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:16px;margin-bottom:0">
+      Hubungi admin untuk mendapatkan akun
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- ADMIN PANEL MODAL -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal" style="width:860px;max-height:85vh">
+    <div class="modal-header" style="background:#1a3a6b">
+      <h3>⚙️ Admin Panel</h3>
+      <button class="modal-close" onclick="closeModal('modal-admin')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid #e5e7eb;background:#f9fafb">
+        <button id="admin-tab-users" onclick="switchAdminTab('users')"
+          style="padding:10px 20px;border:none;background:transparent;font-size:13px;font-weight:600;color:#1a56db;border-bottom:2px solid #1a56db;cursor:pointer">
+          👥 User Management
+        </button>
+        <button id="admin-tab-plants" onclick="switchAdminTab('plants')"
+          style="padding:10px 20px;border:none;background:transparent;font-size:13px;color:#6b7280;cursor:pointer">
+          🏭 Master Plant
+        </button>
+      </div>
+
+      <!-- Users Tab -->
+      <div id="admin-panel-users" style="padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <b style="font-size:13px">Daftar User</b>
+          <button class="btn btn-teal" onclick="showCreateUserForm()" style="font-size:12px">+ Tambah User</button>
+        </div>
+        <!-- Create/Edit Form -->
+        <div id="user-form" style="display:none;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;padding:16px;margin-bottom:16px">
+          <b style="font-size:12px;display:block;margin-bottom:12px" id="user-form-title">Tambah User Baru</b>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151">Username</label>
+              <input id="uf-username" type="text" placeholder="username" style="width:100%;box-sizing:border-box;margin-top:3px;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151">Password</label>
+              <input id="uf-password" type="password" placeholder="min 6 karakter" style="width:100%;box-sizing:border-box;margin-top:3px;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151">Plant</label>
+              <select id="uf-plant" style="width:100%;box-sizing:border-box;margin-top:3px;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:12px">
+                <option value="">-- Semua Plant (Admin) --</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151">PG Role</label>
+              <select id="uf-pg" style="width:100%;box-sizing:border-box;margin-top:3px;padding:7px 9px;border:1px solid #d1d5db;border-radius:5px;font-size:12px">
+                <option value="TA">TA (Turnaround)</option>
+                <option value="OH">OH (Overhaul)</option>
+                <option value="Rutin">Rutin</option>
+                <option value="Admin">Admin</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <input type="checkbox" id="uf-is-admin" style="width:14px;height:14px">
+              <label for="uf-is-admin" style="font-size:12px;font-weight:600">Is Admin</label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-teal" onclick="submitUserForm()" style="font-size:12px">💾 Simpan</button>
+            <button class="btn btn-reset" onclick="document.getElementById('user-form').style.display='none'" style="font-size:12px">Batal</button>
+          </div>
+          <input type="hidden" id="uf-edit-id">
+        </div>
+        <div id="admin-users-table" style="font-size:12px">Memuat...</div>
+      </div>
+
+      <!-- Plants Tab -->
+      <div id="admin-panel-plants" style="display:none;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <b style="font-size:13px">Master Plant</b>
+          <div style="display:flex;gap:8px">
+            <input id="new-plant-code" type="text" placeholder="Kode (misal: 6601)" maxlength="10"
+              style="padding:6px 10px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;width:110px">
+            <input id="new-plant-name" type="text" placeholder="Nama plant"
+              style="padding:6px 10px;border:1px solid #d1d5db;border-radius:5px;font-size:12px;width:180px">
+            <button class="btn btn-teal" onclick="addPlant()" style="font-size:12px">+ Tambah</button>
+          </div>
+        </div>
+        <div id="admin-plants-table" style="font-size:12px">Memuat...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- INITIAL LOADING SCREEN -->
 <div id="init-loading">
   <div class="init-logo">
@@ -578,7 +698,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 <div class="header">
   <h1 id="appTitle">PRISMA · TA-ex System</h1>
   <div style="display:flex;align-items:center;gap:12px;">
-    <div class="header-right" id="headerRight">Material Reservation & PR Management</div>
+    <div class="header-right" id="headerRight" style="display:flex;align-items:center;gap:12px">
+      <span id="header-user-info" style="font-size:11px;opacity:0.85"></span>
+      <button id="btn-admin-panel" onclick="openAdminPanel()" style="display:none;padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer">⚙️ Admin</button>
+      <button onclick="doLogout()" style="padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer">🚪 Logout</button>
+    </div>
     <button onclick="confirmResetAll()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;" onmouseover="this.style.background='rgba(220,38,38,0.7)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">🗑 Reset Data</button>
   </div>
 </div>
@@ -3650,13 +3774,12 @@ async function syncWithTaex() {
 // KERTAS KERJA MODAL & CREATE
 // ============================================================
 function generateKKCode() {
-  // 10 karakter: 2 huruf besar di depan + 8 angka
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const digits  = '0123456789';
-  let code = '';
-  for (let i = 0; i < 2; i++) code += letters[Math.floor(Math.random() * letters.length)];
-  for (let i = 0; i < 8; i++) code += digits[Math.floor(Math.random() * digits.length)];
-  return code;
+  const prefixMap = { TA:'TA', OH:'OH', Rutin:'RT', Admin:'AD' };
+  const prefix = (_currentUser && prefixMap[_currentUser.pg_role]) || 'TA';
+  const digits = '0123456789';
+  let num = '';
+  for (let i = 0; i < 8; i++) num += digits[Math.floor(Math.random() * digits.length)];
+  return prefix + num;
 }
 async function openKertasKerjaModal() {
   showLoading('Memuat data PRISMA...', true);
@@ -3672,6 +3795,22 @@ async function openKertasKerjaModal() {
   document.getElementById('kk-input-code').value = code;
   // Reset pilihan PG dan sembunyikan WO list
   document.getElementById('kk-pg-type').value = '';
+  // Filter PG dropdown berdasarkan role user
+  const pgSel = document.getElementById('kk-pg-type');
+  if (_currentUser && !_currentUser.is_admin) {
+    // Non-admin: hanya bisa pilih PG sesuai role + auto-select
+    pgSel.innerHTML = `<option value="${_currentUser.pg_role}">${_currentUser.pg_role}</option>`;
+    pgSel.value = _currentUser.pg_role;
+    pgSel.disabled = true;
+  } else {
+    pgSel.innerHTML = `<option value="">-- Pilih Planner Group --</option>
+      <option value="TA">TA</option>
+      <option value="OH">OH</option>
+      <option value="Rutin">Rutin</option>
+      <option value="All">All &nbsp;(Semua PG)</option>`;
+    pgSel.disabled = false;
+    pgSel.value = '';
+  }
   document.getElementById('kk-wo-section').style.display = 'none';
   document.getElementById('kk-wo-list').innerHTML = '';
   openModal('modal-kk');
@@ -6773,17 +6912,278 @@ function fixTrkJlStickyHeader() {
 }
 
 // ============================================================
+// AUTH
+// ============================================================
+let _currentUser = null;
+
+function getToken() { return localStorage.getItem('auth_token') || ''; }
+function setToken(t) { localStorage.setItem('auth_token', t); }
+function clearToken() { localStorage.removeItem('auth_token'); }
+
+// Patch apiFetch to always send auth token
+const _origApiFetch = apiFetch;
+async function apiFetch(path, opts = {}) {
+  opts.headers = opts.headers || {};
+  const token = getToken();
+  if (token) opts.headers['x-auth-token'] = token;
+  return _origApiFetch(path, opts);
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!username || !password) { errEl.textContent = 'Username dan password wajib diisi'; errEl.style.display = 'block'; return; }
+  btn.textContent = '⏳ Masuk...'; btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login gagal');
+    setToken(data.token);
+    _currentUser = data.user;
+    hidLoginPage();
+    updateUserUI();
+    init();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Masuk'; btn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  try { await fetch(`${API}/auth/logout`, { method:'POST', headers:{'x-auth-token':getToken()} }); } catch(e) {}
+  clearToken(); _currentUser = null;
+  showLoginPage();
+}
+
+function showLoginPage() {
+  document.getElementById('login-page').style.display = 'flex';
+}
+function hidLoginPage() {
+  document.getElementById('login-page').style.display = 'none';
+}
+
+function updateUserUI() {
+  if (!_currentUser) return;
+  const u = _currentUser;
+  document.getElementById('header-user-info').textContent =
+    `${u.username} · ${u.pg_role}${u.plant_code ? ' · '+u.plant_code : ''}`;
+  document.getElementById('btn-admin-panel').style.display = u.is_admin ? 'inline-block' : 'none';
+}
+
+async function checkAuth() {
+  const token = getToken();
+  if (!token) { showLoginPage(); return false; }
+  try {
+    const res = await fetch(`${API}/auth/me`, { headers: { 'x-auth-token': token } });
+    if (!res.ok) throw new Error('invalid');
+    _currentUser = await res.json();
+    updateUserUI();
+    hidLoginPage();
+    return true;
+  } catch(e) {
+    clearToken();
+    showLoginPage();
+    return false;
+  }
+}
+
+// ── Admin Panel ─────────────────────────────────────────────
+let _adminActiveTab = 'users';
+
+function openAdminPanel() {
+  openModal('modal-admin');
+  switchAdminTab('users');
+}
+
+function switchAdminTab(tab) {
+  _adminActiveTab = tab;
+  document.getElementById('admin-panel-users').style.display  = tab === 'users'  ? 'block' : 'none';
+  document.getElementById('admin-panel-plants').style.display = tab === 'plants' ? 'block' : 'none';
+  const btnU = document.getElementById('admin-tab-users');
+  const btnP = document.getElementById('admin-tab-plants');
+  btnU.style.borderBottom = tab==='users'  ? '2px solid #1a56db' : 'none';
+  btnU.style.color        = tab==='users'  ? '#1a56db' : '#6b7280';
+  btnP.style.borderBottom = tab==='plants' ? '2px solid #1a56db' : 'none';
+  btnP.style.color        = tab==='plants' ? '#1a56db' : '#6b7280';
+  if (tab === 'users')  loadAdminUsers();
+  if (tab === 'plants') loadAdminPlants();
+}
+
+async function loadAdminUsers() {
+  const el = document.getElementById('admin-users-table');
+  el.innerHTML = 'Memuat...';
+  try {
+    const rows = await apiFetch('/admin/users');
+    const PG_LABEL = { TA:'TA', OH:'OH', Rutin:'RT', Admin:'Admin' };
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#1a56db;color:white">
+        <th style="padding:7px 10px;text-align:left">Username</th>
+        <th style="padding:7px 10px">Plant</th>
+        <th style="padding:7px 10px">PG Role</th>
+        <th style="padding:7px 10px">Admin</th>
+        <th style="padding:7px 10px">Status</th>
+        <th style="padding:7px 10px">Aksi</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr style="border-bottom:1px solid #f0f0f0">
+          <td style="padding:7px 10px;font-weight:600">${r.username}</td>
+          <td style="padding:7px 10px;text-align:center">${r.plant_code||'—'}</td>
+          <td style="padding:7px 10px;text-align:center"><span class="badge badge-${r.pg_role==='Admin'?'purple':r.pg_role==='TA'?'blue':r.pg_role==='OH'?'green':'teal'}">${r.pg_role}</span></td>
+          <td style="padding:7px 10px;text-align:center">${r.is_admin?'✅':''}</td>
+          <td style="padding:7px 10px;text-align:center"><span class="badge badge-${r.is_active?'green':'gray'}">${r.is_active?'Aktif':'Nonaktif'}</span></td>
+          <td style="padding:7px 10px;text-align:center;display:flex;gap:4px;justify-content:center">
+            <button class="btn btn-search" style="font-size:11px;padding:3px 8px" onclick="editUser(${r.id},'${r.username}','${r.plant_code||''}','${r.pg_role}',${r.is_admin})">Edit</button>
+            <button class="btn" style="font-size:11px;padding:3px 8px;background:${r.is_active?'#fef2f2':'#f0fdf4'};color:${r.is_active?'#dc2626':'#16a34a'};border:1px solid ${r.is_active?'#fecaca':'#bbf7d0'}" onclick="toggleUser(${r.id},${r.is_active})">${r.is_active?'Nonaktifkan':'Aktifkan'}</button>
+            ${!r.is_admin?`<button class="btn" style="font-size:11px;padding:3px 8px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca" onclick="deleteUser(${r.id},'${r.username}')">Hapus</button>`:''}
+          </td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } catch(e) { el.innerHTML = `<span style="color:red">Gagal: ${e.message}</span>`; }
+}
+
+async function loadAdminPlants() {
+  const el = document.getElementById('admin-plants-table');
+  el.innerHTML = 'Memuat...';
+  try {
+    const rows = await apiFetch('/admin/plants');
+    el.innerHTML = rows.length
+      ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#1a56db;color:white">
+            <th style="padding:7px 10px;text-align:left">Kode Plant</th>
+            <th style="padding:7px 10px;text-align:left">Nama Plant</th>
+            <th style="padding:7px 10px">Aksi</th>
+          </tr></thead>
+          <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid #f0f0f0">
+            <td style="padding:7px 10px;font-weight:700">${r.plant_code}</td>
+            <td style="padding:7px 10px">${r.plant_name||'—'}</td>
+            <td style="padding:7px 10px;text-align:center">
+              <button class="btn" style="font-size:11px;padding:3px 8px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca" onclick="deletePlant('${r.plant_code}')">Hapus</button>
+            </td>
+          </tr>`).join('')}</tbody>
+        </table>`
+      : '<p style="color:#9ca3af;text-align:center;padding:20px">Belum ada plant</p>';
+
+    // Reload plant dropdown di user form
+    const sel = document.getElementById('uf-plant');
+    if (sel) {
+      sel.innerHTML = '<option value="">-- Semua Plant (Admin) --</option>' +
+        rows.map(r => `<option value="${r.plant_code}">${r.plant_code} — ${r.plant_name||''}</option>`).join('');
+    }
+  } catch(e) { el.innerHTML = `<span style="color:red">Gagal: ${e.message}</span>`; }
+}
+
+async function addPlant() {
+  const code = document.getElementById('new-plant-code').value.trim().toUpperCase();
+  const name = document.getElementById('new-plant-name').value.trim();
+  if (!code) return toast('Kode plant wajib diisi','err');
+  try {
+    await apiFetch('/admin/plants', { method:'POST', body:{plant_code:code,plant_name:name} });
+    document.getElementById('new-plant-code').value = '';
+    document.getElementById('new-plant-name').value = '';
+    toast(`Plant ${code} berhasil ditambahkan`,'ok');
+    loadAdminPlants();
+  } catch(e) { toast('Gagal: '+e.message,'err'); }
+}
+
+async function deletePlant(code) {
+  if (!confirm(`Hapus plant ${code}?`)) return;
+  try {
+    await apiFetch(`/admin/plants/${code}`, { method:'DELETE' });
+    toast(`Plant ${code} dihapus`,'ok');
+    loadAdminPlants();
+  } catch(e) { toast('Gagal: '+e.message,'err'); }
+}
+
+function showCreateUserForm() {
+  document.getElementById('user-form-title').textContent = 'Tambah User Baru';
+  document.getElementById('uf-username').value  = '';
+  document.getElementById('uf-password').value  = '';
+  document.getElementById('uf-plant').value     = '';
+  document.getElementById('uf-pg').value        = 'TA';
+  document.getElementById('uf-is-admin').checked = false;
+  document.getElementById('uf-edit-id').value   = '';
+  document.getElementById('uf-username').disabled = false;
+  document.getElementById('user-form').style.display = 'block';
+  loadAdminPlants(); // refresh plant dropdown
+}
+
+function editUser(id, username, plant, pg, isAdmin) {
+  document.getElementById('user-form-title').textContent = `Edit User: ${username}`;
+  document.getElementById('uf-username').value   = username;
+  document.getElementById('uf-username').disabled = true;
+  document.getElementById('uf-password').value   = '';
+  document.getElementById('uf-plant').value      = plant;
+  document.getElementById('uf-pg').value         = pg;
+  document.getElementById('uf-is-admin').checked = isAdmin;
+  document.getElementById('uf-edit-id').value    = id;
+  document.getElementById('user-form').style.display = 'block';
+}
+
+async function submitUserForm() {
+  const editId = document.getElementById('uf-edit-id').value;
+  const body = {
+    username:   document.getElementById('uf-username').value.trim(),
+    password:   document.getElementById('uf-password').value,
+    plant_code: document.getElementById('uf-plant').value || null,
+    pg_role:    document.getElementById('uf-pg').value,
+    is_admin:   document.getElementById('uf-is-admin').checked,
+  };
+  try {
+    if (editId) {
+      await apiFetch(`/admin/users/${editId}`, { method:'PUT', body });
+      toast('User berhasil diupdate','ok');
+    } else {
+      await apiFetch('/admin/users', { method:'POST', body });
+      toast('User berhasil dibuat','ok');
+    }
+    document.getElementById('user-form').style.display = 'none';
+    loadAdminUsers();
+  } catch(e) { toast('Gagal: '+e.message,'err'); }
+}
+
+async function toggleUser(id, currentActive) {
+  try {
+    await apiFetch(`/admin/users/${id}`, { method:'PUT', body:{ is_active: !currentActive } });
+    toast(`User ${currentActive?'dinonaktifkan':'diaktifkan'}`,'ok');
+    loadAdminUsers();
+  } catch(e) { toast('Gagal: '+e.message,'err'); }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Hapus user ${username}?`)) return;
+  try {
+    await apiFetch(`/admin/users/${id}`, { method:'DELETE' });
+    toast(`User ${username} dihapus`,'ok');
+    loadAdminUsers();
+  } catch(e) { toast('Gagal: '+e.message,'err'); }
+}
+
+// ============================================================
 // BOOT
 // ============================================================
-init().then(() => {
-  try { switchApp('taex'); } catch(e) { console.error('switchApp error:', e); }
-  try { initAllResizable(); } catch(e) { console.error('initAllResizable error:', e); }
-  try { initColVisibility(); } catch(e) { console.error('initColVisibility error:', e); }
-  try { initFreezeListeners(); } catch(e) { console.error('initFreezeListeners error:', e); }
-}).catch(e => {
-  console.error('init() rejected:', e);
-  // Pastikan init-loading tersembunyi meski init gagal
-  try { hideInitLoading(); } catch(_) {}
+// Sembunyikan login page dulu saat load awal (init-loading yang tampil)
+document.getElementById('login-page').style.display = 'none';
+
+checkAuth().then(authed => {
+  if (!authed) return; // login page sudah tampil
+  init().then(() => {
+    try { switchApp('taex'); } catch(e) { console.error('switchApp error:', e); }
+    try { initAllResizable(); } catch(e) { console.error('initAllResizable error:', e); }
+    try { initColVisibility(); } catch(e) { console.error('initColVisibility error:', e); }
+    try { initFreezeListeners(); } catch(e) { console.error('initFreezeListeners error:', e); }
+  }).catch(e => {
+    console.error('init() rejected:', e);
+    try { hideInitLoading(); } catch(_) {}
+  });
 });
 
 </script>
