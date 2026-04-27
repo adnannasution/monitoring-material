@@ -1768,11 +1768,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <table id="trkjl-table">
         <thead>
           <tr>
-            <th colspan="4" style="background:#1e3a5f;text-align:center">🔧 Work Order</th>
-            <th colspan="6" style="background:#14532d;text-align:center">📝 Job Detail</th>
-            <th colspan="3" style="background:#3b1f6e;text-align:center">📋 Job List</th>
+            <th colspan="5" style="background:#1e3a5f;text-align:center">🔧 Work Order</th>
+            <th colspan="7" style="background:#14532d;text-align:center">📝 Job Detail</th>
+            <th colspan="4" style="background:#3b1f6e;text-align:center">📋 Job List</th>
             <th colspan="5" style="background:#1e3a5f;text-align:center">⚙️ Equipment</th>
-            <th colspan="4" style="background:#7c2d12;text-align:center">🏗 Project</th>
+            <th colspan="5" style="background:#7c2d12;text-align:center">🏗 Project</th>
           </tr>
           <tr>
             <!-- WO -->
@@ -1780,6 +1780,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th>System Status</th>
             <th>Plan Cost</th>
             <th>Act. Cost</th>
+            <th style="min-width:120px">Readiness WO</th>
             <!-- Job Detail -->
             <th>No. JD</th>
             <th>Deskripsi JD</th>
@@ -1787,10 +1788,12 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th>Nomor PM</th>
             <th>MI</th>
             <th>Material/Jasa</th>
+            <th style="min-width:120px">Readiness JD</th>
             <!-- Job List -->
             <th>No. Joblist</th>
             <th>Deskripsi JL</th>
             <th>Plant</th>
+            <th style="min-width:120px">Readiness JL</th>
             <!-- Equipment -->
             <th>Equipment No.</th>
             <th>Deskripsi Eq.</th>
@@ -1802,10 +1805,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th>Deskripsi Project</th>
             <th>Status</th>
             <th>Finish Date</th>
+            <th style="min-width:120px">Readiness Project</th>
           </tr>
         </thead>
         <tbody id="trkjl-tbody">
-          <tr class="loading-row"><td colspan="22">Memuat data tracking joblist...</td></tr>
+          <tr class="loading-row"><td colspan="26">Memuat data tracking joblist...</td></tr>
         </tbody>
       </table>
     </div>
@@ -6578,6 +6582,18 @@ function renderTrkJl() {
   const STATUS_COLOR = { 'REL': 'green', 'TECO': 'blue', 'CLSD': 'gray', 'CRTD': 'teal' };
   const PROJ_COLOR   = { 'In Progress': 'green', 'Completed': 'blue', 'Planning': 'gray' };
 
+  function readinessBar(pct, ready) {
+    const p     = Math.round(pct || 0);
+    const color = p === 100 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626';
+    const label = ready ? '✅ Ready' : `${p}%`;
+    return `<div style="display:flex;align-items:center;gap:5px;min-width:110px">
+      <div style="flex:1;background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">
+        <div style="width:${p}%;height:100%;background:${color};border-radius:99px"></div>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:${color};white-space:nowrap">${label}</span>
+    </div>`;
+  }
+
   document.getElementById('trkjl-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
         <!-- WO -->
@@ -6585,6 +6601,7 @@ function renderTrkJl() {
         <td><span class="badge badge-${STATUS_COLOR[r.system_status?.split(' ')[0]] || 'gray'}">${D(r.system_status)}</span></td>
         <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
         <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
+        <td>${readinessBar(r.order_readiness_pct, r.order_ready)}</td>
         <!-- Job Detail -->
         <td style="font-size:11px;font-weight:600">${D(r.no_joblist_detail)}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jd_desc||''}">${D(r.jd_desc)}</td>
@@ -6592,10 +6609,12 @@ function renderTrkJl() {
         <td>${D(r.nomor_pm)}</td>
         <td>${boolBadge(r.is_mechanical_integrity)}</td>
         <td style="font-size:10px">${r.is_material==1?'<span class="badge badge-blue">MAT</span>':''}${r.is_jasa==1?'<span class="badge badge-teal">JASA</span>':''}${r.is_lldii==1?'<span class="badge badge-purple">LLDII</span>':''}</td>
+        <td>${readinessBar(r.jd_readiness_pct, r.jd_ready)}</td>
         <!-- Job List -->
         <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
         <td>${D(r.plant)}</td>
+        <td>${readinessBar(r.jl_readiness_pct, r.jl_ready)}</td>
         <!-- Equipment -->
         <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
@@ -6607,8 +6626,9 @@ function renderTrkJl() {
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
         <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
         <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
+        <td>${readinessBar(r.project_readiness_pct, r.project_ready)}</td>
       </tr>`).join('')
-    : '<tr><td colspan="22" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+    : '<tr><td colspan="26" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
   renderPagination('trkjl-pagination', 'trkjl', total, pg.page, totalPages, pg.size, renderTrkJl);
 }

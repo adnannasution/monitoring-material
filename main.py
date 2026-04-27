@@ -2322,7 +2322,117 @@ def get_tracking_joblist(
         ORDER BY p.project_number, jl.no_joblist, jd.no_joblist_detail, wo."order"
     """, params)
 
-    return jsonify([dict(r) for r in rows])
+    # ── Hitung readiness dari taex_reservasi ──────────────────
+    # Ambil semua order yang muncul di hasil, cek di taex_reservasi
+    orders = list({r["order"] for r in rows if r["order"]})
+
+    order_readiness = {}  # order → {ready: bool, pct: float, total_mat: int, ready_mat: int}
+
+    if orders:
+        placeholders = ",".join(["%s"] * len(orders))
+        mat_rows = query(f"""
+            SELECT
+                "order",
+                COUNT(*) AS total_mat,
+                SUM(CASE
+                    WHEN COALESCE(qty_deliv, 0) >= qty_reqmts
+                     AND qty_reqmts > 0
+                    THEN 1 ELSE 0
+                END) AS ready_mat
+            FROM taex_reservasi
+            WHERE "order" IN ({placeholders})
+            GROUP BY "order"
+        """, orders)
+
+        for m in mat_rows:
+            total = int(m["total_mat"] or 0)
+            ready = int(m["ready_mat"] or 0)
+            pct   = round((ready / total * 100), 1) if total > 0 else 0
+            order_readiness[m["order"]] = {
+                "order_ready":     total > 0 and ready == total,
+                "order_readiness_pct": pct,
+                "order_total_mat": total,
+                "order_ready_mat": ready,
+            }
+
+    # Order tanpa data di taex = tidak ready
+    for o in orders:
+        if o not in order_readiness:
+            order_readiness[o] = {
+                "order_ready": False,
+                "order_readiness_pct": 0,
+                "order_total_mat": 0,
+                "order_ready_mat": 0,
+            }
+
+    # ── Hitung readiness per JD ───────────────────────────────
+    # Group WO per jd_id, hitung berapa WO yang ready
+    from collections import defaultdict
+    jd_orders = defaultdict(list)   # jd_id → [order, ...]
+    jl_jds    = defaultdict(set)    # jl_id → {jd_id, ...}
+    proj_jls  = defaultdict(set)    # project_id → {jl_id, ...}
+
+    for r in rows:
+        if r["jd_id"]:
+            jd_orders[r["jd_id"]].append(r["order"])
+        if r["jl_id"] and r["jd_id"]:
+            jl_jds[r["jl_id"]].add(r["jd_id"])
+        if r["project_id"] and r["jl_id"]:
+            proj_jls[r["project_id"]].add(r["jl_id"])
+
+    def jd_readiness(jd_id):
+        orders_in_jd = jd_orders.get(jd_id, [])
+        if not orders_in_jd:
+            return False, 0
+        ready_count = sum(1 for o in orders_in_jd if order_readiness.get(o, {}).get("order_ready"))
+        pct = round(ready_count / len(orders_in_jd) * 100, 1)
+        return ready_count == len(orders_in_jd), pct
+
+    def jl_readiness(jl_id):
+        jds = jl_jds.get(jl_id, set())
+        if not jds:
+            return False, 0
+        ready_count = sum(1 for jd in jds if jd_readiness(jd)[0])
+        pct = round(ready_count / len(jds) * 100, 1)
+        return ready_count == len(jds), pct
+
+    def proj_readiness(project_id):
+        jls = proj_jls.get(project_id, set())
+        if not jls:
+            return False, 0
+        ready_count = sum(1 for jl in jls if jl_readiness(jl)[0])
+        pct = round(ready_count / len(jls) * 100, 1)
+        return ready_count == len(jls), pct
+
+    # ── Gabungkan ke setiap baris ─────────────────────────────
+    result = []
+    for r in rows:
+        d = dict(r)
+        o = d.get("order")
+
+        # Order readiness
+        ord_info = order_readiness.get(o, {"order_ready": False, "order_readiness_pct": 0,
+                                           "order_total_mat": 0, "order_ready_mat": 0})
+        d.update(ord_info)
+
+        # JD readiness
+        jd_ready, jd_pct = jd_readiness(d.get("jd_id")) if d.get("jd_id") else (False, 0)
+        d["jd_ready"]         = jd_ready
+        d["jd_readiness_pct"] = jd_pct
+
+        # JL readiness
+        jl_ready, jl_pct = jl_readiness(d.get("jl_id")) if d.get("jl_id") else (False, 0)
+        d["jl_ready"]         = jl_ready
+        d["jl_readiness_pct"] = jl_pct
+
+        # Project readiness
+        pr_ready, pr_pct = proj_readiness(d.get("project_id")) if d.get("project_id") else (False, 0)
+        d["project_ready"]         = pr_ready
+        d["project_readiness_pct"] = pr_pct
+
+        result.append(d)
+
+    return jsonify(result)
 
 
 @app.get("/{full_path:path}")
