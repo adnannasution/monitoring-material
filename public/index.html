@@ -6527,18 +6527,17 @@ state.trkJlData     = [];
 let trkJlFiltered   = [];
 
 async function fetchAndRenderTrkJl() {
-  document.getElementById('trkjl-tbody').innerHTML =
-    '<tr class="loading-row"><td colspan="27">⏳ Memuat data...</td></tr>';
+  document.getElementById('trkjl-tree').innerHTML =
+    '<div style="color:#6b7280;padding:20px;text-align:center">⏳ Memuat data...</div>';
   try {
     const rows = await apiFetch('/tracking-joblist');
     state.trkJlData = Array.isArray(rows) ? rows : [];
     populateTrkJlFilters();
-    resetPg('trkjl');
     renderTrkJl();
-    document.getElementById('badge-trk-jl').textContent = state.trkJlData.length;
+    document.getElementById('badge-trk-jl').textContent = new Set(state.trkJlData.map(r=>r.order).filter(Boolean)).size;
   } catch(e) {
-    document.getElementById('trkjl-tbody').innerHTML =
-      `<tr><td colspan="22" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+    document.getElementById('trkjl-tree').innerHTML =
+      `<div style="color:red;padding:20px">Gagal memuat: ${e.message}</div>`;
   }
 }
 
