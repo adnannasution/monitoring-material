@@ -97,6 +97,21 @@ thead th {
   cursor: pointer; user-select: none;
 }
 /* trkjl: warna per group di header */
+/* ── TREE ACCORDION ── */
+.tree-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid #f0f0f0; cursor:pointer; user-select:none; transition:background 0.15s; }
+.tree-row:hover { filter: brightness(0.96); }
+.tree-arrow { font-size:10px; width:14px; flex-shrink:0; transition:transform 0.2s; color:#6b7280; }
+.tree-arrow.open { transform:rotate(90deg); }
+.tree-arrow.leaf { color:transparent; cursor:default; }
+.tree-children { display:none; }
+.tree-children.open { display:block; }
+.tree-badge { font-size:10px; background:rgba(0,0,0,0.12); border-radius:99px; padding:1px 6px; white-space:nowrap; }
+.tree-tag { font-size:10px; border-radius:3px; padding:1px 5px; font-weight:600; white-space:nowrap; }
+/* Level colors */
+.tree-lv0 { background:#7c2d12; color:#fff; }
+.tree-lv1 { background:#f0f4ff; border-left:3px solid #1e3a5f; }
+.tree-lv2 { background:#f0fdf4; border-left:3px solid #14532d; }
+.tree-lv3 { background:#fafafa; border-left:3px solid #6b7280; padding-left:4px; }
 thead th:last-child { border-right: none; }
 thead th:hover { background: #1245b5; }
 thead th.no-sort { cursor: default; }
@@ -1764,51 +1779,10 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <button class="btn btn-export" onclick="exportTrkJlExcel()" style="margin-left:8px">📤 Export</button>
     <span class="filter-right" id="trkjl-rowCount"></span>
   </div>
-  <div class="table-container">
-    <div class="table-wrap">
-      <table id="trkjl-table">
-        <thead>
-          <tr>
-            <!-- Project -->
-            <th style="background:#7c2d12">No. Project</th>
-            <th style="background:#7c2d12">Deskripsi Project</th>
-            <th style="background:#7c2d12">Status</th>
-            <th style="background:#7c2d12">Finish Date</th>
-            <th style="background:#7c2d12;min-width:120px">Readiness Project</th>
-            <!-- Equipment -->
-            <th style="background:#1e3a5f;border-left:2px solid rgba(255,255,255,0.5)">Equipment No.</th>
-            <th style="background:#1e3a5f">Deskripsi Eq.</th>
-            <th style="background:#1e3a5f">Func. Loc.</th>
-            <th style="background:#1e3a5f">Disiplin</th>
-            <th style="background:#1e3a5f">Criticality</th>
-            <th style="background:#1e3a5f;min-width:120px">Readiness Eq.</th>
-            <!-- Job List -->
-            <th style="background:#3b1f6e;border-left:2px solid rgba(255,255,255,0.5)">No. Joblist</th>
-            <th style="background:#3b1f6e">Deskripsi JL</th>
-            <th style="background:#3b1f6e">Plant</th>
-            <th style="background:#3b1f6e;min-width:120px">Readiness JL</th>
-            <!-- Job Detail -->
-            <th style="background:#14532d;border-left:2px solid rgba(255,255,255,0.5)">No. JD</th>
-            <th style="background:#14532d">Deskripsi JD</th>
-            <th style="background:#14532d">Collective</th>
-            <th style="background:#14532d">Nomor PM</th>
-            <th style="background:#14532d">MI</th>
-            <th style="background:#14532d">Material/Jasa</th>
-            <th style="background:#14532d;min-width:120px">Readiness JD</th>
-            <!-- WO -->
-            <th style="background:#1e3a5f;border-left:2px solid rgba(255,255,255,0.5)">Order</th>
-            <th style="background:#1e3a5f">System Status</th>
-            <th style="background:#1e3a5f">Plan Cost</th>
-            <th style="background:#1e3a5f">Act. Cost</th>
-            <th style="background:#1e3a5f;min-width:120px">Readiness WO</th>
-          </tr>
-        </thead>
-        <tbody id="trkjl-tbody">
-          <tr class="loading-row"><td colspan="27">Memuat data tracking joblist...</td></tr>
-        </tbody>
-      </table>
+  <div class="table-container" style="overflow:auto">
+    <div id="trkjl-tree" style="min-width:900px;padding:4px 0">
+      <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist...</div>
     </div>
-    <div class="pagination" id="trkjl-pagination"></div>
   </div>
 </div>
 
@@ -6584,6 +6558,29 @@ function populateTrkJlFilters() {
     '<option value="">Semua</option>' + disiplins.map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
+const trkJlExpanded = { proj: new Set(), jl: new Set(), jd: new Set() };
+
+function readinessBar(pct, ready) {
+  const p = Math.round(pct || 0);
+  const color = p === 100 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626';
+  const label = ready ? '✅ Ready' : `${p}%`;
+  return `<div style="display:flex;align-items:center;gap:5px;min-width:120px">
+    <div style="flex:1;background:rgba(0,0,0,0.12);border-radius:99px;height:7px;overflow:hidden;min-width:60px">
+      <div style="width:${p}%;height:100%;background:${color};border-radius:99px"></div>
+    </div>
+    <span style="font-size:11px;font-weight:700;color:${color};white-space:nowrap">${label}</span>
+  </div>`;
+}
+
+function trkJlToggle(type, id) {
+  const set = trkJlExpanded[type];
+  if (set.has(id)) set.delete(id); else set.add(id);
+  const el    = document.getElementById(`trkjl-children-${type}-${id}`);
+  const arrow = document.getElementById(`trkjl-arrow-${type}-${id}`);
+  if (el)    el.classList.toggle('open', set.has(id));
+  if (arrow) arrow.classList.toggle('open', set.has(id));
+}
+
 function renderTrkJl() {
   const q     = (document.getElementById('trkjl-search').value || '').toLowerCase();
   const fProj = document.getElementById('trkjl-filter-project').value;
@@ -6597,90 +6594,120 @@ function renderTrkJl() {
     if (fStat && r.system_status  !== fStat) return false;
     if (fDis  && r.disiplin       !== fDis)  return false;
     if (q) {
-      const hay = [
-        r.order, r.equipment_no, r.equipment_desc,
-        r.project_number, r.project_desc,
-        r.no_joblist_detail, r.jd_desc,
-        r.no_joblist, r.jl_desc,
-        r.collective, r.nomor_pm, r.system_status,
-        r.functional_location,
-      ].filter(Boolean).join(' ').toLowerCase();
+      const hay = [r.order,r.equipment_no,r.equipment_desc,r.project_number,
+        r.project_desc,r.no_joblist_detail,r.jd_desc,r.no_joblist,
+        r.jl_desc,r.collective,r.nomor_pm,r.system_status].filter(Boolean).join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
-  const total       = trkJlFiltered.length;
-  const withEq      = trkJlFiltered.filter(r => r.equipment_no).length;
-  const totalPlan   = trkJlFiltered.reduce((s, r) => s + (parseFloat(r.total_plnnd_costs) || 0), 0);
-  const totalAct    = trkJlFiltered.reduce((s, r) => s + (parseFloat(r.totalact_costs)    || 0), 0);
-  const fmt = v => new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(v);
+  const fmt = v => new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(v);
+  const totalPlan = trkJlFiltered.reduce((s,r)=>s+(parseFloat(r.total_plnnd_costs)||0),0);
+  const totalAct  = trkJlFiltered.reduce((s,r)=>s+(parseFloat(r.totalact_costs)||0),0);
+  const uniqWO    = new Set(trkJlFiltered.map(r=>r.order).filter(Boolean)).size;
 
-  document.getElementById('trkjl-total').textContent      = total;
-  document.getElementById('trkjl-with-eq').textContent    = withEq;
-  document.getElementById('trkjl-plan-cost').textContent  = fmt(totalPlan);
-  document.getElementById('trkjl-act-cost').textContent   = fmt(totalAct);
-  document.getElementById('trkjl-rowCount').textContent   = `${total} baris`;
+  document.getElementById('trkjl-total').textContent     = uniqWO;
+  document.getElementById('trkjl-with-eq').textContent   = trkJlFiltered.filter(r=>r.equipment_no).length;
+  document.getElementById('trkjl-plan-cost').textContent = fmt(totalPlan);
+  document.getElementById('trkjl-act-cost').textContent  = fmt(totalAct);
+  document.getElementById('trkjl-rowCount').textContent  = `${trkJlFiltered.length} baris`;
 
-  const pg         = getPg('trkjl');
-  const totalPages = Math.ceil(total / pg.size) || 1;
-  if (pg.page > totalPages) pg.page = 1;
-  const slice      = trkJlFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
-
-  const STATUS_COLOR = { 'REL': 'green', 'TECO': 'blue', 'CLSD': 'gray', 'CRTD': 'teal' };
-  const PROJ_COLOR   = { 'In Progress': 'green', 'Completed': 'blue', 'Planning': 'gray' };
-
-  function readinessBar(pct, ready) {
-    const p     = Math.round(pct || 0);
-    const color = p === 100 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626';
-    const label = ready ? '✅ Ready' : `${p}%`;
-    return `<div style="display:flex;align-items:center;gap:5px;min-width:110px">
-      <div style="flex:1;background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">
-        <div style="width:${p}%;height:100%;background:${color};border-radius:99px"></div>
-      </div>
-      <span style="font-size:11px;font-weight:700;color:${color};white-space:nowrap">${label}</span>
-    </div>`;
+  // ── Build tree ───────────────────────────────────────────
+  const projMap = new Map();
+  for (const r of trkJlFiltered) {
+    const pid  = r.project_id  || '__no_proj__';
+    const jlid = r.jl_id       || '__no_jl__';
+    const jdid = r.jd_id       || '__no_jd__';
+    if (!projMap.has(pid)) projMap.set(pid, { r, jlMap: new Map() });
+    const proj = projMap.get(pid);
+    if (!proj.jlMap.has(jlid)) proj.jlMap.set(jlid, { r, jdMap: new Map() });
+    const jl = proj.jlMap.get(jlid);
+    if (!jl.jdMap.has(jdid)) jl.jdMap.set(jdid, { r, wos: [] });
+    if (r.order) jl.jdMap.get(jdid).wos.push(r);
   }
 
-  document.getElementById('trkjl-tbody').innerHTML = slice.length
-    ? slice.map(r => `<tr>
-        <!-- Project -->
-        <td style="font-weight:600">${D(r.project_number)}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
-        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
-        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
-        <td>${readinessBar(r.project_readiness_pct, r.project_ready)}</td>
-        <!-- Equipment -->
-        <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
-        <td style="font-size:11px">${D(r.functional_location)}</td>
-        <td><span class="badge badge-${DISIPLIN_COLOR[r.disiplin]||'gray'}">${D(r.disiplin)}</span></td>
-        <td><span class="badge badge-${CRIT_COLOR[r.criticallity_text]||'gray'}">${D(r.criticallity_text)}</span></td>
-        <td>${r.equipment_no ? readinessBar(r.jl_readiness_pct, r.jl_ready) : '<span style="color:#d1d5db">—</span>'}</td>
-        <!-- Job List -->
-        <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
-        <td>${D(r.plant)}</td>
-        <td>${readinessBar(r.jl_readiness_pct, r.jl_ready)}</td>
-        <!-- Job Detail -->
-        <td style="font-size:11px;font-weight:600">${D(r.no_joblist_detail)}</td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jd_desc||''}">${D(r.jd_desc)}</td>
-        <td>${D(r.collective)}</td>
-        <td>${D(r.nomor_pm)}</td>
-        <td>${boolBadge(r.is_mechanical_integrity)}</td>
-        <td style="font-size:10px">${r.is_material==1?'<span class="badge badge-blue">MAT</span>':''}${r.is_jasa==1?'<span class="badge badge-teal">JASA</span>':''}${r.is_lldii==1?'<span class="badge badge-purple">LLDII</span>':''}</td>
-        <td>${readinessBar(r.jd_readiness_pct, r.jd_ready)}</td>
-        <!-- WO -->
-        <td><b style="color:#1a56db">${D(r.order)}</b></td>
-        <td><span class="badge badge-${STATUS_COLOR[r.system_status?.split(' ')[0]] || 'gray'}">${D(r.system_status)}</span></td>
-        <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
-        <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
-        <td>${readinessBar(r.order_readiness_pct, r.order_ready)}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="27" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+  const STATUS_COLOR = { REL:'green', TECO:'blue', CLSD:'gray', CRTD:'teal' };
+  const PROJ_BG      = { 'In Progress':'#16a34a', Completed:'#2563eb', Planning:'#6b7280' };
 
-  renderPagination('trkjl-pagination', 'trkjl', total, pg.page, totalPages, pg.size, renderTrkJl);
-  requestAnimationFrame(fixTrkJlStickyHeader);
+  let html = '';
+  for (const [pid, proj] of projMap) {
+    const pr       = proj.r;
+    const projOpen = trkJlExpanded.proj.has(pid);
+    const jlCount  = proj.jlMap.size;
+    const woCount  = [...proj.jlMap.values()].reduce((s,jl)=>s+[...jl.jdMap.values()].reduce((s2,jd)=>s2+jd.wos.length,0),0);
+
+    html += `<div>
+      <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(pid)}')">
+        <span class="tree-arrow ${projOpen?'open':''}" id="trkjl-arrow-proj-${CSS.escape(pid)}">▶</span>
+        <b style="font-size:13px;flex:0 0 auto">${D(pr.project_number)||'—'}</b>
+        <span style="font-size:11px;opacity:0.85;flex:1;overflow:hidden;text-overflow:ellipsis">${D(pr.project_desc)||''}</span>
+        <span class="tree-badge">${jlCount} JL · ${woCount} WO</span>
+        <span style="font-size:10px;background:${PROJ_BG[pr.project_status]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 7px">${D(pr.project_status)||'—'}</span>
+        <span style="font-size:11px;opacity:0.8">${fmtDate(pr.finish_date)}</span>
+        ${readinessBar(pr.project_readiness_pct, pr.project_ready)}
+      </div>
+      <div class="tree-children ${projOpen?'open':''}" id="trkjl-children-proj-${CSS.escape(pid)}">`;
+
+    for (const [jlid, jl] of proj.jlMap) {
+      const jr     = jl.r;
+      const jlOpen = trkJlExpanded.jl.has(jlid);
+      const jdCount= jl.jdMap.size;
+
+      html += `<div>
+        <div class="tree-row tree-lv1" onclick="trkJlToggle('jl','${CSS.escape(jlid)}')" style="padding-left:28px">
+          <span class="tree-arrow ${jlOpen?'open':''}" id="trkjl-arrow-jl-${CSS.escape(jlid)}">▶</span>
+          <b style="font-size:11px;color:#1e3a5f;flex:0 0 auto">${D(jr.no_joblist)||'—'}</b>
+          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(jr.jl_desc)||''}</span>
+          ${jr.equipment_no?`<span style="font-size:10px;color:#1a56db;font-weight:600">⚙ ${D(jr.equipment_no)}</span><span style="font-size:10px;color:#6b7280">${D(jr.equipment_desc)||''}</span><span class="tree-tag" style="background:#e0e7ff;color:#3730a3">${D(jr.disiplin)||''}</span>`:''}
+          <span class="tree-badge" style="background:rgba(30,58,95,0.1);color:#1e3a5f">${jdCount} JD</span>
+          <span style="font-size:11px;color:#6b7280">${D(jr.plant)||''}</span>
+          ${readinessBar(jr.jl_readiness_pct, jr.jl_ready)}
+        </div>
+        <div class="tree-children ${jlOpen?'open':''}" id="trkjl-children-jl-${CSS.escape(jlid)}">`;
+
+      for (const [jdid, jd] of jl.jdMap) {
+        const dr     = jd.r;
+        const jdOpen = trkJlExpanded.jd.has(jdid);
+        const tags   = [
+          dr.is_mechanical_integrity==1?`<span class="tree-tag" style="background:#fef3c7;color:#92400e">MI</span>`:'',
+          dr.is_material==1?`<span class="tree-tag" style="background:#dbeafe;color:#1e40af">MAT</span>`:'',
+          dr.is_jasa==1?`<span class="tree-tag" style="background:#d1fae5;color:#065f46">JASA</span>`:'',
+          dr.is_lldii==1?`<span class="tree-tag" style="background:#ede9fe;color:#4c1d95">LLDII</span>`:'',
+        ].join('');
+
+        html += `<div>
+          <div class="tree-row tree-lv2" onclick="trkJlToggle('jd','${CSS.escape(jdid)}')" style="padding-left:52px">
+            <span class="tree-arrow ${jdOpen?'open':''}" id="trkjl-arrow-jd-${CSS.escape(jdid)}">▶</span>
+            <b style="font-size:11px;color:#14532d;flex:0 0 auto">${D(dr.no_joblist_detail)||'—'}</b>
+            <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(dr.jd_desc)||''}</span>
+            ${tags}
+            <span style="font-size:10px;color:#6b7280">${D(dr.collective)||''}</span>
+            ${dr.nomor_pm?`<span style="font-size:10px;color:#6b7280">PM: ${D(dr.nomor_pm)}</span>`:''}
+            <span class="tree-badge" style="background:rgba(20,83,45,0.1);color:#14532d">${jd.wos.length} WO</span>
+            ${readinessBar(dr.jd_readiness_pct, dr.jd_ready)}
+          </div>
+          <div class="tree-children ${jdOpen?'open':''}" id="trkjl-children-jd-${CSS.escape(jdid)}">`;
+
+        for (const wo of jd.wos) {
+          const sc = STATUS_COLOR[wo.system_status?.split(' ')[0]] || 'gray';
+          html += `<div class="tree-row tree-lv3" style="padding-left:76px;cursor:default">
+            <span class="tree-arrow leaf">▶</span>
+            <b style="color:#1a56db;font-size:12px;flex:0 0 auto">${D(wo.order)}</b>
+            <span class="badge badge-${sc}" style="font-size:10px">${D(wo.system_status)||'—'}</span>
+            <span style="font-size:11px;color:#6b7280">Plan: <b>${fmtCost(wo.total_plnnd_costs)}</b></span>
+            <span style="font-size:11px;color:#6b7280;flex:1">Act: <b>${fmtCost(wo.totalact_costs)}</b></span>
+            ${readinessBar(wo.order_readiness_pct, wo.order_ready)}
+          </div>`;
+        }
+        html += `</div></div>`;
+      }
+      html += `</div></div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  document.getElementById('trkjl-tree').innerHTML = html || '<div style="color:#9ca3af;padding:20px;text-align:center">Tidak ada data</div>';
 }
 
 function trkJlResetFilter() {
