@@ -1771,8 +1771,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th colspan="4" style="background:#1e3a5f;text-align:center">🔧 Work Order</th>
             <th colspan="6" style="background:#14532d;text-align:center">📝 Job Detail</th>
             <th colspan="3" style="background:#3b1f6e;text-align:center">📋 Job List</th>
-            <th colspan="4" style="background:#7c2d12;text-align:center">🏗 Project</th>
             <th colspan="5" style="background:#1e3a5f;text-align:center">⚙️ Equipment</th>
+            <th colspan="4" style="background:#7c2d12;text-align:center">🏗 Project</th>
           </tr>
           <tr>
             <!-- WO -->
@@ -1791,17 +1791,17 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th>No. Joblist</th>
             <th>Deskripsi JL</th>
             <th>Plant</th>
-            <!-- Project -->
-            <th>No. Project</th>
-            <th>Deskripsi Project</th>
-            <th>Status</th>
-            <th>Finish Date</th>
             <!-- Equipment -->
             <th>Equipment No.</th>
             <th>Deskripsi Eq.</th>
             <th>Func. Loc.</th>
             <th>Disiplin</th>
             <th>Criticality</th>
+            <!-- Project -->
+            <th>No. Project</th>
+            <th>Deskripsi Project</th>
+            <th>Status</th>
+            <th>Finish Date</th>
           </tr>
         </thead>
         <tbody id="trkjl-tbody">
@@ -6596,17 +6596,17 @@ function renderTrkJl() {
         <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
         <td>${D(r.plant)}</td>
-        <!-- Project -->
-        <td style="font-weight:600">${D(r.project_number)}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
-        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
-        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
         <!-- Equipment -->
         <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
         <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
         <td style="font-size:11px">${D(r.functional_location)}</td>
         <td><span class="badge badge-${DISIPLIN_COLOR[r.disiplin]||'gray'}">${D(r.disiplin)}</span></td>
         <td><span class="badge badge-${CRIT_COLOR[r.criticallity_text]||'gray'}">${D(r.criticallity_text)}</span></td>
+        <!-- Project -->
+        <td style="font-weight:600">${D(r.project_number)}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
+        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
+        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
       </tr>`).join('')
     : '<tr><td colspan="22" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 

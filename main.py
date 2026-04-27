@@ -2317,7 +2317,7 @@ def get_tracking_joblist(
         LEFT JOIN job_detail       jd  ON wo.joblist_detail_id = jd.id
         LEFT JOIN job_list         jl  ON jd.joblist_id        = jl.id
         LEFT JOIN project          p   ON jl.project_id        = p.id
-        LEFT JOIN equipment_taex   eq  ON wo.equipment         = eq.equipment_no
+        LEFT JOIN equipment_taex   eq  ON jl.equipment_id      = eq.id
         WHERE {where}
         ORDER BY p.project_number, jl.no_joblist, jd.no_joblist_detail, wo."order"
     """, params)
