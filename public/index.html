@@ -56,7 +56,7 @@ body { font-family: Arial, sans-serif; font-size: 13px; background: #f5f5f5; dis
 .sidebar.collapsed .btn-label { opacity: 0; width: 0; }
 
 .pages { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-.page { display: none; flex: 1; flex-direction: column; overflow: hidden; padding: 16px; gap: 12px; }
+.page { display: none; flex: 1; flex-direction: column; overflow: clip; padding: 16px; gap: 12px; }
 .page.active { display: flex; }
 
 .filter-bar {
@@ -97,10 +97,9 @@ thead th {
   cursor: pointer; user-select: none;
   position: sticky; top: 0; z-index: 2;
 }
-thead tr:nth-child(2) th { top: 33px; z-index: 2; }
-thead tr:nth-child(3) th { top: 66px; z-index: 2; }
-/* Fix gap antar group header pada multi-row thead */
-#trkjl-table thead tr:first-child th { border-bottom: none; }
+thead tr:nth-child(2) th { top: 0; z-index: 2; }
+thead tr:nth-child(3) th { top: 33px; z-index: 2; }
+/* trkjl: warna per group di header */
 thead th:last-child { border-right: none; }
 thead th:hover { background: #1245b5; }
 thead th.no-sort { cursor: default; }
@@ -266,6 +265,8 @@ thead th { position: relative; }
 
 /* Pastikan semua tbody tr punya background solid agar frozen td tidak transparan */
 tbody tr { background: #ffffff; }
+/* Pastikan thead tr tidak kena background putih */
+thead tr { background: transparent !important; }
 tbody tr:nth-child(even) { background: #ffffff; }
 
 th.col-frozen, td.col-frozen {
@@ -1773,45 +1774,38 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <table id="trkjl-table">
         <thead>
           <tr>
-            <th colspan="5" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
-            <th colspan="6" style="background:#1e3a5f;text-align:center;border-right:2px solid #fff">⚙️ Equipment</th>
-            <th colspan="4" style="background:#3b1f6e;text-align:center;border-right:2px solid #fff">📋 Job List</th>
-            <th colspan="7" style="background:#14532d;text-align:center;border-right:2px solid #fff">📝 Job Detail</th>
-            <th colspan="5" style="background:#1e3a5f;text-align:center;border-right:none">🔧 Work Order</th>
-          </tr>
-          <tr>
             <!-- Project -->
-            <th>No. Project</th>
-            <th>Deskripsi Project</th>
-            <th>Status</th>
-            <th>Finish Date</th>
-            <th style="min-width:120px">Readiness Project</th>
+            <th style="background:#7c2d12">No. Project</th>
+            <th style="background:#7c2d12">Deskripsi Project</th>
+            <th style="background:#7c2d12">Status</th>
+            <th style="background:#7c2d12">Finish Date</th>
+            <th style="background:#7c2d12;min-width:120px">Readiness Project</th>
             <!-- Equipment -->
-            <th>Equipment No.</th>
-            <th>Deskripsi Eq.</th>
-            <th>Func. Loc.</th>
-            <th>Disiplin</th>
-            <th>Criticality</th>
-            <th style="min-width:120px">Readiness Eq.</th>
+            <th style="background:#1e3a5f;border-left:2px solid rgba(255,255,255,0.5)">Equipment No.</th>
+            <th style="background:#1e3a5f">Deskripsi Eq.</th>
+            <th style="background:#1e3a5f">Func. Loc.</th>
+            <th style="background:#1e3a5f">Disiplin</th>
+            <th style="background:#1e3a5f">Criticality</th>
+            <th style="background:#1e3a5f;min-width:120px">Readiness Eq.</th>
             <!-- Job List -->
-            <th>No. Joblist</th>
-            <th>Deskripsi JL</th>
-            <th>Plant</th>
-            <th style="min-width:120px">Readiness JL</th>
+            <th style="background:#3b1f6e;border-left:2px solid rgba(255,255,255,0.5)">No. Joblist</th>
+            <th style="background:#3b1f6e">Deskripsi JL</th>
+            <th style="background:#3b1f6e">Plant</th>
+            <th style="background:#3b1f6e;min-width:120px">Readiness JL</th>
             <!-- Job Detail -->
-            <th>No. JD</th>
-            <th>Deskripsi JD</th>
-            <th>Collective</th>
-            <th>Nomor PM</th>
-            <th>MI</th>
-            <th>Material/Jasa</th>
-            <th style="min-width:120px">Readiness JD</th>
+            <th style="background:#14532d;border-left:2px solid rgba(255,255,255,0.5)">No. JD</th>
+            <th style="background:#14532d">Deskripsi JD</th>
+            <th style="background:#14532d">Collective</th>
+            <th style="background:#14532d">Nomor PM</th>
+            <th style="background:#14532d">MI</th>
+            <th style="background:#14532d">Material/Jasa</th>
+            <th style="background:#14532d;min-width:120px">Readiness JD</th>
             <!-- WO -->
-            <th>Order</th>
-            <th>System Status</th>
-            <th>Plan Cost</th>
-            <th>Act. Cost</th>
-            <th style="min-width:120px">Readiness WO</th>
+            <th style="background:#1e3a5f;border-left:2px solid rgba(255,255,255,0.5)">Order</th>
+            <th style="background:#1e3a5f">System Status</th>
+            <th style="background:#1e3a5f">Plan Cost</th>
+            <th style="background:#1e3a5f">Act. Cost</th>
+            <th style="background:#1e3a5f;min-width:120px">Readiness WO</th>
           </tr>
         </thead>
         <tbody id="trkjl-tbody">
@@ -2760,7 +2754,7 @@ function renderPage(app) {
   else if (app==='jobdetail') { if (!state.jobdetailData.length) fetchAndRenderJobdetail(); else renderJobdetail(); }
   else if (app==='jobdetailworkorder') { if (!state.jdwoData.length) fetchAndRenderJdwo(); else renderJdwo(); }
   else if (app==='equipment') { if (!state.equipmentData.length) fetchAndRenderEquipment(); else renderEquipment(); }
-  else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); }
+  else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
 }
 
 function populateFilters() {
@@ -6691,6 +6685,7 @@ function renderTrkJl() {
     : '<tr><td colspan="27" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
   renderPagination('trkjl-pagination', 'trkjl', total, pg.page, totalPages, pg.size, renderTrkJl);
+  requestAnimationFrame(fixTrkJlStickyHeader);
 }
 
 function trkJlResetFilter() {
@@ -6742,6 +6737,18 @@ function exportTrkJlExcel() {
   XLSX.utils.book_append_sheet(wb, ws, 'TrackingJoblist');
   XLSX.writeFile(wb, `TrackingJoblist_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('Export Tracking Joblist berhasil!', 'ok');
+}
+
+function fixTrkJlStickyHeader() {
+  const table = document.getElementById('trkjl-table');
+  if (!table) return;
+  const rows = table.querySelectorAll('thead tr');
+  if (rows.length < 2) return;
+  // Paksa row 1 render dulu baru ukur
+  const row1H = rows[0].offsetHeight;
+  rows[1].querySelectorAll('th').forEach(th => {
+    th.style.top = row1H + 'px';
+  });
 }
 
 // ============================================================
