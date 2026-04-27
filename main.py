@@ -2006,11 +2006,13 @@ def get_job_detail(request: Request, joblist_id: str = None, plant: str = None,
     else:
         pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
     where = " AND ".join(clauses)
+    total = query(f"SELECT COUNT(*) AS n FROM job_detail WHERE {where}", params)[0]["n"]
     rows = query(
         f"SELECT * FROM job_detail WHERE {where} ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
         params + [limit, offset]
     )
-    return jsonify([map_job_detail(r) for r in rows])
+    return jsonify({"total": int(total), "page": page, "limit": limit,
+                    "data": [map_job_detail(r) for r in rows]})
 
 @app.post("/api/jobdetail/replace")
 async def replace_job_detail(request: Request, file: UploadFile = File(...)):

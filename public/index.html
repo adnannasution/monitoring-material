@@ -107,11 +107,10 @@ thead th {
 .tree-children.open { display:block; }
 .tree-badge { font-size:10px; background:rgba(0,0,0,0.12); border-radius:99px; padding:1px 6px; white-space:nowrap; }
 .tree-tag { font-size:10px; border-radius:3px; padding:1px 5px; font-weight:600; white-space:nowrap; }
-/* Level colors */
-.tree-lv0 { background:#7c2d12; color:#fff; }
-.tree-lv1 { background:#f0f4ff; border-left:3px solid #1e3a5f; }
-.tree-lv2 { background:#f0fdf4; border-left:3px solid #14532d; }
-.tree-lv3 { background:#fafafa; border-left:3px solid #6b7280; padding-left:4px; }
+/* Nested table wrapper */
+#trkjl-tree { padding:8px; }
+#trkjl-tree table td, #trkjl-tree table th { white-space:nowrap; }
+#trkjl-tree > div { margin-bottom:8px; }
 thead th:last-child { border-right: none; }
 thead th:hover { background: #1245b5; }
 thead th.no-sort { cursor: default; }
@@ -2649,8 +2648,10 @@ async function init() {
   setSyncStatus('loading', '⏳ Memuat data dari server...');
   try {
     setInitProgress(30, 'Mengambil data dari server...');
-    // Hanya fetch meta (COUNT + state) — ringan, tanpa baris data tabel
-    const data = await apiFetch('/meta');
+    // Fetch meta dan taex paralel — hemat 1 round trip
+    const [data] = await Promise.all([
+      apiFetch('/meta'),
+    ]);
 
     setInitProgress(55, 'Memproses data...');
     state.taexData            = [];
@@ -2664,7 +2665,6 @@ async function init() {
     state.prCounter           = data.prCounter   || 0;
     state.orderData           = [];
     state.poData              = [];
-    // Simpan info total untuk badge
     const pg = data.pagination || {};
     state._totalPrisma   = pg.totalPrisma   || 0;
     state._totalKumpulan = pg.totalKumpulan || 0;
@@ -2682,9 +2682,6 @@ async function init() {
 
     setInitProgress(100, 'Selesai!');
     setTimeout(() => hideInitLoading(), 400);
-
-    // Load data tambahan di background setelah app tampil
-    // (dibutuhkan untuk fitur PR matching dan tab lain)
     setTimeout(() => _backgroundLoad(), 500);
   } catch(e) {
     setInitProgress(100, '❌ Gagal terhubung ke server');
@@ -2696,84 +2693,60 @@ async function init() {
 
 async function _backgroundLoad() {
   try {
-    const [pr, kumpulan, order, project, joblist, jdwo, equipment] = await Promise.all([
+    // Fetch paralel hanya data kecil/penting saat startup
+    const [pr, kumpulan, order, project, joblist, jdwo] = await Promise.all([
       apiFetch('/data/pr?page=1&limit=500'),
       apiFetch('/data/kumpulan?page=1&limit=500'),
       apiFetch('/order'),
       apiFetch('/project'),
       apiFetch('/joblist'),
       apiFetch('/jobdetailworkorder'),
-      apiFetch('/equipment?page=1&limit=500'),
     ]);
 
-    // PR & Kumpulan
     state.prData         = pr.data       || [];
     state.kumpulanData   = kumpulan.data || [];
     state._totalPR       = pr.pagination?.total       || state.prData.length;
     state._totalKumpulan = kumpulan.pagination?.total || state.kumpulanData.length;
 
-    // Order — fix: selalu set ulang dan render agar tidak hilang
     state.orderData = Array.isArray(order) ? order : [];
     renderOrder();
 
-    // Project
     state.projectData = Array.isArray(project) ? project : [];
     document.getElementById('badge-project').textContent = state.projectData.length;
     populateProjectFilters();
 
-    // Job List
     state.joblistData = Array.isArray(joblist) ? joblist : [];
     document.getElementById('badge-joblist').textContent = state.joblistData.length;
+    populateJoblistFilters();
 
-    // WO Detail
     state.jdwoData = Array.isArray(jdwo) ? jdwo : [];
     document.getElementById('badge-jdwo').textContent = state.jdwoData.length;
 
-    // Equipment (paginated)
-    const eqChunk = Array.isArray(equipment) ? equipment : (equipment.data || []);
-    state.equipmentData = eqChunk;
-    // Fetch halaman berikutnya kalau ada
-    const eqTotal = equipment.total || eqChunk.length;
-    if (eqChunk.length < eqTotal) {
-      let pg = 2;
-      while (state.equipmentData.length < eqTotal) {
-        const next = await apiFetch(`/equipment?page=${pg}&limit=500`);
-        const chunk = Array.isArray(next) ? next : (next.data || []);
-        state.equipmentData = state.equipmentData.concat(chunk);
-        if (chunk.length < 500) break;
-        pg++;
-      }
-    }
-    document.getElementById('badge-equipment').textContent = state.equipmentData.length;
-    populateEquipmentFilters();
-
-    // Job Detail (bisa banyak, fetch semua)
-    let allJD = [], jdPage = 1;
-    while (true) {
-      const res   = await apiFetch(`/jobdetail?page=${jdPage}&limit=500`);
-      const chunk = Array.isArray(res) ? res : (res.data || []);
-      allJD = allJD.concat(chunk);
-      if (chunk.length < 500) break;
-      jdPage++;
-    }
-    state.jobdetailData = allJD;
-    document.getElementById('badge-jobdetail').textContent = allJD.length;
-    populateJobdetailFilters();
-    populateJoblistFilters(); // butuh projectData sudah siap
-
     updateBadges();
+
+    // Badge jobdetail & equipment — lazy, fetch count saja
+    _fetchBadgeCounts();
+
   } catch(e) {
     console.warn('Background load gagal:', e.message);
   }
-  // Jika PRISMA masih kosong setelah init, load penuh
   if (prServerMeta.total === 0) {
     try {
       await ensurePrismaLoaded();
-      if (state.prismaReservasiData.length > 0) {
-        await fetchAndRenderPrisma();
-      }
+      if (state.prismaReservasiData.length > 0) await fetchAndRenderPrisma();
     } catch(e) { console.warn('Background PRISMA load gagal:', e.message); }
   }
+}
+
+async function _fetchBadgeCounts() {
+  try {
+    const eq = await apiFetch('/equipment?page=1&limit=1');
+    document.getElementById('badge-equipment').textContent = eq.total || 0;
+  } catch(e) {}
+  try {
+    const jd = await apiFetch('/jobdetail?page=1&limit=1');
+    document.getElementById('badge-jobdetail').textContent = jd.total || 0;
+  } catch(e) {}
 }
 
 // ============================================================
@@ -6343,7 +6316,8 @@ async function fetchAndRenderJobdetail() {
       const res   = await apiFetch(`/jobdetail?page=${p}&limit=500`);
       const chunk = Array.isArray(res) ? res : (res.data || []);
       all = all.concat(chunk);
-      if (chunk.length < 500) break;
+      const total = res.total || chunk.length;
+      if (all.length >= total || chunk.length < 500) break;
       p++;
     }
     state.jobdetailData = all;
@@ -6702,8 +6676,8 @@ function readinessBar(pct, ready) {
   const p = Math.round(pct || 0);
   const color = p === 100 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626';
   const label = ready ? '✅ Ready' : `${p}%`;
-  return `<div style="display:flex;align-items:center;gap:5px;min-width:120px">
-    <div style="flex:1;background:rgba(0,0,0,0.12);border-radius:99px;height:7px;overflow:hidden;min-width:60px">
+  return `<div style="display:flex;align-items:center;gap:5px;min-width:130px">
+    <div style="flex:1;background:rgba(0,0,0,0.1);border-radius:99px;height:7px;overflow:hidden;min-width:60px">
       <div style="width:${p}%;height:100%;background:${color};border-radius:99px"></div>
     </div>
     <span style="font-size:11px;font-weight:700;color:${color};white-space:nowrap">${label}</span>
@@ -6713,10 +6687,26 @@ function readinessBar(pct, ready) {
 function trkJlToggle(type, id) {
   const set = trkJlExpanded[type];
   if (set.has(id)) set.delete(id); else set.add(id);
-  const el    = document.getElementById(`trkjl-children-${type}-${id}`);
-  const arrow = document.getElementById(`trkjl-arrow-${type}-${id}`);
-  if (el)    el.classList.toggle('open', set.has(id));
-  if (arrow) arrow.classList.toggle('open', set.has(id));
+  const el    = document.getElementById(`trkjl-ch-${type}-${id}`);
+  const arrow = document.getElementById(`trkjl-ar-${type}-${id}`);
+  if (el)    el.style.display = set.has(id) ? 'block' : 'none';
+  if (arrow) arrow.style.transform = set.has(id) ? 'rotate(90deg)' : '';
+}
+
+// ── Table helpers ────────────────────────────────────────────
+function trkTable(cols, rows, indent, borderColor) {
+  const thStyle = `padding:6px 10px;text-align:left;font-size:11px;font-weight:600;white-space:nowrap;border-right:1px solid rgba(255,255,255,0.2)`;
+  const tdStyle = `padding:6px 10px;font-size:12px;border-right:1px solid #f0f0f0;white-space:nowrap`;
+  return `<div style="margin-left:${indent}px;border-left:3px solid ${borderColor};margin-bottom:2px;overflow-x:auto">
+    <table style="border-collapse:collapse;width:100%">
+      <thead><tr style="background:${borderColor}">
+        ${cols.map(c => `<th style="${thStyle};color:white">${c}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${rows.map((r,i) => `<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #f0f0f0">${r.map(td => `<td style="${tdStyle}">${td}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
 }
 
 function renderTrkJl() {
@@ -6744,108 +6734,161 @@ function renderTrkJl() {
   const totalPlan = trkJlFiltered.reduce((s,r)=>s+(parseFloat(r.total_plnnd_costs)||0),0);
   const totalAct  = trkJlFiltered.reduce((s,r)=>s+(parseFloat(r.totalact_costs)||0),0);
   const uniqWO    = new Set(trkJlFiltered.map(r=>r.order).filter(Boolean)).size;
-
   document.getElementById('trkjl-total').textContent     = uniqWO;
   document.getElementById('trkjl-with-eq').textContent   = trkJlFiltered.filter(r=>r.equipment_no).length;
   document.getElementById('trkjl-plan-cost').textContent = fmt(totalPlan);
   document.getElementById('trkjl-act-cost').textContent  = fmt(totalAct);
   document.getElementById('trkjl-rowCount').textContent  = `${trkJlFiltered.length} baris`;
 
-  // ── Build tree ───────────────────────────────────────────
+  // Build tree map
   const projMap = new Map();
   for (const r of trkJlFiltered) {
     const pid  = r.project_id  || '__no_proj__';
     const jlid = r.jl_id       || '__no_jl__';
     const jdid = r.jd_id       || '__no_jd__';
-    if (!projMap.has(pid)) projMap.set(pid, { r, jlMap: new Map() });
+    if (!projMap.has(pid))                  projMap.set(pid,  { r, jlMap: new Map() });
     const proj = projMap.get(pid);
-    if (!proj.jlMap.has(jlid)) proj.jlMap.set(jlid, { r, jdMap: new Map() });
-    const jl = proj.jlMap.get(jlid);
-    if (!jl.jdMap.has(jdid)) jl.jdMap.set(jdid, { r, wos: [] });
+    if (!proj.jlMap.has(jlid))             proj.jlMap.set(jlid, { r, jdMap: new Map() });
+    const jl   = proj.jlMap.get(jlid);
+    if (!jl.jdMap.has(jdid))              jl.jdMap.set(jdid, { r, wos: [] });
     if (r.order) jl.jdMap.get(jdid).wos.push(r);
   }
 
-  const STATUS_COLOR = { REL:'green', TECO:'blue', CLSD:'gray', CRTD:'teal' };
-  const PROJ_BG      = { 'In Progress':'#16a34a', Completed:'#2563eb', Planning:'#6b7280' };
+  const PROJ_BG   = { 'In Progress':'#16a34a','Completed':'#2563eb','Planning':'#6b7280' };
+  const ST_COLOR  = { REL:'#16a34a',TECO:'#2563eb',CLSD:'#6b7280',CRTD:'#0891b2' };
+  const DIS_COLOR = { STATIONARY:'#1d4ed8',ROTARY:'#15803d',ELECTRICAL:'#7e22ce',INSTRUMENT:'#0f766e' };
+
+  const badge = (txt, bg) => txt
+    ? `<span style="background:${bg||'#6b7280'};color:#fff;border-radius:3px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap">${txt}</span>`
+    : '<span style="color:#d1d5db">—</span>';
+
+  const arrow = (type, id, open) =>
+    `<span id="trkjl-ar-${type}-${id}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;color:#6b7280;${open?'transform:rotate(90deg)':''}">▶</span>`;
 
   let html = '';
+
+  // ── PROJECT TABLE ────────────────────────────────────────
+  const projCols = ['', 'No. Project', 'Deskripsi Project', 'Status', 'Finish Date', 'Readiness Project'];
+  const projRows = [...projMap.entries()].map(([pid, proj]) => {
+    const pr = proj.r;
+    const open = trkJlExpanded.proj.has(pid);
+    return [
+      `<span onclick="trkJlToggle('proj','${pid}')" style="cursor:pointer">${arrow('proj', pid, open)}</span>`,
+      `<b>${D(pr.project_number)||'—'}</b>`,
+      `<span style="color:#374151">${D(pr.project_desc)||''}</span>`,
+      badge(pr.project_status, PROJ_BG[pr.project_status]),
+      `<span style="font-size:11px">${fmtDate(pr.finish_date)||'—'}</span>`,
+      readinessBar(pr.project_readiness_pct, pr.project_ready),
+    ];
+  });
+
+  html += `<div style="margin-bottom:4px;padding:4px 8px;background:#7c2d12;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
+    🏗 Project (${projMap.size})
+  </div>`;
+  html += trkTable(projCols, projRows, 0, '#7c2d12');
+
+  // ── Per Project: Joblist + nested ───────────────────────
   for (const [pid, proj] of projMap) {
-    const pr       = proj.r;
-    const projOpen = trkJlExpanded.proj.has(pid);
-    const jlCount  = proj.jlMap.size;
-    const woCount  = [...proj.jlMap.values()].reduce((s,jl)=>s+[...jl.jdMap.values()].reduce((s2,jd)=>s2+jd.wos.length,0),0);
+    const open = trkJlExpanded.proj.has(pid);
 
-    html += `<div>
-      <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(pid)}')">
-        <span class="tree-arrow ${projOpen?'open':''}" id="trkjl-arrow-proj-${CSS.escape(pid)}">▶</span>
-        <b style="font-size:13px;flex:0 0 auto">${D(pr.project_number)||'—'}</b>
-        <span style="font-size:11px;opacity:0.85;flex:1;overflow:hidden;text-overflow:ellipsis">${D(pr.project_desc)||''}</span>
-        <span class="tree-badge">${jlCount} JL · ${woCount} WO</span>
-        <span style="font-size:10px;background:${PROJ_BG[pr.project_status]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 7px">${D(pr.project_status)||'—'}</span>
-        <span style="font-size:11px;opacity:0.8">${fmtDate(pr.finish_date)}</span>
-        ${readinessBar(pr.project_readiness_pct, pr.project_ready)}
-      </div>
-      <div class="tree-children ${projOpen?'open':''}" id="trkjl-children-proj-${CSS.escape(pid)}">`;
+    html += `<div id="trkjl-ch-proj-${pid}" style="display:${open?'block':'none'}">`;
 
-    for (const [jlid, jl] of proj.jlMap) {
-      const jr     = jl.r;
+    // ── JOBLIST TABLE ──────────────────────────────────────
+    const jlCols = ['', 'No. Joblist', 'Deskripsi JL', 'Plant', 'Equipment No.', 'Deskripsi Eq.', 'Disiplin', 'Criticality', 'Readiness JL'];
+    const jlRows = [...proj.jlMap.entries()].map(([jlid, jl]) => {
+      const jr   = jl.r;
       const jlOpen = trkJlExpanded.jl.has(jlid);
-      const jdCount= jl.jdMap.size;
+      return [
+        `<span onclick="trkJlToggle('jl','${jlid}')" style="cursor:pointer">${arrow('jl', jlid, jlOpen)}</span>`,
+        `<b style="color:#1e3a5f">${D(jr.no_joblist)||'—'}</b>`,
+        `<span style="color:#374151">${D(jr.jl_desc)||''}</span>`,
+        D(jr.plant)||'—',
+        jr.equipment_no ? `<b style="color:#1a56db">${D(jr.equipment_no)}</b>` : '<span style="color:#d1d5db">—</span>',
+        `<span style="color:#374151">${D(jr.equipment_desc)||'—'}</span>`,
+        jr.disiplin ? badge(jr.disiplin, DIS_COLOR[jr.disiplin]||'#6b7280') : '<span style="color:#d1d5db">—</span>',
+        `<span style="font-size:11px">${D(jr.criticallity_text)||'—'}</span>`,
+        readinessBar(jr.jl_readiness_pct, jr.jl_ready),
+      ];
+    });
 
-      html += `<div>
-        <div class="tree-row tree-lv1" onclick="trkJlToggle('jl','${CSS.escape(jlid)}')" style="padding-left:28px">
-          <span class="tree-arrow ${jlOpen?'open':''}" id="trkjl-arrow-jl-${CSS.escape(jlid)}">▶</span>
-          <b style="font-size:11px;color:#1e3a5f;flex:0 0 auto">${D(jr.no_joblist)||'—'}</b>
-          <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(jr.jl_desc)||''}</span>
-          ${jr.equipment_no?`<span style="font-size:10px;color:#1a56db;font-weight:600">⚙ ${D(jr.equipment_no)}</span><span style="font-size:10px;color:#6b7280">${D(jr.equipment_desc)||''}</span><span class="tree-tag" style="background:#e0e7ff;color:#3730a3">${D(jr.disiplin)||''}</span>`:''}
-          <span class="tree-badge" style="background:rgba(30,58,95,0.1);color:#1e3a5f">${jdCount} JD</span>
-          <span style="font-size:11px;color:#6b7280">${D(jr.plant)||''}</span>
-          ${readinessBar(jr.jl_readiness_pct, jr.jl_ready)}
-        </div>
-        <div class="tree-children ${jlOpen?'open':''}" id="trkjl-children-jl-${CSS.escape(jlid)}">`;
+    html += `<div style="margin:6px 0 2px 16px;padding:3px 8px;background:#1e3a5f;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
+      📋 Job List (${proj.jlMap.size})
+    </div>`;
+    html += trkTable(jlCols, jlRows, 16, '#1e3a5f');
 
-      for (const [jdid, jd] of jl.jdMap) {
-        const dr     = jd.r;
+    // ── Per Joblist: Job Detail + nested ──────────────────
+    for (const [jlid, jl] of proj.jlMap) {
+      const jlOpen = trkJlExpanded.jl.has(jlid);
+      html += `<div id="trkjl-ch-jl-${jlid}" style="display:${jlOpen?'block':'none'}">`;
+
+      // ── JOB DETAIL TABLE ──────────────────────────────
+      const jdCols = ['', 'No. JD', 'Deskripsi JD', 'Collective', 'Nomor PM', 'MI', 'Off Stream', 'Material/Jasa', 'Planning Status', 'Readiness JD'];
+      const jdRows = [...jl.jdMap.entries()].map(([jdid, jd]) => {
+        const dr   = jd.r;
         const jdOpen = trkJlExpanded.jd.has(jdid);
-        const tags   = [
-          dr.is_mechanical_integrity==1?`<span class="tree-tag" style="background:#fef3c7;color:#92400e">MI</span>`:'',
-          dr.is_material==1?`<span class="tree-tag" style="background:#dbeafe;color:#1e40af">MAT</span>`:'',
-          dr.is_jasa==1?`<span class="tree-tag" style="background:#d1fae5;color:#065f46">JASA</span>`:'',
-          dr.is_lldii==1?`<span class="tree-tag" style="background:#ede9fe;color:#4c1d95">LLDII</span>`:'',
-        ].join('');
+        const matTags = [
+          dr.is_material==1?`<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600;margin-right:2px">MAT</span>`:'',
+          dr.is_jasa==1?`<span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600;margin-right:2px">JASA</span>`:'',
+          dr.is_lldii==1?`<span style="background:#ede9fe;color:#4c1d95;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">LLDII</span>`:'',
+        ].join('') || '<span style="color:#d1d5db">—</span>';
+        return [
+          `<span onclick="trkJlToggle('jd','${jdid}')" style="cursor:pointer">${arrow('jd', jdid, jdOpen)}</span>`,
+          `<b style="color:#14532d;font-size:11px">${D(dr.no_joblist_detail)||'—'}</b>`,
+          `<span style="color:#374151;max-width:200px;overflow:hidden;text-overflow:ellipsis;display:inline-block" title="${dr.jd_desc||''}">${D(dr.jd_desc)||''}</span>`,
+          D(dr.collective)||'—',
+          D(dr.nomor_pm)||'—',
+          dr.is_mechanical_integrity==1 ? '<span style="color:#16a34a;font-weight:700">✔</span>' : '<span style="color:#d1d5db">—</span>',
+          dr.is_off_stream==1 ? '<span style="color:#dc2626;font-weight:700">✔</span>' : '<span style="color:#d1d5db">—</span>',
+          matTags,
+          `<span style="font-size:10px;color:#6b7280">${D(dr.planning_status_id)||'—'}</span>`,
+          readinessBar(dr.jd_readiness_pct, dr.jd_ready),
+        ];
+      });
 
-        html += `<div>
-          <div class="tree-row tree-lv2" onclick="trkJlToggle('jd','${CSS.escape(jdid)}')" style="padding-left:52px">
-            <span class="tree-arrow ${jdOpen?'open':''}" id="trkjl-arrow-jd-${CSS.escape(jdid)}">▶</span>
-            <b style="font-size:11px;color:#14532d;flex:0 0 auto">${D(dr.no_joblist_detail)||'—'}</b>
-            <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(dr.jd_desc)||''}</span>
-            ${tags}
-            <span style="font-size:10px;color:#6b7280">${D(dr.collective)||''}</span>
-            ${dr.nomor_pm?`<span style="font-size:10px;color:#6b7280">PM: ${D(dr.nomor_pm)}</span>`:''}
-            <span class="tree-badge" style="background:rgba(20,83,45,0.1);color:#14532d">${jd.wos.length} WO</span>
-            ${readinessBar(dr.jd_readiness_pct, dr.jd_ready)}
-          </div>
-          <div class="tree-children ${jdOpen?'open':''}" id="trkjl-children-jd-${CSS.escape(jdid)}">`;
+      html += `<div style="margin:6px 0 2px 32px;padding:3px 8px;background:#14532d;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
+        📝 Job Detail (${jl.jdMap.size})
+      </div>`;
+      html += trkTable(jdCols, jdRows, 32, '#14532d');
 
-        for (const wo of jd.wos) {
-          const sc = STATUS_COLOR[wo.system_status?.split(' ')[0]] || 'gray';
-          html += `<div class="tree-row tree-lv3" style="padding-left:76px;cursor:default">
-            <span class="tree-arrow leaf">▶</span>
-            <b style="color:#1a56db;font-size:12px;flex:0 0 auto">${D(wo.order)}</b>
-            <span class="badge badge-${sc}" style="font-size:10px">${D(wo.system_status)||'—'}</span>
-            <span style="font-size:11px;color:#6b7280">Plan: <b>${fmtCost(wo.total_plnnd_costs)}</b></span>
-            <span style="font-size:11px;color:#6b7280;flex:1">Act: <b>${fmtCost(wo.totalact_costs)}</b></span>
-            ${readinessBar(wo.order_readiness_pct, wo.order_ready)}
-          </div>`;
-        }
-        html += `</div></div>`;
+      // ── Per Job Detail: WO Table ───────────────────────
+      for (const [jdid, jd] of jl.jdMap) {
+        const jdOpen = trkJlExpanded.jd.has(jdid);
+        html += `<div id="trkjl-ch-jd-${jdid}" style="display:${jdOpen?'block':'none'}">`;
+
+        const woCols = ['Order', 'Notifikasi', 'System Status', 'User Status', 'Plan Cost', 'Act. Cost', 'Basic Start', 'Basic Finish', 'Actual Release', 'Planner Group', 'WBS', 'Readiness WO'];
+        const woRows = jd.wos.map(wo => {
+          const sc = ST_COLOR[wo.system_status?.split(' ')[0]] || '#6b7280';
+          return [
+            `<b style="color:#1a56db">${D(wo.order)}</b>`,
+            `<span style="font-size:11px">${D(wo.notification)||'—'}</span>`,
+            badge(wo.system_status, sc),
+            `<span style="font-size:10px">${D(wo.user_status)||'—'}</span>`,
+            `<span style="font-family:monospace">${fmtCost(wo.total_plnnd_costs)}</span>`,
+            `<span style="font-family:monospace">${fmtCost(wo.totalact_costs)}</span>`,
+            `<span style="font-size:11px">${fmtDate(wo.bas_start_date)||'—'}</span>`,
+            `<span style="font-size:11px">${fmtDate(wo.basic_fin_date)||'—'}</span>`,
+            `<span style="font-size:11px">${fmtDate(wo.actual_release)||'—'}</span>`,
+            `<span style="font-size:11px">${D(wo.planner_group)||'—'}</span>`,
+            `<span style="font-size:10px">${D(wo.wbs_ord_header)||'—'}</span>`,
+            readinessBar(wo.order_readiness_pct, wo.order_ready),
+          ];
+        });
+
+        html += `<div style="margin:6px 0 2px 48px;padding:3px 8px;background:#374151;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
+          🔧 Work Order (${jd.wos.length})
+        </div>`;
+        html += trkTable(woCols, woRows, 48, '#374151');
+        html += `</div>`; // end jd children
       }
-      html += `</div></div>`;
+
+      html += `</div>`; // end jl children
     }
-    html += `</div></div>`;
+
+    html += `</div>`; // end proj children
   }
 
-  document.getElementById('trkjl-tree').innerHTML = html || '<div style="color:#9ca3af;padding:20px;text-align:center">Tidak ada data</div>';
+  document.getElementById('trkjl-tree').innerHTML = html ||
+    '<div style="color:#9ca3af;padding:20px;text-align:center">Tidak ada data</div>';
 }
 
 function trkJlResetFilter() {
@@ -6983,6 +7026,7 @@ async function checkAuth() {
   const token = getToken();
   if (!token) { showLoginPage(); return false; }
   try {
+    // Fetch /auth/me dan /meta paralel untuk hemat waktu
     const res = await fetch(`${API}/auth/me`, { headers: { 'x-auth-token': token } });
     if (!res.ok) throw new Error('invalid');
     _currentUser = await res.json();
@@ -7170,21 +7214,22 @@ async function deleteUser(id, username) {
 // ============================================================
 // BOOT
 // ============================================================
-// Sembunyikan login page dulu saat load awal (init-loading yang tampil)
 document.getElementById('login-page').style.display = 'none';
 
-checkAuth().then(authed => {
-  if (!authed) return; // login page sudah tampil
-  init().then(() => {
-    try { switchApp('taex'); } catch(e) { console.error('switchApp error:', e); }
-    try { initAllResizable(); } catch(e) { console.error('initAllResizable error:', e); }
-    try { initColVisibility(); } catch(e) { console.error('initColVisibility error:', e); }
-    try { initFreezeListeners(); } catch(e) { console.error('initFreezeListeners error:', e); }
-  }).catch(e => {
-    console.error('init() rejected:', e);
+(async () => {
+  const authed = await checkAuth();
+  if (!authed) return;
+  try {
+    await init();
+    switchApp('taex');
+    initAllResizable();
+    initColVisibility();
+    initFreezeListeners();
+  } catch(e) {
+    console.error('init error:', e);
     try { hideInitLoading(); } catch(_) {}
-  });
-});
+  }
+})();
 
 </script>
 
