@@ -5759,7 +5759,7 @@ async function fetchAndRenderEquipment() {
   try {
     let all = [], page = 1;
     while (true) {
-      const res = await apiFetch(`/data/equipment?page=${page}&limit=500`);
+      const res = await apiFetch(`/equipment?page=${page}&limit=500`);
       const chunk = Array.isArray(res) ? res : (res.data || []);
       all = all.concat(chunk);
       const total = res.total || chunk.length;
