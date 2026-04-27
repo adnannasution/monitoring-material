@@ -1771,14 +1771,6 @@ def get_project(request: Request, plant: str = None):
         rows = query("SELECT * FROM project WHERE is_deleted=0 ORDER BY project_number")
     return jsonify([map_project(r) for r in rows])
 
-@app.get("/api/project/{project_id}")
-def get_project_by_id(project_id: str, request: Request):
-    check_api_key(request)
-    row = query("SELECT * FROM project WHERE id=%s", (project_id,))
-    if not row:
-        raise HTTPException(404, "Project tidak ditemukan")
-    return jsonify(map_project(row[0]))
-
 @app.post("/api/project/replace")
 async def replace_project(request: Request, file: UploadFile = File(...)):
     check_api_key(request)
@@ -1786,6 +1778,18 @@ async def replace_project(request: Request, file: UploadFile = File(...)):
     df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
     cnt = bulk_replace_project(df)
     return {"inserted": cnt}
+
+@app.get("/api/project/{project_id}/full")
+def get_project_full_moved(project_id: str, request: Request):
+    return get_project_full(project_id, request)
+
+@app.get("/api/project/{project_id}")
+def get_project_by_id(project_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM project WHERE id=%s", (project_id,))
+    if not row:
+        raise HTTPException(404, "Project tidak ditemukan")
+    return jsonify(map_project(row[0]))
 
 @app.delete("/api/project/{project_id}")
 def delete_project(project_id: str, request: Request):
@@ -1825,14 +1829,6 @@ def get_job_list(request: Request, project_id: str = None, plant: str = None):
         rows = query("SELECT * FROM job_list WHERE is_deleted=0 ORDER BY no_joblist")
     return jsonify([map_job_list(r) for r in rows])
 
-@app.get("/api/joblist/{joblist_id}")
-def get_job_list_by_id(joblist_id: str, request: Request):
-    check_api_key(request)
-    row = query("SELECT * FROM job_list WHERE id=%s", (joblist_id,))
-    if not row:
-        raise HTTPException(404, "Joblist tidak ditemukan")
-    return jsonify(map_job_list(row[0]))
-
 @app.post("/api/joblist/replace")
 async def replace_job_list(request: Request, file: UploadFile = File(...)):
     check_api_key(request)
@@ -1840,6 +1836,14 @@ async def replace_job_list(request: Request, file: UploadFile = File(...)):
     df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
     cnt = bulk_replace_job_list(df)
     return {"inserted": cnt}
+
+@app.get("/api/joblist/{joblist_id}")
+def get_job_list_by_id(joblist_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM job_list WHERE id=%s", (joblist_id,))
+    if not row:
+        raise HTTPException(404, "Joblist tidak ditemukan")
+    return jsonify(map_job_list(row[0]))
 
 @app.delete("/api/joblist/{joblist_id}")
 def delete_job_list(joblist_id: str, request: Request):
@@ -1902,14 +1906,6 @@ def get_job_detail(request: Request, joblist_id: str = None, plant: str = None,
         )
     return jsonify([map_job_detail(r) for r in rows])
 
-@app.get("/api/jobdetail/{detail_id}")
-def get_job_detail_by_id(detail_id: str, request: Request):
-    check_api_key(request)
-    row = query("SELECT * FROM job_detail WHERE id=%s", (detail_id,))
-    if not row:
-        raise HTTPException(404, "Job detail tidak ditemukan")
-    return jsonify(map_job_detail(row[0]))
-
 @app.post("/api/jobdetail/replace")
 async def replace_job_detail(request: Request, file: UploadFile = File(...)):
     check_api_key(request)
@@ -1931,6 +1927,14 @@ async def replace_job_detail(request: Request, file: UploadFile = File(...)):
 
     threading.Thread(target=_bg, daemon=True).start()
     return {"jobId": job_id}
+
+@app.get("/api/jobdetail/{detail_id}")
+def get_job_detail_by_id(detail_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM job_detail WHERE id=%s", (detail_id,))
+    if not row:
+        raise HTTPException(404, "Job detail tidak ditemukan")
+    return jsonify(map_job_detail(row[0]))
 
 @app.delete("/api/jobdetail/{detail_id}")
 def delete_job_detail(detail_id: str, request: Request):
@@ -2145,13 +2149,19 @@ def get_equipment(request: Request, plant: str = None, disiplin: str = None,
     return jsonify({"total": total, "page": page, "limit": limit,
                     "data": [map_equipment(r) for r in rows]})
 
-@app.get("/api/equipment/{eq_id}")
-def get_equipment_by_id(eq_id: str, request: Request):
+@app.get("/api/equipment/meta/filters")
+def equipment_meta(request: Request):
     check_api_key(request)
-    row = query("SELECT * FROM equipment_taex WHERE id=%s", (eq_id,))
-    if not row:
-        raise HTTPException(404, "Equipment tidak ditemukan")
-    return jsonify(map_equipment(row[0]))
+    plants    = query("SELECT DISTINCT plant FROM equipment_taex WHERE is_deleted=0 AND plant IS NOT NULL ORDER BY plant")
+    disiplins = query("SELECT DISTINCT disiplin FROM equipment_taex WHERE is_deleted=0 AND disiplin IS NOT NULL ORDER BY disiplin")
+    groups    = query("SELECT DISTINCT group_asset FROM equipment_taex WHERE is_deleted=0 AND group_asset IS NOT NULL ORDER BY group_asset")
+    crits     = query("SELECT DISTINCT criticallity_text FROM equipment_taex WHERE is_deleted=0 AND criticallity_text IS NOT NULL ORDER BY criticallity_text")
+    return jsonify({
+        "plants":    [r["plant"] for r in plants],
+        "disiplins": [r["disiplin"] for r in disiplins],
+        "groups":    [r["group_asset"] for r in groups],
+        "criticallities": [r["criticallity_text"] for r in crits],
+    })
 
 @app.post("/api/equipment/replace")
 async def replace_equipment(request: Request, file: UploadFile = File(...)):
@@ -2174,19 +2184,13 @@ async def replace_equipment(request: Request, file: UploadFile = File(...)):
     threading.Thread(target=_bg, daemon=True).start()
     return {"jobId": job_id}
 
-@app.get("/api/equipment/meta/filters")
-def equipment_meta(request: Request):
+@app.get("/api/equipment/{eq_id}")
+def get_equipment_by_id(eq_id: str, request: Request):
     check_api_key(request)
-    plants    = query("SELECT DISTINCT plant FROM equipment_taex WHERE is_deleted=0 AND plant IS NOT NULL ORDER BY plant")
-    disiplins = query("SELECT DISTINCT disiplin FROM equipment_taex WHERE is_deleted=0 AND disiplin IS NOT NULL ORDER BY disiplin")
-    groups    = query("SELECT DISTINCT group_asset FROM equipment_taex WHERE is_deleted=0 AND group_asset IS NOT NULL ORDER BY group_asset")
-    crits     = query("SELECT DISTINCT criticallity_text FROM equipment_taex WHERE is_deleted=0 AND criticallity_text IS NOT NULL ORDER BY criticallity_text")
-    return jsonify({
-        "plants":    [r["plant"] for r in plants],
-        "disiplins": [r["disiplin"] for r in disiplins],
-        "groups":    [r["group_asset"] for r in groups],
-        "criticallities": [r["criticallity_text"] for r in crits],
-    })
+    row = query("SELECT * FROM equipment_taex WHERE id=%s", (eq_id,))
+    if not row:
+        raise HTTPException(404, "Equipment tidak ditemukan")
+    return jsonify(map_equipment(row[0]))
 
 @app.delete("/api/equipment/{eq_id}")
 def delete_equipment(eq_id: str, request: Request):

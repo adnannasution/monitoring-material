@@ -1431,8 +1431,6 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
-</div><!-- /pages -->
-
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- PAGE: EQUIPMENT TAEX -->
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -1729,6 +1727,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <div class="pagination" id="jdwo-pagination"></div>
   </div>
 </div>
+
+</div><!-- /pages -->
 </div><!-- /body -->
 
 <!-- MODAL: UPLOAD PO -->
@@ -3972,14 +3972,19 @@ function changePageSize(key, size) {
 }
 
 function renderPageByKey(key) {
-  if (key==='taex')   fetchAndRenderTaex();
-  else if (key==='prisma') fetchAndRenderPrisma();
-  else if (key==='kk')    renderKK();
-  else if (key==='sum')   renderSummary();
-  else if (key==='ks')    fetchAndRenderKumpulan();
-  else if (key==='sap')   fetchAndRenderSAP();
-  else if (key==='order') renderOrder();
-  else if (key==='po')    fetchAndRenderPo();
+  if (key==='taex')      fetchAndRenderTaex();
+  else if (key==='prisma')    fetchAndRenderPrisma();
+  else if (key==='kk')        renderKK();
+  else if (key==='sum')       renderSummary();
+  else if (key==='ks')        fetchAndRenderKumpulan();
+  else if (key==='sap')       fetchAndRenderSAP();
+  else if (key==='order')     renderOrder();
+  else if (key==='po')        fetchAndRenderPo();
+  else if (key==='project')   renderProject();
+  else if (key==='joblist')   renderJoblist();
+  else if (key==='jobdetail') renderJobdetail();
+  else if (key==='jdwo')      renderJdwo();
+  else if (key==='equipment') renderEquipment();
 }
 
 // ============================================================
@@ -4004,7 +4009,12 @@ function debounceRender(app) {
   }, 280);
 }
 function appToKey(app) {
-  const m = { 'taex':'taex','prisma-reservasi':'prisma','kertas-kerja':'kk','summary':'sum','kumpulan':'ks','pr':'sap','order':'order','po':'po','tracking':'trk','audit':'audit' };
+  const m = {
+    'taex':'taex','prisma-reservasi':'prisma','kertas-kerja':'kk','summary':'sum',
+    'kumpulan':'ks','pr':'sap','order':'order','po':'po','tracking':'trk','audit':'audit',
+    'project':'project','joblist':'joblist','jobdetail':'jobdetail',
+    'jobdetailworkorder':'jdwo','equipment':'equipment',
+  };
   return m[app] || app;
 }
 function clearSearch(inputId, app) {
@@ -5743,7 +5753,7 @@ async function exportAuditExcel() {
 
 // ── EQUIPMENT TAEX ──────────────────────────────────────────
 state.equipmentData = [];
-let equipmentFiltered = [], equipmentPage = 1;
+let equipmentFiltered = [];
 
 async function fetchAndRenderEquipment() {
   try {
@@ -5758,6 +5768,7 @@ async function fetchAndRenderEquipment() {
     }
     state.equipmentData = all;
     populateEquipmentFilters();
+    resetPg('equipment');
     renderEquipment();
     document.getElementById('badge-equipment').textContent = all.length;
   } catch(e) {
@@ -5771,7 +5782,6 @@ function populateEquipmentFilters() {
   const disiplins = [...new Set(state.equipmentData.map(r => r.Disiplin).filter(Boolean))].sort();
   const groups    = [...new Set(state.equipmentData.map(r => r.GroupAsset).filter(Boolean))].sort();
   const crits     = [...new Set(state.equipmentData.map(r => r.CriticallityText).filter(Boolean))].sort();
-
   document.getElementById('equipment-filter-plant').innerHTML =
     '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
   document.getElementById('equipment-filter-disiplin').innerHTML =
@@ -5793,10 +5803,10 @@ function renderEquipment() {
   const fCrit = document.getElementById('equipment-filter-crit').value;
 
   equipmentFiltered = state.equipmentData.filter(r => {
-    if (fPl   && r.Plant          !== fPl)   return false;
-    if (fDis  && r.Disiplin       !== fDis)  return false;
-    if (fGrp  && r.GroupAsset     !== fGrp)  return false;
-    if (fCrit && r.CriticallityText !== fCrit) return false;
+    if (fPl   && r.Plant             !== fPl)   return false;
+    if (fDis  && r.Disiplin          !== fDis)  return false;
+    if (fGrp  && r.GroupAsset        !== fGrp)  return false;
+    if (fCrit && r.CriticallityText  !== fCrit) return false;
     if (q) {
       const hay = `${r.EquipmentNo} ${r.DescriptionofTechnicalObject} ${r.FunctionalLocation} ${r.Location} ${r.ManufacturerOfAsset}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -5804,20 +5814,20 @@ function renderEquipment() {
     return true;
   });
 
-  const total = equipmentFiltered.length;
+  const total     = equipmentFiltered.length;
   const statCount = equipmentFiltered.filter(r => r.Disiplin === 'STATIONARY').length;
   const rotCount  = equipmentFiltered.filter(r => r.Disiplin === 'ROTARY').length;
   const elecCount = equipmentFiltered.filter(r => r.Disiplin === 'ELECTRICAL').length;
+  document.getElementById('equipment-total').textContent       = total;
+  document.getElementById('equipment-stat').textContent        = statCount;
+  document.getElementById('equipment-rot').textContent         = rotCount;
+  document.getElementById('equipment-elec').textContent        = elecCount;
+  document.getElementById('equipment-rowCount').textContent    = `${total} baris`;
 
-  document.getElementById('equipment-total').textContent = total;
-  document.getElementById('equipment-stat').textContent  = statCount;
-  document.getElementById('equipment-rot').textContent   = rotCount;
-  document.getElementById('equipment-elec').textContent  = elecCount;
-  document.getElementById('equipment-rowCount').textContent = `${total} baris`;
-
-  const pages = Math.ceil(total / PG_LIMIT) || 1;
-  if (equipmentPage > pages) equipmentPage = 1;
-  const slice = equipmentFiltered.slice((equipmentPage - 1) * PG_LIMIT, equipmentPage * PG_LIMIT);
+  const pg         = getPg('equipment');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice = equipmentFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
 
   document.getElementById('equipment-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
@@ -5837,26 +5847,24 @@ function renderEquipment() {
       </tr>`).join('')
     : '<tr><td colspan="13" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
-  renderPagination('equipment-pagination', equipmentPage, pages, p => { equipmentPage = p; renderEquipment(); });
+  renderPagination('equipment-pagination', 'equipment', total, pg.page, totalPages, pg.size, renderEquipment);
 }
 
 function equipmentResetFilter() {
   document.getElementById('equipment-search').value = '';
   ['equipment-filter-plant','equipment-filter-disiplin','equipment-filter-group','equipment-filter-crit']
     .forEach(id => document.getElementById(id).value = '');
+  resetPg('equipment');
   renderEquipment();
 }
 
 function exportEquipmentExcel() {
   if (!equipmentFiltered.length) return toast('Tidak ada data untuk diekspor','err');
   const rows = equipmentFiltered.map(r => ({
-    EquipmentNo: r.EquipmentNo,
-    Description: r.DescriptionofTechnicalObject,
-    Plant: r.Plant, FunctionalLocation: r.FunctionalLocation,
-    Location: r.Location, Disiplin: r.Disiplin,
-    GroupAsset: r.GroupAsset, Criticallity: r.CriticallityText,
-    EquipmentCategory: r.EquipmentCategory,
-    CatalogProfileText: r.CatalogProfileText,
+    EquipmentNo: r.EquipmentNo, Description: r.DescriptionofTechnicalObject,
+    Plant: r.Plant, FunctionalLocation: r.FunctionalLocation, Location: r.Location,
+    Disiplin: r.Disiplin, GroupAsset: r.GroupAsset, Criticallity: r.CriticallityText,
+    EquipmentCategory: r.EquipmentCategory, CatalogProfileText: r.CatalogProfileText,
     MainWorkCenter: r.MainWorkCenter, ModelType: r.ModelType,
     ManufacturerOfAsset: r.ManufacturerOfAsset,
   }));
@@ -5873,7 +5881,6 @@ function openEquipmentUploadModal() {
   openModal('modal-equipment-upload');
 }
 
-// Drop zone drag styling
 const _eqZone = document.getElementById('equipment-upload-zone');
 if (_eqZone) {
   _eqZone.addEventListener('dragover', e => { e.preventDefault(); _eqZone.classList.add('drag'); });
@@ -5884,17 +5891,13 @@ if (_eqZone) {
 // PROJECT · JOB LIST · JOB DETAIL · WORK ORDER
 // ============================================================
 
-// State
 state.projectData    = [];
 state.joblistData    = [];
 state.jobdetailData  = [];
 state.jdwoData       = [];
 
 let projectFiltered  = [], joblistFiltered = [], jobdetailFiltered = [], jdwoFiltered = [];
-let projectPage = 1, joblistPage = 1, jobdetailPage = 1, jdwoPage = 1;
-const PG_LIMIT = 100;
 
-// ── Helpers ─────────────────────────────────────────────────
 function fmtCost(v) {
   if (v === null || v === undefined || v === '') return '<span style="color:#d1d5db">—</span>';
   const n = parseFloat(v);
@@ -5911,6 +5914,7 @@ async function fetchAndRenderProject() {
     const rows = await apiFetch('/project');
     state.projectData = Array.isArray(rows) ? rows : [];
     populateProjectFilters();
+    resetPg('project');
     renderProject();
     document.getElementById('badge-project').textContent = state.projectData.length;
   } catch(e) {
@@ -5920,34 +5924,34 @@ async function fetchAndRenderProject() {
 
 function populateProjectFilters() {
   const plants = [...new Set(state.projectData.map(r => r.Plant).filter(Boolean))].sort();
-  const sel = document.getElementById('project-filter-plant');
-  sel.innerHTML = '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('project-filter-plant').innerHTML =
+    '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
 }
 
 function renderProject() {
-  const q    = (document.getElementById('project-search').value || '').toLowerCase();
-  const fSt  = document.getElementById('project-filter-status').value;
-  const fPl  = document.getElementById('project-filter-plant').value;
+  const q   = (document.getElementById('project-search').value || '').toLowerCase();
+  const fSt = document.getElementById('project-filter-status').value;
+  const fPl = document.getElementById('project-filter-plant').value;
 
   projectFiltered = state.projectData.filter(r => {
     if (fSt && r.ProjectStatus !== fSt) return false;
     if (fPl && r.Plant !== fPl) return false;
     if (q) {
-      const hay = `${r.ProjectNumber} ${r.Description} ${r.Plant} ${r.Revision}`.toLowerCase();
-      if (!hay.includes(q)) return false;
+      if (!`${r.ProjectNumber} ${r.Description} ${r.Plant} ${r.Revision}`.toLowerCase().includes(q)) return false;
     }
     return true;
   });
 
-  const total = projectFiltered.length;
+  const total      = projectFiltered.length;
   const inProgress = projectFiltered.filter(r => r.ProjectStatus === 'In Progress').length;
-  document.getElementById('project-total').textContent = total;
+  document.getElementById('project-total').textContent      = total;
   document.getElementById('project-inprogress').textContent = inProgress;
-  document.getElementById('project-rowCount').textContent = `${total} baris`;
+  document.getElementById('project-rowCount').textContent   = `${total} baris`;
 
-  const pages = Math.ceil(total / PG_LIMIT) || 1;
-  if (projectPage > pages) projectPage = 1;
-  const slice = projectFiltered.slice((projectPage - 1) * PG_LIMIT, projectPage * PG_LIMIT);
+  const pg         = getPg('project');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = projectFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
 
   const statusColor = { 'In Progress': 'green', 'Completed': 'blue', 'Planning': 'gray' };
   document.getElementById('project-tbody').innerHTML = slice.length
@@ -5963,13 +5967,14 @@ function renderProject() {
       </tr>`).join('')
     : '<tr><td colspan="8" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
-  renderPagination('project-pagination', projectPage, pages, p => { projectPage = p; renderProject(); });
+  renderPagination('project-pagination', 'project', total, pg.page, totalPages, pg.size, renderProject);
 }
 
 function projectResetFilter() {
   document.getElementById('project-search').value = '';
   document.getElementById('project-filter-status').value = '';
   document.getElementById('project-filter-plant').value = '';
+  resetPg('project');
   renderProject();
 }
 
@@ -5978,8 +5983,7 @@ function exportProjectExcel() {
   const rows = projectFiltered.map(r => ({
     ProjectNumber: r.ProjectNumber, Description: r.Description,
     Plant: r.Plant, Revision: r.Revision, ProjectStatus: r.ProjectStatus,
-    StartDate: r.StartDate, FinishDate: r.FinishDate,
-    CreatedBy: r.CreatedBy, Created: r.Created,
+    StartDate: r.StartDate, FinishDate: r.FinishDate, CreatedBy: r.CreatedBy,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -5994,6 +5998,7 @@ async function fetchAndRenderJoblist() {
     const rows = await apiFetch('/joblist');
     state.joblistData = Array.isArray(rows) ? rows : [];
     populateJoblistFilters();
+    resetPg('joblist');
     renderJoblist();
     document.getElementById('badge-joblist').textContent = state.joblistData.length;
   } catch(e) {
@@ -6005,12 +6010,10 @@ function populateJoblistFilters() {
   const plants = [...new Set(state.joblistData.map(r => r.Plant).filter(Boolean))].sort();
   document.getElementById('joblist-filter-plant').innerHTML =
     '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
-
-  // Daftar project berdasarkan ProjectId yang ada di joblist, cross-ref ke projectData
-  const projectIds = [...new Set(state.joblistData.map(r => r.ProjectId).filter(Boolean))];
+  const projectIds = [...new Set(state.joblistData.map(r => r.ProjectId).filter(Boolean))].sort();
   const sel = document.getElementById('joblist-filter-project');
   sel.innerHTML = '<option value="">Semua</option>';
-  projectIds.sort().forEach(pid => {
+  projectIds.forEach(pid => {
     const proj = state.projectData.find(p => p.ID === pid);
     sel.innerHTML += `<option value="${pid}">${proj ? proj.ProjectNumber : pid.slice(0,8)+'...'}</option>`;
   });
@@ -6024,20 +6027,18 @@ function renderJoblist() {
   joblistFiltered = state.joblistData.filter(r => {
     if (fPl && r.Plant !== fPl) return false;
     if (fPr && r.ProjectId !== fPr) return false;
-    if (q) {
-      const hay = `${r.NoJoblist} ${r.JoblistDescription} ${r.Plant}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+    if (q && !`${r.NoJoblist} ${r.JoblistDescription} ${r.Plant}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
   const total = joblistFiltered.length;
-  document.getElementById('joblist-total').textContent = total;
-  document.getElementById('joblist-rowCount').textContent = `${total} baris`;
+  document.getElementById('joblist-total').textContent      = total;
+  document.getElementById('joblist-rowCount').textContent   = `${total} baris`;
 
-  const pages = Math.ceil(total / PG_LIMIT) || 1;
-  if (joblistPage > pages) joblistPage = 1;
-  const slice = joblistFiltered.slice((joblistPage - 1) * PG_LIMIT, joblistPage * PG_LIMIT);
+  const pg         = getPg('joblist');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = joblistFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
 
   document.getElementById('joblist-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
@@ -6051,13 +6052,14 @@ function renderJoblist() {
       </tr>`).join('')
     : '<tr><td colspan="7" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
-  renderPagination('joblist-pagination', joblistPage, pages, p => { joblistPage = p; renderJoblist(); });
+  renderPagination('joblist-pagination', 'joblist', total, pg.page, totalPages, pg.size, renderJoblist);
 }
 
 function joblistResetFilter() {
   document.getElementById('joblist-search').value = '';
   document.getElementById('joblist-filter-plant').value = '';
   document.getElementById('joblist-filter-project').value = '';
+  resetPg('joblist');
   renderJoblist();
 }
 
@@ -6065,9 +6067,8 @@ function exportJoblistExcel() {
   if (!joblistFiltered.length) return toast('Tidak ada data untuk diekspor','err');
   const rows = joblistFiltered.map(r => ({
     NoJoblist: r.NoJoblist, JoblistDescription: r.JoblistDescription,
-    Plant: r.Plant, ProjectId: r.ProjectId,
-    CreatedBy: r.CreatedBy, Created: r.Created,
-    ModifiedBy: r.ModifiedBy,
+    Plant: r.Plant, ProjectId: r.ProjectId, CreatedBy: r.CreatedBy,
+    Created: r.Created, ModifiedBy: r.ModifiedBy,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -6079,17 +6080,17 @@ function exportJoblistExcel() {
 // ── JOB DETAIL ──────────────────────────────────────────────
 async function fetchAndRenderJobdetail() {
   try {
-    let all = [];
-    let page = 1;
+    let all = [], p = 1;
     while (true) {
-      const res = await apiFetch(`/jobdetail?page=${page}&limit=500`);
+      const res   = await apiFetch(`/jobdetail?page=${p}&limit=500`);
       const chunk = Array.isArray(res) ? res : (res.data || []);
       all = all.concat(chunk);
       if (chunk.length < 500) break;
-      page++;
+      p++;
     }
     state.jobdetailData = all;
     populateJobdetailFilters();
+    resetPg('jobdetail');
     renderJobdetail();
     document.getElementById('badge-jobdetail').textContent = all.length;
   } catch(e) {
@@ -6101,7 +6102,6 @@ function populateJobdetailFilters() {
   const plants = [...new Set(state.jobdetailData.map(r => r.Plant).filter(Boolean))].sort();
   document.getElementById('jobdetail-filter-plant').innerHTML =
     '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
-
   const collectives = [...new Set(state.jobdetailData.map(r => r.Collective).filter(Boolean))].sort();
   document.getElementById('jobdetail-filter-collective').innerHTML =
     '<option value="">Semua</option>' + collectives.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -6114,31 +6114,29 @@ function renderJobdetail() {
   const fTyp = document.getElementById('jobdetail-filter-type').value;
 
   jobdetailFiltered = state.jobdetailData.filter(r => {
-    if (fPl && r.Plant !== fPl) return false;
+    if (fPl  && r.Plant      !== fPl)  return false;
     if (fCol && r.Collective !== fCol) return false;
     if (fTyp === 'material' && r.IsMaterial != 1) return false;
-    if (fTyp === 'jasa' && r.IsJasa != 1) return false;
-    if (fTyp === 'lldii' && r.IsLLDII != 1) return false;
-    if (q) {
-      const hay = `${r.NoJoblistDetail} ${r.JoblistDetailDescription} ${r.NomorPM} ${r.NoDocument} ${r.Notes}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+    if (fTyp === 'jasa'     && r.IsJasa     != 1) return false;
+    if (fTyp === 'lldii'    && r.IsLLDII    != 1) return false;
+    if (q && !`${r.NoJoblistDetail} ${r.JoblistDetailDescription} ${r.NomorPM} ${r.NoDocument} ${r.Notes}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
-  const total   = jobdetailFiltered.length;
-  const matCount = jobdetailFiltered.filter(r => r.IsMaterial == 1).length;
-  const jasaCount = jobdetailFiltered.filter(r => r.IsJasa == 1).length;
-  const miCount  = jobdetailFiltered.filter(r => r.IsMechanicalIntegrity == 1).length;
+  const total     = jobdetailFiltered.length;
+  const matCount  = jobdetailFiltered.filter(r => r.IsMaterial          == 1).length;
+  const jasaCount = jobdetailFiltered.filter(r => r.IsJasa              == 1).length;
+  const miCount   = jobdetailFiltered.filter(r => r.IsMechanicalIntegrity == 1).length;
   document.getElementById('jobdetail-total').textContent    = total;
   document.getElementById('jobdetail-material').textContent = matCount;
   document.getElementById('jobdetail-jasa').textContent     = jasaCount;
   document.getElementById('jobdetail-mi').textContent       = miCount;
   document.getElementById('jobdetail-rowCount').textContent = `${total} baris`;
 
-  const pages = Math.ceil(total / PG_LIMIT) || 1;
-  if (jobdetailPage > pages) jobdetailPage = 1;
-  const slice = jobdetailFiltered.slice((jobdetailPage - 1) * PG_LIMIT, jobdetailPage * PG_LIMIT);
+  const pg         = getPg('jobdetail');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = jobdetailFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
 
   document.getElementById('jobdetail-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
@@ -6159,7 +6157,7 @@ function renderJobdetail() {
       </tr>`).join('')
     : '<tr><td colspan="14" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
-  renderPagination('jobdetail-pagination', jobdetailPage, pages, p => { jobdetailPage = p; renderJobdetail(); });
+  renderPagination('jobdetail-pagination', 'jobdetail', total, pg.page, totalPages, pg.size, renderJobdetail);
 }
 
 function jobdetailResetFilter() {
@@ -6167,6 +6165,7 @@ function jobdetailResetFilter() {
   document.getElementById('jobdetail-filter-plant').value = '';
   document.getElementById('jobdetail-filter-collective').value = '';
   document.getElementById('jobdetail-filter-type').value = '';
+  resetPg('jobdetail');
   renderJobdetail();
 }
 
@@ -6175,9 +6174,9 @@ function exportJobdetailExcel() {
   const rows = jobdetailFiltered.map(r => ({
     NoJoblistDetail: r.NoJoblistDetail, Description: r.JoblistDetailDescription,
     Plant: r.Plant, Collective: r.Collective, NoDocument: r.NoDocument,
-    NomorPM: r.NomorPM, IsMI: r.IsMechanicalIntegrity == 1 ? 1 : 0,
-    IsMaterial: r.IsMaterial == 1 ? 1 : 0, IsJasa: r.IsJasa == 1 ? 1 : 0,
-    IsLLDII: r.IsLLDII == 1 ? 1 : 0, IsOffStream: r.IsOffStream == 1 ? 1 : 0,
+    NomorPM: r.NomorPM, IsMI: r.IsMechanicalIntegrity==1?1:0,
+    IsMaterial: r.IsMaterial==1?1:0, IsJasa: r.IsJasa==1?1:0,
+    IsLLDII: r.IsLLDII==1?1:0, IsOffStream: r.IsOffStream==1?1:0,
     Area: r.AuthparamArea, PICPlanner: r.PICPlannerName, Notes: r.Notes,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -6193,6 +6192,7 @@ async function fetchAndRenderJdwo() {
     const rows = await apiFetch('/jobdetailworkorder');
     state.jdwoData = Array.isArray(rows) ? rows : [];
     populateJdwoFilters();
+    resetPg('jdwo');
     renderJdwo();
     document.getElementById('badge-jdwo').textContent = state.jdwoData.length;
   } catch(e) {
@@ -6212,24 +6212,22 @@ function renderJdwo() {
 
   jdwoFiltered = state.jdwoData.filter(r => {
     if (fSt && r.SystemStatus !== fSt) return false;
-    if (q) {
-      const hay = `${r.Order} ${r.Description} ${r.Equipment} ${r.FunctionalLoc} ${r.Revision}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+    if (q && !`${r.Order} ${r.Description} ${r.Equipment} ${r.FunctionalLoc} ${r.Revision}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
-  const total = jdwoFiltered.length;
+  const total     = jdwoFiltered.length;
   const totalPlan = jdwoFiltered.reduce((s, r) => s + (parseFloat(r.TotalPlnndCosts) || 0), 0);
   const totalAct  = jdwoFiltered.reduce((s, r) => s + (parseFloat(r.Totalactcosts)   || 0), 0);
   document.getElementById('jdwo-total').textContent      = total;
-  document.getElementById('jdwo-total-plan').textContent = new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(totalPlan);
-  document.getElementById('jdwo-total-act').textContent  = new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(totalAct);
+  document.getElementById('jdwo-total-plan').textContent = new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(totalPlan);
+  document.getElementById('jdwo-total-act').textContent  = new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(totalAct);
   document.getElementById('jdwo-rowCount').textContent   = `${total} baris`;
 
-  const pages = Math.ceil(total / PG_LIMIT) || 1;
-  if (jdwoPage > pages) jdwoPage = 1;
-  const slice = jdwoFiltered.slice((jdwoPage - 1) * PG_LIMIT, jdwoPage * PG_LIMIT);
+  const pg         = getPg('jdwo');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = jdwoFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
 
   document.getElementById('jdwo-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
@@ -6252,12 +6250,13 @@ function renderJdwo() {
       </tr>`).join('')
     : '<tr><td colspan="16" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
-  renderPagination('jdwo-pagination', jdwoPage, pages, p => { jdwoPage = p; renderJdwo(); });
+  renderPagination('jdwo-pagination', 'jdwo', total, pg.page, totalPages, pg.size, renderJdwo);
 }
 
 function jdwoResetFilter() {
   document.getElementById('jdwo-search').value = '';
   document.getElementById('jdwo-filter-status').value = '';
+  resetPg('jdwo');
   renderJdwo();
 }
 
@@ -6267,11 +6266,10 @@ function exportJdwoExcel() {
     Order: r.Order, Description: r.Description, Equipment: r.Equipment,
     FunctionalLoc: r.FunctionalLoc, Revision: r.Revision,
     SystemStatus: r.SystemStatus, UserStatus: r.UserStatus,
-    WBSordheader: r.WBSordheader,
-    TotalPlnndCosts: r.TotalPlnndCosts, Totalactcosts: r.Totalactcosts,
-    PlannerGroup: r.PlannerGroup, MainWorkCtr: r.MainWorkCtr,
-    Basstartdate: r.Basstartdate, Basicfindate: r.Basicfindate,
-    ActualRelease: r.ActualRelease, CostCenter: r.CostCenter,
+    WBSordheader: r.WBSordheader, TotalPlnndCosts: r.TotalPlnndCosts,
+    Totalactcosts: r.Totalactcosts, PlannerGroup: r.PlannerGroup,
+    MainWorkCtr: r.MainWorkCtr, Basstartdate: r.Basstartdate,
+    Basicfindate: r.Basicfindate, ActualRelease: r.ActualRelease, CostCenter: r.CostCenter,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -6280,7 +6278,6 @@ function exportJdwoExcel() {
   toast('Export Work Order berhasil!', 'ok');
 }
 
-// ── Upload Handlers untuk 4 tab baru ─────────────────────────
 // Mapping: UI key → backend upload_type & reload fn
 const NEW_UPLOAD_META = {
   project:  { backendType: 'project',           reloadFn: fetchAndRenderProject,   modalId: 'modal-project-upload'   },
