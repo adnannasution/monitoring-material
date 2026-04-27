@@ -26,6 +26,9 @@ from database import migrate, query, execute, get_state, set_state
 from bulk_ops import (
     bulk_replace_taex, bulk_replace_prisma, bulk_replace_pr,
     bulk_replace_po, bulk_replace_kumpulan, bulk_replace_order,
+    bulk_replace_project, bulk_replace_job_list,
+    bulk_replace_job_detail, bulk_replace_job_detail_work_order,
+    bulk_replace_equipment_taex,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
 
@@ -354,7 +357,7 @@ async def upload_excel(upload_type: str, request: Request,
                        file: UploadFile = File(...),
                        mode: Optional[str] = Form(None)):
     check_api_key(request)
-    if upload_type not in ("taex","prisma","pr","po"):
+    if upload_type not in ("taex","prisma","pr","po","project","joblist","jobdetail","jobdetailworkorder","equipment"):
         raise HTTPException(400, "Type tidak valid")
 
     content = await file.read()
@@ -387,6 +390,16 @@ async def upload_excel(upload_type: str, request: Request,
                 cnt = bulk_replace_pr(df)
             elif upload_type == "po":
                 cnt = bulk_replace_po(df)
+            elif upload_type == "project":
+                cnt = bulk_replace_project(df)
+            elif upload_type == "joblist":
+                cnt = bulk_replace_job_list(df)
+            elif upload_type == "jobdetail":
+                cnt = bulk_replace_job_detail(df)
+            elif upload_type == "jobdetailworkorder":
+                cnt = bulk_replace_job_detail_work_order(df)
+            elif upload_type == "equipment":
+                cnt = bulk_replace_equipment_taex(df)
             else:
                 cnt = 0
 
@@ -1731,6 +1744,467 @@ def chatbot_schema(request: Request):
 # ═══════════════════════════════════════════════════════════════
 # SPA FALLBACK
 # ═══════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════
+# PROJECT
+# ═══════════════════════════════════════════════════════════════
+def map_project(r):
+    return {
+        "ID": r["id"], "ProjectNumber": r["project_number"],
+        "ProjectTypeId": r["project_type_id"],
+        "StartDate": r["start_date"], "FinishDate": r["finish_date"],
+        "Revision": r["revision"], "Description": r["description"],
+        "ProjectStatus": r["project_status"], "Plant": r["plant"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+        "Modified": r["modified"], "ModifiedBy": r["modified_by"],
+        "DurationTaBrickId": r["duration_ta_brick_id"],
+    }
+
+@app.get("/api/project")
+def get_project(request: Request, plant: str = None):
+    check_api_key(request)
+    if plant:
+        rows = query("SELECT * FROM project WHERE is_deleted=0 AND plant=%s ORDER BY project_number", (plant,))
+    else:
+        rows = query("SELECT * FROM project WHERE is_deleted=0 ORDER BY project_number")
+    return jsonify([map_project(r) for r in rows])
+
+@app.get("/api/project/{project_id}")
+def get_project_by_id(project_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM project WHERE id=%s", (project_id,))
+    if not row:
+        raise HTTPException(404, "Project tidak ditemukan")
+    return jsonify(map_project(row[0]))
+
+@app.post("/api/project/replace")
+async def replace_project(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+    cnt = bulk_replace_project(df)
+    return {"inserted": cnt}
+
+@app.delete("/api/project/{project_id}")
+def delete_project(project_id: str, request: Request):
+    check_api_key(request)
+    execute("UPDATE project SET is_deleted=1 WHERE id=%s", (project_id,))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOB LIST
+# ═══════════════════════════════════════════════════════════════
+def map_job_list(r):
+    return {
+        "ID": r["id"], "ProjectId": r["project_id"],
+        "EquipmentId": r["equipment_id"], "Plant": r["plant"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+        "Modified": r["modified"], "ModifiedBy": r["modified_by"],
+        "JoblistDescription": r["joblist_description"],
+        "NoJoblist": r["no_joblist"],
+    }
+
+@app.get("/api/joblist")
+def get_job_list(request: Request, project_id: str = None, plant: str = None):
+    check_api_key(request)
+    if project_id:
+        rows = query(
+            "SELECT * FROM job_list WHERE is_deleted=0 AND project_id=%s ORDER BY no_joblist",
+            (project_id,)
+        )
+    elif plant:
+        rows = query(
+            "SELECT * FROM job_list WHERE is_deleted=0 AND plant=%s ORDER BY no_joblist",
+            (plant,)
+        )
+    else:
+        rows = query("SELECT * FROM job_list WHERE is_deleted=0 ORDER BY no_joblist")
+    return jsonify([map_job_list(r) for r in rows])
+
+@app.get("/api/joblist/{joblist_id}")
+def get_job_list_by_id(joblist_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM job_list WHERE id=%s", (joblist_id,))
+    if not row:
+        raise HTTPException(404, "Joblist tidak ditemukan")
+    return jsonify(map_job_list(row[0]))
+
+@app.post("/api/joblist/replace")
+async def replace_job_list(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+    cnt = bulk_replace_job_list(df)
+    return {"inserted": cnt}
+
+@app.delete("/api/joblist/{joblist_id}")
+def delete_job_list(joblist_id: str, request: Request):
+    check_api_key(request)
+    execute("UPDATE job_list SET is_deleted=1 WHERE id=%s", (joblist_id,))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOB DETAIL
+# ═══════════════════════════════════════════════════════════════
+def map_job_detail(r):
+    return {
+        "ID": r["id"], "JoblistId": r["joblist_id"],
+        "JoblistDetailReasonId": r["joblist_detail_reason_id"],
+        "JoblistDetailDescription": r["joblist_detail_description"],
+        "IsMechanicalIntegrity": r["is_mechanical_integrity"],
+        "IsOptimization": r["is_optimization"],
+        "JobDisciplineId": r["job_discipline_id"],
+        "Plant": r["plant"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+        "Modified": r["modified"], "ModifiedBy": r["modified_by"],
+        "NoDocument": r["no_document"],
+        "CreatorJobTitle": r["creator_job_title"], "CreatorName": r["creator_name"],
+        "AssignTo": r["assign_to"], "AuthparamArea": r["authparam_area"],
+        "StatusId": r["status_id"],
+        "IsOffStream": r["is_off_stream"],
+        "NomorPM": r["nomor_pm"], "Collective": r["collective"],
+        "Notes": r["notes"],
+        "PICPlanner": r["pic_planner"], "PICPlannerName": r["pic_planner_name"],
+        "IsAllIn": r["is_all_in"],
+        "IsJasa": r["is_jasa"], "IsLLDII": r["is_lldii"], "IsMaterial": r["is_material"],
+        "NoJoblistDetail": r["no_joblist_detail"],
+        "IsRequestFreezing": r["is_request_freezing"],
+        "PlanningStatusId": r["planning_status_id"],
+        "PlanningMaterialStatusId": r["planning_material_status_id"],
+        "PlanningJasaStatusId": r["planning_jasa_status_id"],
+    }
+
+@app.get("/api/jobdetail")
+def get_job_detail(request: Request, joblist_id: str = None, plant: str = None,
+                   page: int = 1, limit: int = 500):
+    check_api_key(request)
+    offset = (page - 1) * limit
+    if joblist_id:
+        rows = query(
+            "SELECT * FROM job_detail WHERE is_deleted=0 AND joblist_id=%s ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
+            (joblist_id, limit, offset)
+        )
+    elif plant:
+        rows = query(
+            "SELECT * FROM job_detail WHERE is_deleted=0 AND plant=%s ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
+            (plant, limit, offset)
+        )
+    else:
+        rows = query(
+            "SELECT * FROM job_detail WHERE is_deleted=0 ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
+            (limit, offset)
+        )
+    return jsonify([map_job_detail(r) for r in rows])
+
+@app.get("/api/jobdetail/{detail_id}")
+def get_job_detail_by_id(detail_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM job_detail WHERE id=%s", (detail_id,))
+    if not row:
+        raise HTTPException(404, "Job detail tidak ditemukan")
+    return jsonify(map_job_detail(row[0]))
+
+@app.post("/api/jobdetail/replace")
+async def replace_job_detail(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    job_id = f"jobdetail_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    set_job(job_id, 0, "Membaca file Excel...")
+
+    def _bg():
+        try:
+            df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+            if df.empty:
+                set_job(job_id, 100, "File kosong", True, "File Excel kosong")
+                return
+            set_job(job_id, 20, f"Parsed {len(df):,} baris. Menyimpan...")
+            cnt = bulk_replace_job_detail(df)
+            set_job(job_id, 100, f"✅ Selesai! {cnt:,} baris tersimpan", True)
+        except Exception as e:
+            set_job(job_id, 100, f"❌ {e}", True, str(e))
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return {"jobId": job_id}
+
+@app.delete("/api/jobdetail/{detail_id}")
+def delete_job_detail(detail_id: str, request: Request):
+    check_api_key(request)
+    execute("UPDATE job_detail SET is_deleted=1 WHERE id=%s", (detail_id,))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOB DETAIL WORK ORDER
+# ═══════════════════════════════════════════════════════════════
+def map_job_detail_work_order(r):
+    return {
+        "ID": r["id"], "JoblistDetailId": r["joblist_detail_id"],
+        "Notification": r["notification"], "CreatedOn": r["created_on"],
+        "SuperiorOrder": r["superior_order"], "Order": r["order"],
+        "Description": r["description"], "Equipment": r["equipment"],
+        "FunctionalLoc": r["functional_loc"], "Location": r["location"],
+        "Revision": r["revision"],
+        "SystemStatus": r["system_status"], "UserStatus": r["user_status"],
+        "WBSordheader": r["wbs_ord_header"],
+        "TotalPlnndCosts": _n(r["total_plnnd_costs"]),
+        "Totalactcosts": _n(r["totalact_costs"]),
+        "PlannerGroup": r["planner_group"], "MainWorkCtr": r["main_work_ctr"],
+        "ChangeBy": r["change_by"],
+        "Basstartdate": r["bas_start_date"], "Basicfindate": r["basic_fin_date"],
+        "ActualRelease": r["actual_release"],
+        "CostCenter": r["cost_center"], "EnteredBy": r["entered_by"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+        "Modified": r["modified"], "ModifiedBy": r["modified_by"],
+    }
+
+@app.get("/api/jobdetailworkorder")
+def get_job_detail_work_order(request: Request,
+                               joblist_detail_id: str = None,
+                               order: str = None):
+    check_api_key(request)
+    if joblist_detail_id:
+        rows = query(
+            'SELECT * FROM job_detail_work_order WHERE is_deleted=0 AND joblist_detail_id=%s ORDER BY id',
+            (joblist_detail_id,)
+        )
+    elif order:
+        rows = query(
+            'SELECT * FROM job_detail_work_order WHERE is_deleted=0 AND "order"=%s ORDER BY id',
+            (order,)
+        )
+    else:
+        rows = query('SELECT * FROM job_detail_work_order WHERE is_deleted=0 ORDER BY id')
+    return jsonify([map_job_detail_work_order(r) for r in rows])
+
+@app.post("/api/jobdetailworkorder/replace")
+async def replace_job_detail_work_order(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+    cnt = bulk_replace_job_detail_work_order(df)
+    return {"inserted": cnt}
+
+@app.delete("/api/jobdetailworkorder/{row_id}")
+def delete_job_detail_work_order(row_id: str, request: Request):
+    check_api_key(request)
+    execute("UPDATE job_detail_work_order SET is_deleted=1 WHERE id=%s", (row_id,))
+    return {"ok": True}
+
+# ─── JOIN: Project → Joblist → JobDetail → WorkOrder ────────
+@app.get("/api/project/{project_id}/full")
+def get_project_full(project_id: str, request: Request):
+    """
+    Mengembalikan satu project beserta semua joblist, jobdetail,
+    dan work order yang terkait — dalam satu response JSON terstruktur.
+    """
+    check_api_key(request)
+    proj = query("SELECT * FROM project WHERE id=%s", (project_id,))
+    if not proj:
+        raise HTTPException(404, "Project tidak ditemukan")
+
+    joblists = query(
+        "SELECT * FROM job_list WHERE project_id=%s AND is_deleted=0 ORDER BY no_joblist",
+        (project_id,)
+    )
+    result = map_project(proj[0])
+    result["Joblists"] = []
+
+    for jl in joblists:
+        jl_data = map_job_list(jl)
+        details = query(
+            "SELECT * FROM job_detail WHERE joblist_id=%s AND is_deleted=0 ORDER BY no_joblist_detail",
+            (jl["id"],)
+        )
+        jl_data["JobDetails"] = []
+        for jd in details:
+            jd_data = map_job_detail(jd)
+            wos = query(
+                "SELECT * FROM job_detail_work_order WHERE joblist_detail_id=%s AND is_deleted=0",
+                (jd["id"],)
+            )
+            jd_data["WorkOrders"] = [map_job_detail_work_order(w) for w in wos]
+            jl_data["JobDetails"].append(jd_data)
+        result["Joblists"].append(jl_data)
+
+    return jsonify(result)
+
+
+@app.get("/api/jobdetail/summary")
+def get_jobdetail_summary(request: Request, plant: str = None):
+    """Summary jobdetail: count per collective, per status material/jasa"""
+    check_api_key(request)
+    plant_clause = "AND plant=%s" if plant else ""
+    params = (plant,) if plant else ()
+    rows = query(f"""
+        SELECT
+            collective,
+            COUNT(*) AS total,
+            SUM(CASE WHEN is_material=1 THEN 1 ELSE 0 END) AS total_material,
+            SUM(CASE WHEN is_jasa=1 THEN 1 ELSE 0 END) AS total_jasa,
+            SUM(CASE WHEN is_lldii=1 THEN 1 ELSE 0 END) AS total_lldii,
+            SUM(CASE WHEN is_off_stream=1 THEN 1 ELSE 0 END) AS total_off_stream,
+            SUM(CASE WHEN is_mechanical_integrity=1 THEN 1 ELSE 0 END) AS total_mi
+        FROM job_detail
+        WHERE is_deleted=0 {plant_clause}
+        GROUP BY collective
+        ORDER BY collective NULLS LAST
+    """, params)
+    return jsonify([{
+        "Collective": r["collective"],
+        "Total": int(r["total"]),
+        "TotalMaterial": int(r["total_material"] or 0),
+        "TotalJasa": int(r["total_jasa"] or 0),
+        "TotalLLDII": int(r["total_lldii"] or 0),
+        "TotalOffStream": int(r["total_off_stream"] or 0),
+        "TotalMI": int(r["total_mi"] or 0),
+    } for r in rows])
+
+
+@app.get("/api/data/project")
+def get_data_project(request: Request):
+    check_api_key(request)
+    rows = query("SELECT * FROM project WHERE is_deleted=0 ORDER BY project_number")
+    return jsonify([map_project(r) for r in rows])
+
+@app.get("/api/data/joblist")
+def get_data_joblist(request: Request):
+    check_api_key(request)
+    rows = query("SELECT * FROM job_list WHERE is_deleted=0 ORDER BY no_joblist")
+    return jsonify([map_job_list(r) for r in rows])
+
+@app.get("/api/data/jobdetail")
+def get_data_jobdetail(request: Request, page: int = 1, limit: int = 500):
+    check_api_key(request)
+    offset = (page - 1) * limit
+    rows = query(
+        "SELECT * FROM job_detail WHERE is_deleted=0 ORDER BY no_joblist_detail LIMIT %s OFFSET %s",
+        (limit, offset)
+    )
+    return jsonify([map_job_detail(r) for r in rows])
+
+@app.get("/api/data/jobdetailworkorder")
+def get_data_jdwo(request: Request):
+    check_api_key(request)
+    rows = query("SELECT * FROM job_detail_work_order WHERE is_deleted=0 ORDER BY id")
+    return jsonify([map_job_detail_work_order(r) for r in rows])
+
+
+# ═══════════════════════════════════════════════════════════════
+# EQUIPMENT TAEX
+# ═══════════════════════════════════════════════════════════════
+def map_equipment(r):
+    return {
+        "ID": r["id"], "Plant": r["plant"],
+        "UnitId": r["unit_id"],
+        "EquipmentNo": r["equipment_no"],
+        "DescriptionofTechnicalObject": r["description_of_technical_object"],
+        "FunctionalLocation": r["functional_location"],
+        "Location": r["location"],
+        "Disiplin": r["disiplin"],
+        "EquipmentCategory": r["equipment_category"],
+        "GroupAsset": r["group_asset"],
+        "Criticallity": r["criticallity"],
+        "CriticallityText": r["criticallity_text"],
+        "CatalogProfile": r["catalog_profile"],
+        "CatalogProfileText": r["catalog_profile_text"],
+        "MainWorkCenter": r["main_work_center"],
+        "MaintenancePlant": r["maintenance_plant"],
+        "PlanningPlant": r["planning_plant"],
+        "ModelType": r["model_type"],
+        "ManufacturerOfAsset": r["manufacturer_of_asset"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+        "Modified": r["modified"], "ModifiedBy": r["modified_by"],
+    }
+
+@app.get("/api/equipment")
+def get_equipment(request: Request, plant: str = None, disiplin: str = None,
+                  q: str = None, page: int = 1, limit: int = 500):
+    check_api_key(request)
+    clauses = ["is_deleted=0"]
+    params = []
+    if plant:
+        clauses.append("plant=%s"); params.append(plant)
+    if disiplin:
+        clauses.append("disiplin=%s"); params.append(disiplin)
+    if q:
+        clauses.append("(equipment_no ILIKE %s OR description_of_technical_object ILIKE %s OR functional_location ILIKE %s)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+    where = " AND ".join(clauses)
+    offset = (page - 1) * limit
+    total = query(f"SELECT COUNT(*) AS n FROM equipment_taex WHERE {where}", params)[0]["n"]
+    rows = query(f"SELECT * FROM equipment_taex WHERE {where} ORDER BY equipment_no LIMIT %s OFFSET %s",
+                 params + [limit, offset])
+    return jsonify({"total": total, "page": page, "limit": limit,
+                    "data": [map_equipment(r) for r in rows]})
+
+@app.get("/api/equipment/{eq_id}")
+def get_equipment_by_id(eq_id: str, request: Request):
+    check_api_key(request)
+    row = query("SELECT * FROM equipment_taex WHERE id=%s", (eq_id,))
+    if not row:
+        raise HTTPException(404, "Equipment tidak ditemukan")
+    return jsonify(map_equipment(row[0]))
+
+@app.post("/api/equipment/replace")
+async def replace_equipment(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    job_id = f"equipment_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    set_job(job_id, 0, "Membaca file Excel...")
+
+    def _bg():
+        try:
+            df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+            if df.empty:
+                set_job(job_id, 100, "File kosong", True, "File Excel kosong"); return
+            set_job(job_id, 20, f"Parsed {len(df):,} baris. Menyimpan...")
+            cnt = bulk_replace_equipment_taex(df)
+            set_job(job_id, 100, f"✅ Selesai! {cnt:,} baris tersimpan", True)
+        except Exception as e:
+            set_job(job_id, 100, f"❌ {e}", True, str(e))
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return {"jobId": job_id}
+
+@app.get("/api/equipment/meta/filters")
+def equipment_meta(request: Request):
+    check_api_key(request)
+    plants    = query("SELECT DISTINCT plant FROM equipment_taex WHERE is_deleted=0 AND plant IS NOT NULL ORDER BY plant")
+    disiplins = query("SELECT DISTINCT disiplin FROM equipment_taex WHERE is_deleted=0 AND disiplin IS NOT NULL ORDER BY disiplin")
+    groups    = query("SELECT DISTINCT group_asset FROM equipment_taex WHERE is_deleted=0 AND group_asset IS NOT NULL ORDER BY group_asset")
+    crits     = query("SELECT DISTINCT criticallity_text FROM equipment_taex WHERE is_deleted=0 AND criticallity_text IS NOT NULL ORDER BY criticallity_text")
+    return jsonify({
+        "plants":    [r["plant"] for r in plants],
+        "disiplins": [r["disiplin"] for r in disiplins],
+        "groups":    [r["group_asset"] for r in groups],
+        "criticallities": [r["criticallity_text"] for r in crits],
+    })
+
+@app.delete("/api/equipment/{eq_id}")
+def delete_equipment(eq_id: str, request: Request):
+    check_api_key(request)
+    execute("UPDATE equipment_taex SET is_deleted=1 WHERE id=%s", (eq_id,))
+    return {"ok": True}
+
+@app.get("/api/data/equipment")
+def get_data_equipment(request: Request, page: int = 1, limit: int = 500):
+    check_api_key(request)
+    offset = (page - 1) * limit
+    total = query("SELECT COUNT(*) AS n FROM equipment_taex WHERE is_deleted=0")[0]["n"]
+    rows = query("SELECT * FROM equipment_taex WHERE is_deleted=0 ORDER BY equipment_no LIMIT %s OFFSET %s",
+                 (limit, offset))
+    return jsonify({"total": total, "page": page, "limit": limit,
+                    "data": [map_equipment(r) for r in rows]})
+
+
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
     return FileResponse("public/index.html")

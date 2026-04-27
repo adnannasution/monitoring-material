@@ -579,6 +579,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-po" onclick="switchApp('po')">🛒 PO<span class="tab-badge" id="badge-po">0</span></div>
   <div class="tab" id="tab-tracking" onclick="switchApp('tracking')">🔍 Tracking<span class="tab-badge" id="badge-tracking">0</span></div>
   <div class="tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
+  <div class="tab" id="tab-project" onclick="switchApp('project')">🏗 Project<span class="tab-badge" id="badge-project">0</span></div>
+  <div class="tab" id="tab-joblist" onclick="switchApp('joblist')">📋 Job List<span class="tab-badge" id="badge-joblist">0</span></div>
+  <div class="tab" id="tab-jobdetail" onclick="switchApp('jobdetail')">📝 Job Detail<span class="tab-badge" id="badge-jobdetail">0</span></div>
+  <div class="tab" id="tab-jobdetailworkorder" onclick="switchApp('jobdetailworkorder')">🔧 WO Detail<span class="tab-badge" id="badge-jdwo">0</span></div>
+  <div class="tab" id="tab-equipment" onclick="switchApp('equipment')">⚙️ Equipment<span class="tab-badge" id="badge-equipment">0</span></div>
 </div>
 
 <!-- BODY -->
@@ -1427,6 +1432,303 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 </div>
 
 </div><!-- /pages -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: EQUIPMENT TAEX -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-equipment">
+  <div class="info-bar" id="equipment-info-bar">
+    <span>Total Equipment: <b id="equipment-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Stationary: <b id="equipment-stat">—</b></span>
+    <div class="info-divider"></div>
+    <span>Rotary: <b id="equipment-rot">—</b></span>
+    <div class="info-divider"></div>
+    <span>Electrical: <b id="equipment-elec">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openEquipmentUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="equipment-search" placeholder="No. equipment, deskripsi, functional loc..." oninput="debounceRender('equipment')">
+      <span class="search-clear" onclick="clearSearch('equipment-search','equipment')">✕</span>
+    </span>
+    <label>Plant:</label>
+    <select id="equipment-filter-plant" onchange="renderEquipment()">
+      <option value="">Semua</option>
+    </select>
+    <label>Disiplin:</label>
+    <select id="equipment-filter-disiplin" onchange="renderEquipment()">
+      <option value="">Semua</option>
+    </select>
+    <label>Group Asset:</label>
+    <select id="equipment-filter-group" onchange="renderEquipment()">
+      <option value="">Semua</option>
+    </select>
+    <label>Criticality:</label>
+    <select id="equipment-filter-crit" onchange="renderEquipment()">
+      <option value="">Semua</option>
+    </select>
+    <button class="btn btn-search" onclick="renderEquipment()">Cari</button>
+    <button class="btn btn-reset" onclick="equipmentResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportEquipmentExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="equipment-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="equipment-table">
+        <thead><tr>
+          <th>Equipment No.</th>
+          <th>Deskripsi</th>
+          <th>Plant</th>
+          <th>Functional Loc.</th>
+          <th>Location</th>
+          <th>Disiplin</th>
+          <th>Group Asset</th>
+          <th>Criticality</th>
+          <th>Eq. Category</th>
+          <th>Catalog Profile</th>
+          <th>Main Work Ctr</th>
+          <th>Model Type</th>
+          <th>Manufacturer</th>
+        </tr></thead>
+        <tbody id="equipment-tbody">
+          <tr class="loading-row"><td colspan="13">Memuat data equipment...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="equipment-pagination"></div>
+  </div>
+</div>
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-project">
+  <div class="info-bar" id="project-info-bar">
+    <span>Total Project: <b id="project-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>In Progress: <b id="project-inprogress">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openProjectUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="project-search" placeholder="Nomor project, deskripsi, plant..." oninput="debounceRender('project')">
+      <span class="search-clear" onclick="clearSearch('project-search','project')">✕</span>
+    </span>
+    <label>Status:</label>
+    <select id="project-filter-status" onchange="renderProject()">
+      <option value="">Semua</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Completed">Completed</option>
+      <option value="Planning">Planning</option>
+    </select>
+    <label>Plant:</label>
+    <select id="project-filter-plant" onchange="renderProject()">
+      <option value="">Semua</option>
+    </select>
+    <button class="btn btn-search" onclick="renderProject()">Cari</button>
+    <button class="btn btn-reset" onclick="projectResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportProjectExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="project-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="project-table">
+        <thead><tr>
+          <th>No. Project</th>
+          <th>Deskripsi</th>
+          <th>Plant</th>
+          <th>Revision</th>
+          <th>Status</th>
+          <th>Start Date</th>
+          <th>Finish Date</th>
+          <th>Created By</th>
+        </tr></thead>
+        <tbody id="project-tbody">
+          <tr class="loading-row"><td colspan="8">Memuat data project...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="project-pagination"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: JOB LIST -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-joblist">
+  <div class="info-bar" id="joblist-info-bar">
+    <span>Total Joblist: <b id="joblist-total">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJoblistUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="joblist-search" placeholder="No joblist, deskripsi..." oninput="debounceRender('joblist')">
+      <span class="search-clear" onclick="clearSearch('joblist-search','joblist')">✕</span>
+    </span>
+    <label>Plant:</label>
+    <select id="joblist-filter-plant" onchange="renderJoblist()">
+      <option value="">Semua</option>
+    </select>
+    <label>Project:</label>
+    <select id="joblist-filter-project" onchange="renderJoblist()">
+      <option value="">Semua</option>
+    </select>
+    <button class="btn btn-search" onclick="renderJoblist()">Cari</button>
+    <button class="btn btn-reset" onclick="joblistResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJoblistExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="joblist-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="joblist-table">
+        <thead><tr>
+          <th>No. Joblist</th>
+          <th>Deskripsi</th>
+          <th>Plant</th>
+          <th>Project ID</th>
+          <th>Created By</th>
+          <th>Created</th>
+          <th>Modified By</th>
+        </tr></thead>
+        <tbody id="joblist-tbody">
+          <tr class="loading-row"><td colspan="7">Memuat data joblist...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="joblist-pagination"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: JOB DETAIL -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-jobdetail">
+  <div class="info-bar" id="jobdetail-info-bar">
+    <span>Total Detail: <b id="jobdetail-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Material: <b id="jobdetail-material">—</b></span>
+    <div class="info-divider"></div>
+    <span>Jasa: <b id="jobdetail-jasa">—</b></span>
+    <div class="info-divider"></div>
+    <span>MI: <b id="jobdetail-mi">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJobdetailUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="jobdetail-search" placeholder="No joblist detail, deskripsi, nomor PM..." oninput="debounceRender('jobdetail')">
+      <span class="search-clear" onclick="clearSearch('jobdetail-search','jobdetail')">✕</span>
+    </span>
+    <label>Plant:</label>
+    <select id="jobdetail-filter-plant" onchange="renderJobdetail()">
+      <option value="">Semua</option>
+    </select>
+    <label>Collective:</label>
+    <select id="jobdetail-filter-collective" onchange="renderJobdetail()">
+      <option value="">Semua</option>
+    </select>
+    <label>Tipe:</label>
+    <select id="jobdetail-filter-type" onchange="renderJobdetail()">
+      <option value="">Semua</option>
+      <option value="material">Material</option>
+      <option value="jasa">Jasa</option>
+      <option value="lldii">LLDII</option>
+    </select>
+    <button class="btn btn-search" onclick="renderJobdetail()">Cari</button>
+    <button class="btn btn-reset" onclick="jobdetailResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJobdetailExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="jobdetail-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="jobdetail-table">
+        <thead><tr>
+          <th>No. Joblist Detail</th>
+          <th>Deskripsi</th>
+          <th>Plant</th>
+          <th>Collective</th>
+          <th>No. Document</th>
+          <th>Nomor PM</th>
+          <th>MI</th>
+          <th>Material</th>
+          <th>Jasa</th>
+          <th>LLDII</th>
+          <th>Off Stream</th>
+          <th>Area</th>
+          <th>PIC Planner</th>
+          <th>Notes</th>
+        </tr></thead>
+        <tbody id="jobdetail-tbody">
+          <tr class="loading-row"><td colspan="14">Memuat data job detail...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="jobdetail-pagination"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: JOB DETAIL WORK ORDER -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-jobdetailworkorder">
+  <div class="info-bar" id="jdwo-info-bar">
+    <span>Total Work Order: <b id="jdwo-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Plan Cost: <b id="jdwo-total-plan">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Act. Cost: <b id="jdwo-total-act">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJdwoUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="jdwo-search" placeholder="Order, equipment, deskripsi..." oninput="debounceRender('jobdetailworkorder')">
+      <span class="search-clear" onclick="clearSearch('jdwo-search','jobdetailworkorder')">✕</span>
+    </span>
+    <label>System Status:</label>
+    <select id="jdwo-filter-status" onchange="renderJdwo()">
+      <option value="">Semua</option>
+    </select>
+    <button class="btn btn-search" onclick="renderJdwo()">Cari</button>
+    <button class="btn btn-reset" onclick="jdwoResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJdwoExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="jdwo-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="jdwo-table">
+        <thead><tr>
+          <th>Order</th>
+          <th>Deskripsi</th>
+          <th>Equipment</th>
+          <th>Functional Loc</th>
+          <th>Revision</th>
+          <th>System Status</th>
+          <th>User Status</th>
+          <th>WBS Ord. Header</th>
+          <th>Total Plan Cost</th>
+          <th>Total Act. Cost</th>
+          <th>Planner Group</th>
+          <th>Main Work Ctr</th>
+          <th>Basic Start</th>
+          <th>Basic Finish</th>
+          <th>Actual Release</th>
+          <th>Cost Center</th>
+        </tr></thead>
+        <tbody id="jdwo-tbody">
+          <tr class="loading-row"><td colspan="16">Memuat data work order...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="jdwo-pagination"></div>
+  </div>
+</div>
 </div><!-- /body -->
 
 <!-- MODAL: UPLOAD PO -->
@@ -1605,7 +1907,189 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
-<!-- MODAL: TAMBAH DATA TA-EX -->
+<!-- MODAL: UPLOAD EQUIPMENT TAEX -->
+<div class="modal-overlay" id="modal-equipment-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#475569;">
+      <h3>📥 Upload Excel Equipment TA-ex</h3>
+      <button class="modal-close" onclick="closeModal('modal-equipment-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e293b;">
+        <b>Kolom yang didukung:</b> Id, Plant, UnitId, CatalogProfile, Criticallity, CriticallityText, DescriptionofTechnicalObject, Disiplin, EquipmentCategory, EquipmentNo, FunctionalLocation, GroupAsset, Location, MainWorkCenter, MaintenancePlant, ModelType, PlanningPlant, CatalogProfileText, ManufacturerOfAsset, Created, CreatedBy, IsDeleted, Modified, ModifiedBy
+      </div>
+      <div class="upload-zone" id="equipment-upload-zone" onclick="document.getElementById('equipment-file-input').click()" ondragover="handleDrag(event,'equipment-upload-zone')" ondragleave="handleDragLeave(event,'equipment-upload-zone')" ondrop="handleDropNew(event,'equipment')">
+        <input type="file" id="equipment-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'equipment')">
+        <div class="upload-icon">⚙️</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="equipment-upload-preview" style="display:none">
+        <span id="equipment-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="equipment-preview-table"></div>
+      </div>
+      <div id="equipment-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="equipment-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="equipment-progress-pct" style="font-size:13px;font-weight:700;color:#475569;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="equipment-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#475569,#94a3b8);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="equipment-cancel-btn" onclick="closeModal('modal-equipment-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-project-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#7c3aed;">
+      <h3>📥 Upload Excel Project</h3>
+      <button class="modal-close" onclick="closeModal('modal-project-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#4c1d95;">
+        <b>Kolom yang didukung:</b> Id, ProjectNumber, ProjectTypeId, StartDate, FinishDate, Revision, Description, ProjectStatus, Plant, Created, CreatedBy, IsDeleted, Modified, ModifiedBy, DurationTaBrickId
+      </div>
+      <div class="upload-zone" id="project-upload-zone" onclick="document.getElementById('project-file-input').click()" ondragover="handleDrag(event,'project-upload-zone')" ondragleave="handleDragLeave(event,'project-upload-zone')" ondrop="handleDropNew(event,'project')">
+        <input type="file" id="project-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'project')">
+        <div class="upload-icon">🏗</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="project-upload-preview" style="display:none">
+        <span id="project-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="project-preview-table"></div>
+      </div>
+      <div id="project-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="project-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="project-progress-pct" style="font-size:13px;font-weight:700;color:#7c3aed;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="project-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#7c3aed,#a78bfa);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="project-cancel-btn" onclick="closeModal('modal-project-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UPLOAD JOB LIST -->
+<div class="modal-overlay" id="modal-joblist-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#0f766e;">
+      <h3>📥 Upload Excel Job List</h3>
+      <button class="modal-close" onclick="closeModal('modal-joblist-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#134e4a;">
+        <b>Kolom yang didukung:</b> Id, ProjectId, EquipmentId, Plant, Created, CreatedBy, IsDeleted, Modified, ModifiedBy, JoblistDescription, NoJoblist
+      </div>
+      <div class="upload-zone" id="joblist-upload-zone" onclick="document.getElementById('joblist-file-input').click()" ondragover="handleDrag(event,'joblist-upload-zone')" ondragleave="handleDragLeave(event,'joblist-upload-zone')" ondrop="handleDropNew(event,'joblist')">
+        <input type="file" id="joblist-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'joblist')">
+        <div class="upload-icon">📋</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="joblist-upload-preview" style="display:none">
+        <span id="joblist-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="joblist-preview-table"></div>
+      </div>
+      <div id="joblist-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="joblist-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="joblist-progress-pct" style="font-size:13px;font-weight:700;color:#0f766e;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="joblist-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#0f766e,#14b8a6);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="joblist-cancel-btn" onclick="closeModal('modal-joblist-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UPLOAD JOB DETAIL -->
+<div class="modal-overlay" id="modal-jobdetail-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#b45309;">
+      <h3>📥 Upload Excel Job Detail</h3>
+      <button class="modal-close" onclick="closeModal('modal-jobdetail-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#78350f;">
+        <b>Kolom yang didukung:</b> Id, JoblistId, JoblistDetailDescription, IsMechanicalIntegrity, IsOptimization, Plant, NoDocument, Collective, NomorPM, Notes, IsMaterial, IsJasa, IsLLDII, IsOffStream, NoJoblistDetail, PlanningStatusId, dll.
+      </div>
+      <div class="upload-zone" id="jobdetail-upload-zone" onclick="document.getElementById('jobdetail-file-input').click()" ondragover="handleDrag(event,'jobdetail-upload-zone')" ondragleave="handleDragLeave(event,'jobdetail-upload-zone')" ondrop="handleDropNew(event,'jobdetail')">
+        <input type="file" id="jobdetail-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'jobdetail')">
+        <div class="upload-icon">📝</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv — file besar diproses async</span>
+      </div>
+      <div id="jobdetail-upload-preview" style="display:none">
+        <span id="jobdetail-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="jobdetail-preview-table"></div>
+      </div>
+      <div id="jobdetail-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="jobdetail-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="jobdetail-progress-pct" style="font-size:13px;font-weight:700;color:#b45309;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="jobdetail-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#b45309,#f59e0b);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+        <div style="margin-top:6px;"><span id="jobdetail-progress-eta" style="font-size:11px;color:#6b7280;"></span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="jobdetail-cancel-btn" onclick="closeModal('modal-jobdetail-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UPLOAD JOB DETAIL WORK ORDER -->
+<div class="modal-overlay" id="modal-jdwo-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#0369a1;">
+      <h3>📥 Upload Excel Job Detail Work Order</h3>
+      <button class="modal-close" onclick="closeModal('modal-jdwo-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e40af;">
+        <b>Kolom yang didukung:</b> Id, JoblistDetailId, Notification, CreatedOn, SuperiorOrder, Order, Description, Equipment, FunctionalLoc, Location, Revision, SystemStatus, UserStatus, WBSordheader, TotalPlnndCosts, Totalactcosts, PlannerGroup, MainWorkCtr, ChangeBy, Basstartdate, Basicfindate, ActualRelease, CostCenter, EnteredBy
+      </div>
+      <div class="upload-zone" id="jdwo-upload-zone" onclick="document.getElementById('jdwo-file-input').click()" ondragover="handleDrag(event,'jdwo-upload-zone')" ondragleave="handleDragLeave(event,'jdwo-upload-zone')" ondrop="handleDropNew(event,'jdwo')">
+        <input type="file" id="jdwo-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'jdwo')">
+        <div class="upload-icon">🔧</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="jdwo-upload-preview" style="display:none">
+        <span id="jdwo-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="jdwo-preview-table"></div>
+      </div>
+      <div id="jdwo-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="jdwo-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="jdwo-progress-pct" style="font-size:13px;font-weight:700;color:#0369a1;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="jdwo-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#0369a1,#38bdf8);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="jdwo-cancel-btn" onclick="closeModal('modal-jdwo-upload')">Batal</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-add-taex">
   <div class="modal" style="width:700px;">
     <div class="modal-header">
@@ -2067,6 +2551,11 @@ const SIDEBAR_MENUS = {
   'order':             [{icon:'📋', label:'Order', active:true}],
   'tracking':          [{icon:'🔍', label:'Tracking', active:true}],
   'audit':             [{icon:'🔎', label:'Audit', active:true}],
+  'project':           [{icon:'🏗', label:'Project', active:true}],
+  'joblist':           [{icon:'📋', label:'Job List', active:true}],
+  'jobdetail':         [{icon:'📝', label:'Job Detail', active:true}],
+  'jobdetailworkorder':[{icon:'🔧', label:'WO Detail', active:true}],
+  'equipment':         [{icon:'⚙️', label:'Equipment', active:true}],
 };
 const HEADER_TITLES = {
   'taex':             ['TA-ex', 'Material Reservation'],
@@ -2079,6 +2568,11 @@ const HEADER_TITLES = {
   'po':               ['PO', 'Purchase Order'],
   'tracking':         ['Tracking', 'End-to-End Procurement Tracking'],
   'audit':            ['Audit', 'Cek Perubahan TA-ex vs PRISMA'],
+  'project':          ['Project', 'Manajemen Project TA'],
+  'joblist':          ['Job List', 'Daftar Joblist per Project'],
+  'jobdetail':        ['Job Detail', 'Detail Pekerjaan & Perencanaan'],
+  'jobdetailworkorder':['Work Order', 'Job Detail Work Order SAP'],
+  'equipment':         ['Equipment', 'Master Data Equipment TA-ex'],
 };
 
 function switchApp(app) {
@@ -2108,6 +2602,11 @@ function renderPage(app) {
   else if (app==='po') { if (!poFiltered.length) fetchAndRenderPo(); }
   else if (app==='tracking') renderTracking();
   else if (app==='audit') fetchAndRenderAudit();
+  else if (app==='project') { if (!state.projectData.length) fetchAndRenderProject(); else renderProject(); }
+  else if (app==='joblist') { if (!state.joblistData.length) fetchAndRenderJoblist(); else renderJoblist(); }
+  else if (app==='jobdetail') { if (!state.jobdetailData.length) fetchAndRenderJobdetail(); else renderJobdetail(); }
+  else if (app==='jobdetailworkorder') { if (!state.jdwoData.length) fetchAndRenderJdwo(); else renderJdwo(); }
+  else if (app==='equipment') { if (!state.equipmentData.length) fetchAndRenderEquipment(); else renderEquipment(); }
 }
 
 function populateFilters() {
@@ -5241,6 +5740,668 @@ async function exportAuditExcel() {
     toast('Export Audit gagal: ' + e.message, 'err');
   }
 }
+
+// ── EQUIPMENT TAEX ──────────────────────────────────────────
+state.equipmentData = [];
+let equipmentFiltered = [], equipmentPage = 1;
+
+async function fetchAndRenderEquipment() {
+  try {
+    let all = [], page = 1;
+    while (true) {
+      const res = await apiFetch(`/data/equipment?page=${page}&limit=500`);
+      const chunk = Array.isArray(res) ? res : (res.data || []);
+      all = all.concat(chunk);
+      const total = res.total || chunk.length;
+      if (all.length >= total || chunk.length < 500) break;
+      page++;
+    }
+    state.equipmentData = all;
+    populateEquipmentFilters();
+    renderEquipment();
+    document.getElementById('badge-equipment').textContent = all.length;
+  } catch(e) {
+    document.getElementById('equipment-tbody').innerHTML =
+      `<tr><td colspan="13" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateEquipmentFilters() {
+  const plants    = [...new Set(state.equipmentData.map(r => r.Plant).filter(Boolean))].sort();
+  const disiplins = [...new Set(state.equipmentData.map(r => r.Disiplin).filter(Boolean))].sort();
+  const groups    = [...new Set(state.equipmentData.map(r => r.GroupAsset).filter(Boolean))].sort();
+  const crits     = [...new Set(state.equipmentData.map(r => r.CriticallityText).filter(Boolean))].sort();
+
+  document.getElementById('equipment-filter-plant').innerHTML =
+    '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('equipment-filter-disiplin').innerHTML =
+    '<option value="">Semua</option>' + disiplins.map(d => `<option value="${d}">${d}</option>`).join('');
+  document.getElementById('equipment-filter-group').innerHTML =
+    '<option value="">Semua</option>' + groups.map(g => `<option value="${g}">${g}</option>`).join('');
+  document.getElementById('equipment-filter-crit').innerHTML =
+    '<option value="">Semua</option>' + crits.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+const CRIT_COLOR = { 'Critical': 'red', 'Non Critical': 'gray', 'Normal': 'blue' };
+const DISIPLIN_COLOR = { 'STATIONARY': 'blue', 'ROTARY': 'green', 'ELECTRICAL': 'purple', 'INSTRUMENT': 'teal' };
+
+function renderEquipment() {
+  const q     = (document.getElementById('equipment-search').value || '').toLowerCase();
+  const fPl   = document.getElementById('equipment-filter-plant').value;
+  const fDis  = document.getElementById('equipment-filter-disiplin').value;
+  const fGrp  = document.getElementById('equipment-filter-group').value;
+  const fCrit = document.getElementById('equipment-filter-crit').value;
+
+  equipmentFiltered = state.equipmentData.filter(r => {
+    if (fPl   && r.Plant          !== fPl)   return false;
+    if (fDis  && r.Disiplin       !== fDis)  return false;
+    if (fGrp  && r.GroupAsset     !== fGrp)  return false;
+    if (fCrit && r.CriticallityText !== fCrit) return false;
+    if (q) {
+      const hay = `${r.EquipmentNo} ${r.DescriptionofTechnicalObject} ${r.FunctionalLocation} ${r.Location} ${r.ManufacturerOfAsset}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total = equipmentFiltered.length;
+  const statCount = equipmentFiltered.filter(r => r.Disiplin === 'STATIONARY').length;
+  const rotCount  = equipmentFiltered.filter(r => r.Disiplin === 'ROTARY').length;
+  const elecCount = equipmentFiltered.filter(r => r.Disiplin === 'ELECTRICAL').length;
+
+  document.getElementById('equipment-total').textContent = total;
+  document.getElementById('equipment-stat').textContent  = statCount;
+  document.getElementById('equipment-rot').textContent   = rotCount;
+  document.getElementById('equipment-elec').textContent  = elecCount;
+  document.getElementById('equipment-rowCount').textContent = `${total} baris`;
+
+  const pages = Math.ceil(total / PG_LIMIT) || 1;
+  if (equipmentPage > pages) equipmentPage = 1;
+  const slice = equipmentFiltered.slice((equipmentPage - 1) * PG_LIMIT, equipmentPage * PG_LIMIT);
+
+  document.getElementById('equipment-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td><b>${D(r.EquipmentNo)}</b></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${r.DescriptionofTechnicalObject||''}">${D(r.DescriptionofTechnicalObject)}</td>
+        <td>${D(r.Plant)}</td>
+        <td>${D(r.FunctionalLocation)}</td>
+        <td>${D(r.Location)}</td>
+        <td><span class="badge badge-${DISIPLIN_COLOR[r.Disiplin]||'gray'}">${D(r.Disiplin)}</span></td>
+        <td style="font-size:11px">${D(r.GroupAsset)}</td>
+        <td><span class="badge badge-${CRIT_COLOR[r.CriticallityText]||'gray'}">${D(r.CriticallityText)}</span></td>
+        <td>${D(r.EquipmentCategory)}</td>
+        <td style="font-size:11px">${D(r.CatalogProfileText)}</td>
+        <td>${D(r.MainWorkCenter)}</td>
+        <td style="font-size:11px">${D(r.ModelType)}</td>
+        <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="${r.ManufacturerOfAsset||''}">${D(r.ManufacturerOfAsset)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="13" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('equipment-pagination', equipmentPage, pages, p => { equipmentPage = p; renderEquipment(); });
+}
+
+function equipmentResetFilter() {
+  document.getElementById('equipment-search').value = '';
+  ['equipment-filter-plant','equipment-filter-disiplin','equipment-filter-group','equipment-filter-crit']
+    .forEach(id => document.getElementById(id).value = '');
+  renderEquipment();
+}
+
+function exportEquipmentExcel() {
+  if (!equipmentFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = equipmentFiltered.map(r => ({
+    EquipmentNo: r.EquipmentNo,
+    Description: r.DescriptionofTechnicalObject,
+    Plant: r.Plant, FunctionalLocation: r.FunctionalLocation,
+    Location: r.Location, Disiplin: r.Disiplin,
+    GroupAsset: r.GroupAsset, Criticallity: r.CriticallityText,
+    EquipmentCategory: r.EquipmentCategory,
+    CatalogProfileText: r.CatalogProfileText,
+    MainWorkCenter: r.MainWorkCenter, ModelType: r.ModelType,
+    ManufacturerOfAsset: r.ManufacturerOfAsset,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:30},{wch:8},{wch:14},{wch:14},{wch:14},{wch:20},{wch:14},{wch:6},{wch:24},{wch:12},{wch:14},{wch:22}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Equipment');
+  XLSX.writeFile(wb, `Equipment_TA-ex_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Equipment berhasil!', 'ok');
+}
+
+function openEquipmentUploadModal() {
+  document.getElementById('equipment-file-input').value = '';
+  openModal('modal-equipment-upload');
+}
+
+// Drop zone drag styling
+const _eqZone = document.getElementById('equipment-upload-zone');
+if (_eqZone) {
+  _eqZone.addEventListener('dragover', e => { e.preventDefault(); _eqZone.classList.add('drag'); });
+  _eqZone.addEventListener('dragleave', () => _eqZone.classList.remove('drag'));
+}
+
+// ============================================================
+// PROJECT · JOB LIST · JOB DETAIL · WORK ORDER
+// ============================================================
+
+// State
+state.projectData    = [];
+state.joblistData    = [];
+state.jobdetailData  = [];
+state.jdwoData       = [];
+
+let projectFiltered  = [], joblistFiltered = [], jobdetailFiltered = [], jdwoFiltered = [];
+let projectPage = 1, joblistPage = 1, jobdetailPage = 1, jdwoPage = 1;
+const PG_LIMIT = 100;
+
+// ── Helpers ─────────────────────────────────────────────────
+function fmtCost(v) {
+  if (v === null || v === undefined || v === '') return '<span style="color:#d1d5db">—</span>';
+  const n = parseFloat(v);
+  if (isNaN(n)) return v;
+  return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(n);
+}
+function boolBadge(v) {
+  return v == 1 ? '<span class="badge badge-green">✔</span>' : '<span style="color:#d1d5db">—</span>';
+}
+
+// ── PROJECT ─────────────────────────────────────────────────
+async function fetchAndRenderProject() {
+  try {
+    const rows = await apiFetch('/project');
+    state.projectData = Array.isArray(rows) ? rows : [];
+    populateProjectFilters();
+    renderProject();
+    document.getElementById('badge-project').textContent = state.projectData.length;
+  } catch(e) {
+    document.getElementById('project-tbody').innerHTML = `<tr><td colspan="8" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateProjectFilters() {
+  const plants = [...new Set(state.projectData.map(r => r.Plant).filter(Boolean))].sort();
+  const sel = document.getElementById('project-filter-plant');
+  sel.innerHTML = '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
+function renderProject() {
+  const q    = (document.getElementById('project-search').value || '').toLowerCase();
+  const fSt  = document.getElementById('project-filter-status').value;
+  const fPl  = document.getElementById('project-filter-plant').value;
+
+  projectFiltered = state.projectData.filter(r => {
+    if (fSt && r.ProjectStatus !== fSt) return false;
+    if (fPl && r.Plant !== fPl) return false;
+    if (q) {
+      const hay = `${r.ProjectNumber} ${r.Description} ${r.Plant} ${r.Revision}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total = projectFiltered.length;
+  const inProgress = projectFiltered.filter(r => r.ProjectStatus === 'In Progress').length;
+  document.getElementById('project-total').textContent = total;
+  document.getElementById('project-inprogress').textContent = inProgress;
+  document.getElementById('project-rowCount').textContent = `${total} baris`;
+
+  const pages = Math.ceil(total / PG_LIMIT) || 1;
+  if (projectPage > pages) projectPage = 1;
+  const slice = projectFiltered.slice((projectPage - 1) * PG_LIMIT, projectPage * PG_LIMIT);
+
+  const statusColor = { 'In Progress': 'green', 'Completed': 'blue', 'Planning': 'gray' };
+  document.getElementById('project-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td><b>${D(r.ProjectNumber)}</b></td>
+        <td>${D(r.Description)}</td>
+        <td>${D(r.Plant)}</td>
+        <td>${D(r.Revision)}</td>
+        <td><span class="badge badge-${statusColor[r.ProjectStatus]||'gray'}">${D(r.ProjectStatus)}</span></td>
+        <td>${fmtDate(r.StartDate)}</td>
+        <td>${fmtDate(r.FinishDate)}</td>
+        <td style="font-size:11px">${D(r.CreatedBy)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('project-pagination', projectPage, pages, p => { projectPage = p; renderProject(); });
+}
+
+function projectResetFilter() {
+  document.getElementById('project-search').value = '';
+  document.getElementById('project-filter-status').value = '';
+  document.getElementById('project-filter-plant').value = '';
+  renderProject();
+}
+
+function exportProjectExcel() {
+  if (!projectFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = projectFiltered.map(r => ({
+    ProjectNumber: r.ProjectNumber, Description: r.Description,
+    Plant: r.Plant, Revision: r.Revision, ProjectStatus: r.ProjectStatus,
+    StartDate: r.StartDate, FinishDate: r.FinishDate,
+    CreatedBy: r.CreatedBy, Created: r.Created,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Project');
+  XLSX.writeFile(wb, `Project_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Project berhasil!', 'ok');
+}
+
+// ── JOB LIST ────────────────────────────────────────────────
+async function fetchAndRenderJoblist() {
+  try {
+    const rows = await apiFetch('/joblist');
+    state.joblistData = Array.isArray(rows) ? rows : [];
+    populateJoblistFilters();
+    renderJoblist();
+    document.getElementById('badge-joblist').textContent = state.joblistData.length;
+  } catch(e) {
+    document.getElementById('joblist-tbody').innerHTML = `<tr><td colspan="7" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateJoblistFilters() {
+  const plants = [...new Set(state.joblistData.map(r => r.Plant).filter(Boolean))].sort();
+  document.getElementById('joblist-filter-plant').innerHTML =
+    '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  // Daftar project berdasarkan ProjectId yang ada di joblist, cross-ref ke projectData
+  const projectIds = [...new Set(state.joblistData.map(r => r.ProjectId).filter(Boolean))];
+  const sel = document.getElementById('joblist-filter-project');
+  sel.innerHTML = '<option value="">Semua</option>';
+  projectIds.sort().forEach(pid => {
+    const proj = state.projectData.find(p => p.ID === pid);
+    sel.innerHTML += `<option value="${pid}">${proj ? proj.ProjectNumber : pid.slice(0,8)+'...'}</option>`;
+  });
+}
+
+function renderJoblist() {
+  const q   = (document.getElementById('joblist-search').value || '').toLowerCase();
+  const fPl = document.getElementById('joblist-filter-plant').value;
+  const fPr = document.getElementById('joblist-filter-project').value;
+
+  joblistFiltered = state.joblistData.filter(r => {
+    if (fPl && r.Plant !== fPl) return false;
+    if (fPr && r.ProjectId !== fPr) return false;
+    if (q) {
+      const hay = `${r.NoJoblist} ${r.JoblistDescription} ${r.Plant}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total = joblistFiltered.length;
+  document.getElementById('joblist-total').textContent = total;
+  document.getElementById('joblist-rowCount').textContent = `${total} baris`;
+
+  const pages = Math.ceil(total / PG_LIMIT) || 1;
+  if (joblistPage > pages) joblistPage = 1;
+  const slice = joblistFiltered.slice((joblistPage - 1) * PG_LIMIT, joblistPage * PG_LIMIT);
+
+  document.getElementById('joblist-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td><b>${D(r.NoJoblist)}</b></td>
+        <td>${D(r.JoblistDescription)}</td>
+        <td>${D(r.Plant)}</td>
+        <td style="font-size:10px;color:#6b7280">${D(r.ProjectId)}</td>
+        <td style="font-size:11px">${D(r.CreatedBy)}</td>
+        <td>${fmtDate(r.Created)}</td>
+        <td style="font-size:11px">${D(r.ModifiedBy)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('joblist-pagination', joblistPage, pages, p => { joblistPage = p; renderJoblist(); });
+}
+
+function joblistResetFilter() {
+  document.getElementById('joblist-search').value = '';
+  document.getElementById('joblist-filter-plant').value = '';
+  document.getElementById('joblist-filter-project').value = '';
+  renderJoblist();
+}
+
+function exportJoblistExcel() {
+  if (!joblistFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = joblistFiltered.map(r => ({
+    NoJoblist: r.NoJoblist, JoblistDescription: r.JoblistDescription,
+    Plant: r.Plant, ProjectId: r.ProjectId,
+    CreatedBy: r.CreatedBy, Created: r.Created,
+    ModifiedBy: r.ModifiedBy,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'JobList');
+  XLSX.writeFile(wb, `JobList_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Joblist berhasil!', 'ok');
+}
+
+// ── JOB DETAIL ──────────────────────────────────────────────
+async function fetchAndRenderJobdetail() {
+  try {
+    let all = [];
+    let page = 1;
+    while (true) {
+      const res = await apiFetch(`/jobdetail?page=${page}&limit=500`);
+      const chunk = Array.isArray(res) ? res : (res.data || []);
+      all = all.concat(chunk);
+      if (chunk.length < 500) break;
+      page++;
+    }
+    state.jobdetailData = all;
+    populateJobdetailFilters();
+    renderJobdetail();
+    document.getElementById('badge-jobdetail').textContent = all.length;
+  } catch(e) {
+    document.getElementById('jobdetail-tbody').innerHTML = `<tr><td colspan="14" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateJobdetailFilters() {
+  const plants = [...new Set(state.jobdetailData.map(r => r.Plant).filter(Boolean))].sort();
+  document.getElementById('jobdetail-filter-plant').innerHTML =
+    '<option value="">Semua</option>' + plants.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  const collectives = [...new Set(state.jobdetailData.map(r => r.Collective).filter(Boolean))].sort();
+  document.getElementById('jobdetail-filter-collective').innerHTML =
+    '<option value="">Semua</option>' + collectives.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function renderJobdetail() {
+  const q    = (document.getElementById('jobdetail-search').value || '').toLowerCase();
+  const fPl  = document.getElementById('jobdetail-filter-plant').value;
+  const fCol = document.getElementById('jobdetail-filter-collective').value;
+  const fTyp = document.getElementById('jobdetail-filter-type').value;
+
+  jobdetailFiltered = state.jobdetailData.filter(r => {
+    if (fPl && r.Plant !== fPl) return false;
+    if (fCol && r.Collective !== fCol) return false;
+    if (fTyp === 'material' && r.IsMaterial != 1) return false;
+    if (fTyp === 'jasa' && r.IsJasa != 1) return false;
+    if (fTyp === 'lldii' && r.IsLLDII != 1) return false;
+    if (q) {
+      const hay = `${r.NoJoblistDetail} ${r.JoblistDetailDescription} ${r.NomorPM} ${r.NoDocument} ${r.Notes}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total   = jobdetailFiltered.length;
+  const matCount = jobdetailFiltered.filter(r => r.IsMaterial == 1).length;
+  const jasaCount = jobdetailFiltered.filter(r => r.IsJasa == 1).length;
+  const miCount  = jobdetailFiltered.filter(r => r.IsMechanicalIntegrity == 1).length;
+  document.getElementById('jobdetail-total').textContent    = total;
+  document.getElementById('jobdetail-material').textContent = matCount;
+  document.getElementById('jobdetail-jasa').textContent     = jasaCount;
+  document.getElementById('jobdetail-mi').textContent       = miCount;
+  document.getElementById('jobdetail-rowCount').textContent = `${total} baris`;
+
+  const pages = Math.ceil(total / PG_LIMIT) || 1;
+  if (jobdetailPage > pages) jobdetailPage = 1;
+  const slice = jobdetailFiltered.slice((jobdetailPage - 1) * PG_LIMIT, jobdetailPage * PG_LIMIT);
+
+  document.getElementById('jobdetail-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td><b style="font-size:11px">${D(r.NoJoblistDetail)}</b></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${r.JoblistDetailDescription||''}">${D(r.JoblistDetailDescription)}</td>
+        <td>${D(r.Plant)}</td>
+        <td>${D(r.Collective)}</td>
+        <td style="font-size:11px">${D(r.NoDocument)}</td>
+        <td>${D(r.NomorPM)}</td>
+        <td>${boolBadge(r.IsMechanicalIntegrity)}</td>
+        <td>${boolBadge(r.IsMaterial)}</td>
+        <td>${boolBadge(r.IsJasa)}</td>
+        <td>${boolBadge(r.IsLLDII)}</td>
+        <td>${boolBadge(r.IsOffStream)}</td>
+        <td>${D(r.AuthparamArea)}</td>
+        <td style="font-size:11px">${D(r.PICPlannerName)}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.Notes||''}">${D(r.Notes)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="14" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('jobdetail-pagination', jobdetailPage, pages, p => { jobdetailPage = p; renderJobdetail(); });
+}
+
+function jobdetailResetFilter() {
+  document.getElementById('jobdetail-search').value = '';
+  document.getElementById('jobdetail-filter-plant').value = '';
+  document.getElementById('jobdetail-filter-collective').value = '';
+  document.getElementById('jobdetail-filter-type').value = '';
+  renderJobdetail();
+}
+
+function exportJobdetailExcel() {
+  if (!jobdetailFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = jobdetailFiltered.map(r => ({
+    NoJoblistDetail: r.NoJoblistDetail, Description: r.JoblistDetailDescription,
+    Plant: r.Plant, Collective: r.Collective, NoDocument: r.NoDocument,
+    NomorPM: r.NomorPM, IsMI: r.IsMechanicalIntegrity == 1 ? 1 : 0,
+    IsMaterial: r.IsMaterial == 1 ? 1 : 0, IsJasa: r.IsJasa == 1 ? 1 : 0,
+    IsLLDII: r.IsLLDII == 1 ? 1 : 0, IsOffStream: r.IsOffStream == 1 ? 1 : 0,
+    Area: r.AuthparamArea, PICPlanner: r.PICPlannerName, Notes: r.Notes,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'JobDetail');
+  XLSX.writeFile(wb, `JobDetail_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Job Detail berhasil!', 'ok');
+}
+
+// ── JOB DETAIL WORK ORDER ───────────────────────────────────
+async function fetchAndRenderJdwo() {
+  try {
+    const rows = await apiFetch('/jobdetailworkorder');
+    state.jdwoData = Array.isArray(rows) ? rows : [];
+    populateJdwoFilters();
+    renderJdwo();
+    document.getElementById('badge-jdwo').textContent = state.jdwoData.length;
+  } catch(e) {
+    document.getElementById('jdwo-tbody').innerHTML = `<tr><td colspan="16" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateJdwoFilters() {
+  const statuses = [...new Set(state.jdwoData.map(r => r.SystemStatus).filter(Boolean))].sort();
+  document.getElementById('jdwo-filter-status').innerHTML =
+    '<option value="">Semua</option>' + statuses.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function renderJdwo() {
+  const q   = (document.getElementById('jdwo-search').value || '').toLowerCase();
+  const fSt = document.getElementById('jdwo-filter-status').value;
+
+  jdwoFiltered = state.jdwoData.filter(r => {
+    if (fSt && r.SystemStatus !== fSt) return false;
+    if (q) {
+      const hay = `${r.Order} ${r.Description} ${r.Equipment} ${r.FunctionalLoc} ${r.Revision}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total = jdwoFiltered.length;
+  const totalPlan = jdwoFiltered.reduce((s, r) => s + (parseFloat(r.TotalPlnndCosts) || 0), 0);
+  const totalAct  = jdwoFiltered.reduce((s, r) => s + (parseFloat(r.Totalactcosts)   || 0), 0);
+  document.getElementById('jdwo-total').textContent      = total;
+  document.getElementById('jdwo-total-plan').textContent = new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(totalPlan);
+  document.getElementById('jdwo-total-act').textContent  = new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(totalAct);
+  document.getElementById('jdwo-rowCount').textContent   = `${total} baris`;
+
+  const pages = Math.ceil(total / PG_LIMIT) || 1;
+  if (jdwoPage > pages) jdwoPage = 1;
+  const slice = jdwoFiltered.slice((jdwoPage - 1) * PG_LIMIT, jdwoPage * PG_LIMIT);
+
+  document.getElementById('jdwo-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td><b>${D(r.Order)}</b></td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${r.Description||''}">${D(r.Description)}</td>
+        <td>${D(r.Equipment)}</td>
+        <td>${D(r.FunctionalLoc)}</td>
+        <td>${D(r.Revision)}</td>
+        <td style="font-size:10px">${D(r.SystemStatus)}</td>
+        <td>${D(r.UserStatus)}</td>
+        <td style="font-size:10px">${D(r.WBSordheader)}</td>
+        <td style="text-align:right">${fmtCost(r.TotalPlnndCosts)}</td>
+        <td style="text-align:right">${fmtCost(r.Totalactcosts)}</td>
+        <td>${D(r.PlannerGroup)}</td>
+        <td>${D(r.MainWorkCtr)}</td>
+        <td>${fmtDate(r.Basstartdate)}</td>
+        <td>${fmtDate(r.Basicfindate)}</td>
+        <td>${fmtDate(r.ActualRelease)}</td>
+        <td>${D(r.CostCenter)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="16" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('jdwo-pagination', jdwoPage, pages, p => { jdwoPage = p; renderJdwo(); });
+}
+
+function jdwoResetFilter() {
+  document.getElementById('jdwo-search').value = '';
+  document.getElementById('jdwo-filter-status').value = '';
+  renderJdwo();
+}
+
+function exportJdwoExcel() {
+  if (!jdwoFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = jdwoFiltered.map(r => ({
+    Order: r.Order, Description: r.Description, Equipment: r.Equipment,
+    FunctionalLoc: r.FunctionalLoc, Revision: r.Revision,
+    SystemStatus: r.SystemStatus, UserStatus: r.UserStatus,
+    WBSordheader: r.WBSordheader,
+    TotalPlnndCosts: r.TotalPlnndCosts, Totalactcosts: r.Totalactcosts,
+    PlannerGroup: r.PlannerGroup, MainWorkCtr: r.MainWorkCtr,
+    Basstartdate: r.Basstartdate, Basicfindate: r.Basicfindate,
+    ActualRelease: r.ActualRelease, CostCenter: r.CostCenter,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'WorkOrder');
+  XLSX.writeFile(wb, `JobDetailWO_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Work Order berhasil!', 'ok');
+}
+
+// ── Upload Handlers untuk 4 tab baru ─────────────────────────
+// Mapping: UI key → backend upload_type & reload fn
+const NEW_UPLOAD_META = {
+  project:  { backendType: 'project',           reloadFn: fetchAndRenderProject,   modalId: 'modal-project-upload'   },
+  joblist:  { backendType: 'joblist',            reloadFn: fetchAndRenderJoblist,   modalId: 'modal-joblist-upload'   },
+  jobdetail:{ backendType: 'jobdetail',          reloadFn: fetchAndRenderJobdetail, modalId: 'modal-jobdetail-upload'  },
+  jdwo:     { backendType: 'jobdetailworkorder', reloadFn: fetchAndRenderJdwo,      modalId: 'modal-jdwo-upload'      },
+  equipment:{ backendType: 'equipment',          reloadFn: fetchAndRenderEquipment, modalId: 'modal-equipment-upload' },
+};
+
+function handleDropNew(e, type) {
+  e.preventDefault();
+  const zoneMap = { project:'project-upload-zone', joblist:'joblist-upload-zone', jobdetail:'jobdetail-upload-zone', jdwo:'jdwo-upload-zone' };
+  const zone = document.getElementById(zoneMap[type]);
+  if (zone) zone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processNewUpload(file, type);
+}
+
+function handleFileSelectNew(e, type) {
+  const file = e.target.files[0];
+  if (file) processNewUpload(file, type);
+}
+
+async function processNewUpload(file, type) {
+  const meta = NEW_UPLOAD_META[type];
+  if (!meta) return;
+
+  const previewEl = document.getElementById(type + '-upload-preview');
+  const infoEl    = document.getElementById(type + '-preview-info');
+  const panelEl   = document.getElementById(type + '-progress-panel');
+  const barEl     = document.getElementById(type + '-progress-bar');
+  const msgEl     = document.getElementById(type + '-progress-msg');
+  const pctEl     = document.getElementById(type + '-progress-pct');
+  const cancelBtn = document.getElementById(type + '-cancel-btn');
+  const etaEl     = document.getElementById(type + '-progress-eta');
+
+  if (previewEl) previewEl.style.display = 'block';
+  if (infoEl) infoEl.textContent = '⏳ Mengirim file ke server...';
+  setSyncStatus('loading', '⏳ Mengirim file ke server...');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadRes = await fetch(`${API}/upload/${meta.backendType}`, {
+      method: 'POST',
+      headers: { 'x-api-key': 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK' },
+      body: formData,
+    });
+    if (!uploadRes.ok) throw new Error(`HTTP ${uploadRes.status}`);
+    const json = await uploadRes.json();
+
+    // Jika ada jobId → poll progress; jika tidak (sync response) → langsung reload
+    if (json.jobId) {
+      if (panelEl) panelEl.style.display = 'block';
+      if (cancelBtn) cancelBtn.disabled = true;
+      const startTime = Date.now();
+
+      await new Promise((resolve, reject) => {
+        const iv = setInterval(async () => {
+          try {
+            const r = await fetch(`${API}/upload-progress/${json.jobId}`, {
+              headers: { 'x-api-key': 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK' }
+            });
+            const job = await r.json();
+            const pct = job.pct || 0;
+            if (barEl) barEl.style.width = pct + '%';
+            if (pctEl) pctEl.textContent = pct + '%';
+            if (msgEl) msgEl.textContent = job.msg || '';
+            if (etaEl && pct > 5 && pct < 100) {
+              const elapsed = (Date.now() - startTime) / 1000;
+              const rem = (100 - pct) / (pct / elapsed);
+              etaEl.textContent = rem < 60 ? `Estimasi: ~${Math.ceil(rem)} detik` : `Estimasi: ~${Math.ceil(rem/60)} menit`;
+            }
+            setSyncStatus('loading', `⏳ ${job.msg}`);
+            if (infoEl) infoEl.textContent = job.msg;
+            if (job.done) {
+              clearInterval(iv);
+              if (cancelBtn) cancelBtn.disabled = false;
+              if (job.error) { reject(new Error(job.error)); return; }
+              if (barEl) barEl.style.background = 'linear-gradient(90deg,#16a34a,#22c55e)';
+              resolve();
+            }
+          } catch(err) { clearInterval(iv); reject(err); }
+        }, 600);
+      });
+    } else if (json.inserted !== undefined) {
+      if (infoEl) infoEl.textContent = `✅ ${json.inserted} baris tersimpan`;
+    }
+
+    // Reload data
+    setSyncStatus('loading', '⏳ Memuat data terbaru...');
+    await meta.reloadFn();
+    setTimeout(() => {
+      if (previewEl) previewEl.style.display = 'none';
+      if (panelEl)  { panelEl.style.display = 'none'; if (barEl) barEl.style.width = '0%'; }
+      closeModal(meta.modalId);
+      setSyncStatus('ok', `✅ Upload ${type} selesai · ${new Date().toLocaleTimeString('id-ID')}`);
+      toast(`Upload ${type} selesai!`, 'ok');
+    }, 800);
+
+  } catch(e) {
+    setSyncStatus('err', '❌ Upload gagal: ' + e.message);
+    toast('Upload gagal: ' + e.message, 'err');
+    if (infoEl) infoEl.textContent = '❌ Gagal: ' + e.message;
+    if (cancelBtn) cancelBtn.disabled = false;
+  }
+}
+
+function openProjectUploadModal()  { document.getElementById('project-file-input').value = ''; openModal('modal-project-upload'); }
+function openJoblistUploadModal()  { document.getElementById('joblist-file-input').value = ''; openModal('modal-joblist-upload'); }
+function openJobdetailUploadModal(){ document.getElementById('jobdetail-file-input').value = ''; openModal('modal-jobdetail-upload'); }
+function openJdwoUploadModal()     { document.getElementById('jdwo-file-input').value = ''; openModal('modal-jdwo-upload'); }
+
+// Drop zone drag styling untuk tab baru
+['project-upload-zone','joblist-upload-zone','jobdetail-upload-zone','jdwo-upload-zone'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drag'));
+});
 
 // ============================================================
 // BOOT

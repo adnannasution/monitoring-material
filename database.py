@@ -325,6 +325,171 @@ def migrate():
         )
     """)
 
+    execute("""
+        CREATE TABLE IF NOT EXISTS equipment_taex (
+            id                              TEXT PRIMARY KEY,
+            plant                           TEXT,
+            created                         TEXT,
+            created_by                      TEXT,
+            is_deleted                      INTEGER DEFAULT 0,
+            modified                        TEXT,
+            modified_by                     TEXT,
+            unit_id                         TEXT,
+            catalog_profile                 TEXT,
+            criticallity                    TEXT,
+            criticallity_text               TEXT,
+            description_of_technical_object TEXT,
+            disiplin                        TEXT,
+            equipment_category              TEXT,
+            equipment_no                    TEXT,
+            functional_location             TEXT,
+            group_asset                     TEXT,
+            location                        TEXT,
+            main_work_center                TEXT,
+            maintenance_plant               TEXT,
+            model_type                      TEXT,
+            planning_plant                  TEXT,
+            catalog_profile_text            TEXT,
+            manufacturer_of_asset           TEXT,
+            inserted_at                     TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS project (
+            id                   TEXT PRIMARY KEY,
+            project_number       TEXT,
+            project_type_id      TEXT,
+            start_date           TEXT,
+            finish_date          TEXT,
+            revision             TEXT,
+            description          TEXT,
+            project_status       TEXT,
+            plant                TEXT,
+            created              TEXT,
+            created_by           TEXT,
+            is_deleted           INTEGER DEFAULT 0,
+            modified             TEXT,
+            modified_by          TEXT,
+            duration_ta_brick_id TEXT,
+            inserted_at          TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS job_list (
+            id                  TEXT PRIMARY KEY,
+            project_id          TEXT,
+            equipment_id        TEXT,
+            plant               TEXT,
+            created             TEXT,
+            created_by          TEXT,
+            is_deleted          INTEGER DEFAULT 0,
+            modified            TEXT,
+            modified_by         TEXT,
+            joblist_description TEXT,
+            no_joblist          TEXT,
+            inserted_at         TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS job_detail (
+            id                           TEXT PRIMARY KEY,
+            joblist_id                   TEXT,
+            joblist_detail_reason_id     TEXT,
+            joblist_detail_description   TEXT,
+            is_mechanical_integrity      INTEGER,
+            is_optimization              INTEGER,
+            job_discipline_id            TEXT,
+            plant                        TEXT,
+            created                      TEXT,
+            created_by                   TEXT,
+            is_deleted                   INTEGER DEFAULT 0,
+            modified                     TEXT,
+            modified_by                  TEXT,
+            no_document                  TEXT,
+            creator_created              TEXT,
+            creator_job_title            TEXT,
+            creator_name                 TEXT,
+            assign_to                    TEXT,
+            authparam_area               TEXT,
+            status_id                    TEXT,
+            document_joblist_type_id     TEXT,
+            economic_consiqiency_class   INTEGER,
+            economic_probability_class   INTEGER,
+            environment_consiqiency_class INTEGER,
+            environment_probability_class INTEGER,
+            health_consiqiency_class     INTEGER,
+            health_probability_class     INTEGER,
+            is_off_stream                INTEGER,
+            job_execution_id             TEXT,
+            joblist_detail_category_id   TEXT,
+            legal_consiqiency_class      INTEGER,
+            legal_probability_class      INTEGER,
+            responsibility_id            TEXT,
+            nomor_pm                     TEXT,
+            collective                   TEXT,
+            maintenance_plan             TEXT,
+            maintenanceitem              TEXT,
+            notes                        TEXT,
+            pic_planner                  TEXT,
+            assign_to_pic_date           TEXT,
+            pic_planner_job_title        TEXT,
+            pic_planner_name             TEXT,
+            is_all_in                    INTEGER,
+            is_aspek_durasi              INTEGER,
+            is_aspek_quality             INTEGER,
+            is_aspek_safety              INTEGER,
+            is_jasa                      INTEGER,
+            is_lldii                     INTEGER,
+            is_material                  INTEGER,
+            no_joblist_detail            TEXT,
+            is_request_freezing          INTEGER,
+            request_freezing_date        TEXT,
+            planning_status_id           TEXT,
+            planning_contract_id         TEXT,
+            planning_jasa_status_id      TEXT,
+            planning_material_status_id  TEXT,
+            inserted_at                  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS job_detail_work_order (
+            id                  TEXT PRIMARY KEY,
+            joblist_detail_id   TEXT,
+            notification        TEXT,
+            created_on          TEXT,
+            superior_order      TEXT,
+            "order"             TEXT,
+            description         TEXT,
+            equipment           TEXT,
+            functional_loc      TEXT,
+            location            TEXT,
+            revision            TEXT,
+            system_status       TEXT,
+            user_status         TEXT,
+            wbs_ord_header      TEXT,
+            total_plnnd_costs   NUMERIC,
+            totalact_costs      NUMERIC,
+            planner_group       TEXT,
+            main_work_ctr       TEXT,
+            change_by           TEXT,
+            bas_start_date      TEXT,
+            basic_fin_date      TEXT,
+            actual_release      TEXT,
+            cost_center         TEXT,
+            entered_by          TEXT,
+            created             TEXT,
+            created_by          TEXT,
+            is_deleted          INTEGER DEFAULT 0,
+            modified            TEXT,
+            modified_by         TEXT,
+            inserted_at         TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
     # Indexes
     for sql in [
         'CREATE INDEX IF NOT EXISTS idx_taex_material ON taex_reservasi(material)',
@@ -334,8 +499,19 @@ def migrate():
         'CREATE INDEX IF NOT EXISTS idx_prisma_order    ON prisma_reservasi("order")',
         'CREATE INDEX IF NOT EXISTS idx_sap_pr          ON sap_pr(pr)',
         'CREATE INDEX IF NOT EXISTS idx_kumpulan_code   ON kumpulan_summary(code_tracking)',
-        'CREATE INDEX IF NOT EXISTS idx_sap_po_po       ON sap_po(po)',
-        'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq ON sap_po(purchreq)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_po_po              ON sap_po(po)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq        ON sap_po(purchreq)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_no            ON equipment_taex(equipment_no)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_plant         ON equipment_taex(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_func_loc      ON equipment_taex(functional_location)',
+        'CREATE INDEX IF NOT EXISTS idx_project_number         ON project(project_number)',
+        'CREATE INDEX IF NOT EXISTS idx_project_plant          ON project(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_joblist_project        ON job_list(project_id)',
+        'CREATE INDEX IF NOT EXISTS idx_joblist_plant          ON job_list(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_jobdetail_joblist      ON job_detail(joblist_id)',
+        'CREATE INDEX IF NOT EXISTS idx_jobdetail_plant        ON job_detail(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_jdwo_joblist_detail    ON job_detail_work_order(joblist_detail_id)',
+        'CREATE INDEX IF NOT EXISTS idx_jdwo_order             ON job_detail_work_order("order")',
     ]:
         try:
             execute(sql)
