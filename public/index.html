@@ -7024,10 +7024,16 @@ function updateUserUI() {
 
 async function checkAuth() {
   const token = getToken();
-  if (!token) { showLoginPage(); return false; }
+  if (!token) {
+    hideInitLoading();
+    showLoginPage();
+    return false;
+  }
   try {
-    // Fetch /auth/me dan /meta paralel untuk hemat waktu
-    const res = await fetch(`${API}/auth/me`, { headers: { 'x-auth-token': token } });
+    const res = await fetch(`${API}/auth/me`, {
+      headers: { 'x-auth-token': token },
+      signal: AbortSignal.timeout(8000), // timeout 8 detik
+    });
     if (!res.ok) throw new Error('invalid');
     _currentUser = await res.json();
     updateUserUI();
@@ -7035,6 +7041,7 @@ async function checkAuth() {
     return true;
   } catch(e) {
     clearToken();
+    hideInitLoading();
     showLoginPage();
     return false;
   }
