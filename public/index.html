@@ -95,7 +95,12 @@ thead th {
   text-align: left; font-weight: 600; font-size: 11px;
   border-right: 1px solid rgba(255,255,255,0.2);
   cursor: pointer; user-select: none;
+  position: sticky; top: 0; z-index: 2;
 }
+thead tr:nth-child(2) th { top: 33px; z-index: 2; }
+thead tr:nth-child(3) th { top: 66px; z-index: 2; }
+/* Fix gap antar group header pada multi-row thead */
+#trkjl-table thead tr:first-child th { border-bottom: none; }
 thead th:last-child { border-right: none; }
 thead th:hover { background: #1245b5; }
 thead th.no-sort { cursor: default; }
@@ -1768,19 +1773,31 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <table id="trkjl-table">
         <thead>
           <tr>
-            <th colspan="5" style="background:#1e3a5f;text-align:center">🔧 Work Order</th>
-            <th colspan="7" style="background:#14532d;text-align:center">📝 Job Detail</th>
-            <th colspan="4" style="background:#3b1f6e;text-align:center">📋 Job List</th>
-            <th colspan="5" style="background:#1e3a5f;text-align:center">⚙️ Equipment</th>
-            <th colspan="5" style="background:#7c2d12;text-align:center">🏗 Project</th>
+            <th colspan="5" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
+            <th colspan="6" style="background:#1e3a5f;text-align:center;border-right:2px solid #fff">⚙️ Equipment</th>
+            <th colspan="4" style="background:#3b1f6e;text-align:center;border-right:2px solid #fff">📋 Job List</th>
+            <th colspan="7" style="background:#14532d;text-align:center;border-right:2px solid #fff">📝 Job Detail</th>
+            <th colspan="5" style="background:#1e3a5f;text-align:center;border-right:none">🔧 Work Order</th>
           </tr>
           <tr>
-            <!-- WO -->
-            <th>Order</th>
-            <th>System Status</th>
-            <th>Plan Cost</th>
-            <th>Act. Cost</th>
-            <th style="min-width:120px">Readiness WO</th>
+            <!-- Project -->
+            <th>No. Project</th>
+            <th>Deskripsi Project</th>
+            <th>Status</th>
+            <th>Finish Date</th>
+            <th style="min-width:120px">Readiness Project</th>
+            <!-- Equipment -->
+            <th>Equipment No.</th>
+            <th>Deskripsi Eq.</th>
+            <th>Func. Loc.</th>
+            <th>Disiplin</th>
+            <th>Criticality</th>
+            <th style="min-width:120px">Readiness Eq.</th>
+            <!-- Job List -->
+            <th>No. Joblist</th>
+            <th>Deskripsi JL</th>
+            <th>Plant</th>
+            <th style="min-width:120px">Readiness JL</th>
             <!-- Job Detail -->
             <th>No. JD</th>
             <th>Deskripsi JD</th>
@@ -1789,27 +1806,16 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <th>MI</th>
             <th>Material/Jasa</th>
             <th style="min-width:120px">Readiness JD</th>
-            <!-- Job List -->
-            <th>No. Joblist</th>
-            <th>Deskripsi JL</th>
-            <th>Plant</th>
-            <th style="min-width:120px">Readiness JL</th>
-            <!-- Equipment -->
-            <th>Equipment No.</th>
-            <th>Deskripsi Eq.</th>
-            <th>Func. Loc.</th>
-            <th>Disiplin</th>
-            <th>Criticality</th>
-            <!-- Project -->
-            <th>No. Project</th>
-            <th>Deskripsi Project</th>
-            <th>Status</th>
-            <th>Finish Date</th>
-            <th style="min-width:120px">Readiness Project</th>
+            <!-- WO -->
+            <th>Order</th>
+            <th>System Status</th>
+            <th>Plan Cost</th>
+            <th>Act. Cost</th>
+            <th style="min-width:120px">Readiness WO</th>
           </tr>
         </thead>
         <tbody id="trkjl-tbody">
-          <tr class="loading-row"><td colspan="26">Memuat data tracking joblist...</td></tr>
+          <tr class="loading-row"><td colspan="27">Memuat data tracking joblist...</td></tr>
         </tbody>
       </table>
     </div>
@@ -2603,28 +2609,81 @@ async function init() {
 
 async function _backgroundLoad() {
   try {
-    const [pr, kumpulan, order] = await Promise.all([
+    const [pr, kumpulan, order, project, joblist, jdwo, equipment] = await Promise.all([
       apiFetch('/data/pr?page=1&limit=500'),
       apiFetch('/data/kumpulan?page=1&limit=500'),
       apiFetch('/order'),
+      apiFetch('/project'),
+      apiFetch('/joblist'),
+      apiFetch('/jobdetailworkorder'),
+      apiFetch('/equipment?page=1&limit=500'),
     ]);
-    state.prData       = pr.data       || [];
-    state.kumpulanData = kumpulan.data || [];
+
+    // PR & Kumpulan
+    state.prData         = pr.data       || [];
+    state.kumpulanData   = kumpulan.data || [];
     state._totalPR       = pr.pagination?.total       || state.prData.length;
     state._totalKumpulan = kumpulan.pagination?.total || state.kumpulanData.length;
+
+    // Order — fix: selalu set ulang dan render agar tidak hilang
     state.orderData = Array.isArray(order) ? order : [];
-    updateBadges();
     renderOrder();
+
+    // Project
+    state.projectData = Array.isArray(project) ? project : [];
+    document.getElementById('badge-project').textContent = state.projectData.length;
+    populateProjectFilters();
+
+    // Job List
+    state.joblistData = Array.isArray(joblist) ? joblist : [];
+    document.getElementById('badge-joblist').textContent = state.joblistData.length;
+
+    // WO Detail
+    state.jdwoData = Array.isArray(jdwo) ? jdwo : [];
+    document.getElementById('badge-jdwo').textContent = state.jdwoData.length;
+
+    // Equipment (paginated)
+    const eqChunk = Array.isArray(equipment) ? equipment : (equipment.data || []);
+    state.equipmentData = eqChunk;
+    // Fetch halaman berikutnya kalau ada
+    const eqTotal = equipment.total || eqChunk.length;
+    if (eqChunk.length < eqTotal) {
+      let pg = 2;
+      while (state.equipmentData.length < eqTotal) {
+        const next = await apiFetch(`/equipment?page=${pg}&limit=500`);
+        const chunk = Array.isArray(next) ? next : (next.data || []);
+        state.equipmentData = state.equipmentData.concat(chunk);
+        if (chunk.length < 500) break;
+        pg++;
+      }
+    }
+    document.getElementById('badge-equipment').textContent = state.equipmentData.length;
+    populateEquipmentFilters();
+
+    // Job Detail (bisa banyak, fetch semua)
+    let allJD = [], jdPage = 1;
+    while (true) {
+      const res   = await apiFetch(`/jobdetail?page=${jdPage}&limit=500`);
+      const chunk = Array.isArray(res) ? res : (res.data || []);
+      allJD = allJD.concat(chunk);
+      if (chunk.length < 500) break;
+      jdPage++;
+    }
+    state.jobdetailData = allJD;
+    document.getElementById('badge-jobdetail').textContent = allJD.length;
+    populateJobdetailFilters();
+    populateJoblistFilters(); // butuh projectData sudah siap
+
+    updateBadges();
   } catch(e) {
     console.warn('Background load gagal:', e.message);
   }
-  // Jika PRISMA masih kosong setelah init (mis. /api/data/prisma gagal),
-  // load penuh via /api/prisma lalu render ulang
+  // Jika PRISMA masih kosong setelah init, load penuh
   if (prServerMeta.total === 0) {
     try {
       await ensurePrismaLoaded();
       if (state.prismaReservasiData.length > 0) {
-        await fetchAndRenderPrisma(); // akan pakai fallback state jika API masih gagal
+        await fetchAndRenderPrisma();
       }
     } catch(e) { console.warn('Background PRISMA load gagal:', e.message); }
   }
@@ -6506,7 +6565,7 @@ let trkJlFiltered   = [];
 
 async function fetchAndRenderTrkJl() {
   document.getElementById('trkjl-tbody').innerHTML =
-    '<tr class="loading-row"><td colspan="22">⏳ Memuat data...</td></tr>';
+    '<tr class="loading-row"><td colspan="27">⏳ Memuat data...</td></tr>';
   try {
     const rows = await apiFetch('/tracking-joblist');
     state.trkJlData = Array.isArray(rows) ? rows : [];
@@ -6596,12 +6655,24 @@ function renderTrkJl() {
 
   document.getElementById('trkjl-tbody').innerHTML = slice.length
     ? slice.map(r => `<tr>
-        <!-- WO -->
-        <td><b style="color:#1a56db">${D(r.order)}</b></td>
-        <td><span class="badge badge-${STATUS_COLOR[r.system_status?.split(' ')[0]] || 'gray'}">${D(r.system_status)}</span></td>
-        <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
-        <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
-        <td>${readinessBar(r.order_readiness_pct, r.order_ready)}</td>
+        <!-- Project -->
+        <td style="font-weight:600">${D(r.project_number)}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
+        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
+        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
+        <td>${readinessBar(r.project_readiness_pct, r.project_ready)}</td>
+        <!-- Equipment -->
+        <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
+        <td style="font-size:11px">${D(r.functional_location)}</td>
+        <td><span class="badge badge-${DISIPLIN_COLOR[r.disiplin]||'gray'}">${D(r.disiplin)}</span></td>
+        <td><span class="badge badge-${CRIT_COLOR[r.criticallity_text]||'gray'}">${D(r.criticallity_text)}</span></td>
+        <td>${r.equipment_no ? readinessBar(r.jl_readiness_pct, r.jl_ready) : '<span style="color:#d1d5db">—</span>'}</td>
+        <!-- Job List -->
+        <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
+        <td>${D(r.plant)}</td>
+        <td>${readinessBar(r.jl_readiness_pct, r.jl_ready)}</td>
         <!-- Job Detail -->
         <td style="font-size:11px;font-weight:600">${D(r.no_joblist_detail)}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jd_desc||''}">${D(r.jd_desc)}</td>
@@ -6610,25 +6681,14 @@ function renderTrkJl() {
         <td>${boolBadge(r.is_mechanical_integrity)}</td>
         <td style="font-size:10px">${r.is_material==1?'<span class="badge badge-blue">MAT</span>':''}${r.is_jasa==1?'<span class="badge badge-teal">JASA</span>':''}${r.is_lldii==1?'<span class="badge badge-purple">LLDII</span>':''}</td>
         <td>${readinessBar(r.jd_readiness_pct, r.jd_ready)}</td>
-        <!-- Job List -->
-        <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
-        <td>${D(r.plant)}</td>
-        <td>${readinessBar(r.jl_readiness_pct, r.jl_ready)}</td>
-        <!-- Equipment -->
-        <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
-        <td style="font-size:11px">${D(r.functional_location)}</td>
-        <td><span class="badge badge-${DISIPLIN_COLOR[r.disiplin]||'gray'}">${D(r.disiplin)}</span></td>
-        <td><span class="badge badge-${CRIT_COLOR[r.criticallity_text]||'gray'}">${D(r.criticallity_text)}</span></td>
-        <!-- Project -->
-        <td style="font-weight:600">${D(r.project_number)}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
-        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
-        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
-        <td>${readinessBar(r.project_readiness_pct, r.project_ready)}</td>
+        <!-- WO -->
+        <td><b style="color:#1a56db">${D(r.order)}</b></td>
+        <td><span class="badge badge-${STATUS_COLOR[r.system_status?.split(' ')[0]] || 'gray'}">${D(r.system_status)}</span></td>
+        <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
+        <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
+        <td>${readinessBar(r.order_readiness_pct, r.order_ready)}</td>
       </tr>`).join('')
-    : '<tr><td colspan="26" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+    : '<tr><td colspan="27" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
 
   renderPagination('trkjl-pagination', 'trkjl', total, pg.page, totalPages, pg.size, renderTrkJl);
 }
