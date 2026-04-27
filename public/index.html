@@ -584,6 +584,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-jobdetail" onclick="switchApp('jobdetail')">📝 Job Detail<span class="tab-badge" id="badge-jobdetail">0</span></div>
   <div class="tab" id="tab-jobdetailworkorder" onclick="switchApp('jobdetailworkorder')">🔧 WO Detail<span class="tab-badge" id="badge-jdwo">0</span></div>
   <div class="tab" id="tab-equipment" onclick="switchApp('equipment')">⚙️ Equipment<span class="tab-badge" id="badge-equipment">0</span></div>
+  <div class="tab" id="tab-tracking-joblist" onclick="switchApp('tracking-joblist')">🔗 Tracking Joblist<span class="tab-badge" id="badge-trk-jl">0</span></div>
 </div>
 
 <!-- BODY -->
@@ -1728,6 +1729,90 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: TRACKING JOBLIST -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-tracking-joblist">
+  <div class="info-bar" id="trkjl-info-bar">
+    <span>Total WO: <b id="trkjl-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Dengan Equipment: <b id="trkjl-with-eq">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Plan Cost: <b id="trkjl-plan-cost">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Act. Cost: <b id="trkjl-act-cost">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="fetchAndRenderTrkJl()" style="margin-left:4px">🔄 Refresh</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="trkjl-search" placeholder="Order, equipment, project, job detail..." oninput="debounceRender('tracking-joblist')">
+      <span class="search-clear" onclick="clearSearch('trkjl-search','tracking-joblist')">✕</span>
+    </span>
+    <label>Project:</label>
+    <select id="trkjl-filter-project" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <label>Collective:</label>
+    <select id="trkjl-filter-collective" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <label>System Status:</label>
+    <select id="trkjl-filter-status" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <label>Disiplin:</label>
+    <select id="trkjl-filter-disiplin" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderTrkJl()">Cari</button>
+    <button class="btn btn-reset" onclick="trkJlResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportTrkJlExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="trkjl-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="trkjl-table">
+        <thead>
+          <tr>
+            <th colspan="4" style="background:#1e3a5f;text-align:center">🔧 Work Order</th>
+            <th colspan="6" style="background:#14532d;text-align:center">📝 Job Detail</th>
+            <th colspan="3" style="background:#3b1f6e;text-align:center">📋 Job List</th>
+            <th colspan="4" style="background:#7c2d12;text-align:center">🏗 Project</th>
+            <th colspan="5" style="background:#1e3a5f;text-align:center">⚙️ Equipment</th>
+          </tr>
+          <tr>
+            <!-- WO -->
+            <th>Order</th>
+            <th>System Status</th>
+            <th>Plan Cost</th>
+            <th>Act. Cost</th>
+            <!-- Job Detail -->
+            <th>No. JD</th>
+            <th>Deskripsi JD</th>
+            <th>Collective</th>
+            <th>Nomor PM</th>
+            <th>MI</th>
+            <th>Material/Jasa</th>
+            <!-- Job List -->
+            <th>No. Joblist</th>
+            <th>Deskripsi JL</th>
+            <th>Plant</th>
+            <!-- Project -->
+            <th>No. Project</th>
+            <th>Deskripsi Project</th>
+            <th>Status</th>
+            <th>Finish Date</th>
+            <!-- Equipment -->
+            <th>Equipment No.</th>
+            <th>Deskripsi Eq.</th>
+            <th>Func. Loc.</th>
+            <th>Disiplin</th>
+            <th>Criticality</th>
+          </tr>
+        </thead>
+        <tbody id="trkjl-tbody">
+          <tr class="loading-row"><td colspan="22">Memuat data tracking joblist...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="trkjl-pagination"></div>
+  </div>
+</div>
+
 </div><!-- /pages -->
 </div><!-- /body -->
 
@@ -2514,15 +2599,18 @@ async function init() {
 
 async function _backgroundLoad() {
   try {
-    const [pr, kumpulan] = await Promise.all([
+    const [pr, kumpulan, order] = await Promise.all([
       apiFetch('/data/pr?page=1&limit=500'),
       apiFetch('/data/kumpulan?page=1&limit=500'),
+      apiFetch('/order'),
     ]);
     state.prData       = pr.data       || [];
     state.kumpulanData = kumpulan.data || [];
     state._totalPR       = pr.pagination?.total       || state.prData.length;
     state._totalKumpulan = kumpulan.pagination?.total || state.kumpulanData.length;
+    state.orderData = Array.isArray(order) ? order : [];
     updateBadges();
+    renderOrder();
   } catch(e) {
     console.warn('Background load gagal:', e.message);
   }
@@ -2556,6 +2644,7 @@ const SIDEBAR_MENUS = {
   'jobdetail':         [{icon:'📝', label:'Job Detail', active:true}],
   'jobdetailworkorder':[{icon:'🔧', label:'WO Detail', active:true}],
   'equipment':         [{icon:'⚙️', label:'Equipment', active:true}],
+  'tracking-joblist':  [{icon:'🔗', label:'Tracking Joblist', active:true}],
 };
 const HEADER_TITLES = {
   'taex':             ['TA-ex', 'Material Reservation'],
@@ -2573,6 +2662,7 @@ const HEADER_TITLES = {
   'jobdetail':        ['Job Detail', 'Detail Pekerjaan & Perencanaan'],
   'jobdetailworkorder':['Work Order', 'Job Detail Work Order SAP'],
   'equipment':         ['Equipment', 'Master Data Equipment TA-ex'],
+  'tracking-joblist':  ['Tracking Joblist', 'WO → Job Detail → Job List → Project + Equipment'],
 };
 
 function switchApp(app) {
@@ -2607,6 +2697,7 @@ function renderPage(app) {
   else if (app==='jobdetail') { if (!state.jobdetailData.length) fetchAndRenderJobdetail(); else renderJobdetail(); }
   else if (app==='jobdetailworkorder') { if (!state.jdwoData.length) fetchAndRenderJdwo(); else renderJdwo(); }
   else if (app==='equipment') { if (!state.equipmentData.length) fetchAndRenderEquipment(); else renderEquipment(); }
+  else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); }
 }
 
 function populateFilters() {
@@ -3985,6 +4076,7 @@ function renderPageByKey(key) {
   else if (key==='jobdetail') renderJobdetail();
   else if (key==='jdwo')      renderJdwo();
   else if (key==='equipment') renderEquipment();
+  else if (key==='trkjl')    renderTrkJl();
 }
 
 // ============================================================
@@ -4014,6 +4106,7 @@ function appToKey(app) {
     'kumpulan':'ks','pr':'sap','order':'order','po':'po','tracking':'trk','audit':'audit',
     'project':'project','joblist':'joblist','jobdetail':'jobdetail',
     'jobdetailworkorder':'jdwo','equipment':'equipment',
+    'tracking-joblist':'trkjl',
   };
   return m[app] || app;
 }
@@ -6399,6 +6492,177 @@ function openJdwoUploadModal()     { document.getElementById('jdwo-file-input').
   el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); });
   el.addEventListener('dragleave', () => el.classList.remove('drag'));
 });
+
+// ============================================================
+// TRACKING JOBLIST
+// WO Detail → Job Detail → Job List → Project + Equipment
+// ============================================================
+state.trkJlData     = [];
+let trkJlFiltered   = [];
+
+async function fetchAndRenderTrkJl() {
+  document.getElementById('trkjl-tbody').innerHTML =
+    '<tr class="loading-row"><td colspan="22">⏳ Memuat data...</td></tr>';
+  try {
+    const rows = await apiFetch('/tracking-joblist');
+    state.trkJlData = Array.isArray(rows) ? rows : [];
+    populateTrkJlFilters();
+    resetPg('trkjl');
+    renderTrkJl();
+    document.getElementById('badge-trk-jl').textContent = state.trkJlData.length;
+  } catch(e) {
+    document.getElementById('trkjl-tbody').innerHTML =
+      `<tr><td colspan="22" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateTrkJlFilters() {
+  const projects  = [...new Set(state.trkJlData.map(r => r.project_number).filter(Boolean))].sort();
+  const colls     = [...new Set(state.trkJlData.map(r => r.collective).filter(Boolean))].sort();
+  const statuses  = [...new Set(state.trkJlData.map(r => r.system_status).filter(Boolean))].sort();
+  const disiplins = [...new Set(state.trkJlData.map(r => r.disiplin).filter(Boolean))].sort();
+
+  document.getElementById('trkjl-filter-project').innerHTML =
+    '<option value="">Semua</option>' + projects.map(v => `<option value="${v}">${v}</option>`).join('');
+  document.getElementById('trkjl-filter-collective').innerHTML =
+    '<option value="">Semua</option>' + colls.map(v => `<option value="${v}">${v}</option>`).join('');
+  document.getElementById('trkjl-filter-status').innerHTML =
+    '<option value="">Semua</option>' + statuses.map(v => `<option value="${v}">${v}</option>`).join('');
+  document.getElementById('trkjl-filter-disiplin').innerHTML =
+    '<option value="">Semua</option>' + disiplins.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+function renderTrkJl() {
+  const q     = (document.getElementById('trkjl-search').value || '').toLowerCase();
+  const fProj = document.getElementById('trkjl-filter-project').value;
+  const fColl = document.getElementById('trkjl-filter-collective').value;
+  const fStat = document.getElementById('trkjl-filter-status').value;
+  const fDis  = document.getElementById('trkjl-filter-disiplin').value;
+
+  trkJlFiltered = state.trkJlData.filter(r => {
+    if (fProj && r.project_number !== fProj) return false;
+    if (fColl && r.collective     !== fColl) return false;
+    if (fStat && r.system_status  !== fStat) return false;
+    if (fDis  && r.disiplin       !== fDis)  return false;
+    if (q) {
+      const hay = [
+        r.order, r.equipment_no, r.equipment_desc,
+        r.project_number, r.project_desc,
+        r.no_joblist_detail, r.jd_desc,
+        r.no_joblist, r.jl_desc,
+        r.collective, r.nomor_pm, r.system_status,
+        r.functional_location,
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const total       = trkJlFiltered.length;
+  const withEq      = trkJlFiltered.filter(r => r.equipment_no).length;
+  const totalPlan   = trkJlFiltered.reduce((s, r) => s + (parseFloat(r.total_plnnd_costs) || 0), 0);
+  const totalAct    = trkJlFiltered.reduce((s, r) => s + (parseFloat(r.totalact_costs)    || 0), 0);
+  const fmt = v => new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(v);
+
+  document.getElementById('trkjl-total').textContent      = total;
+  document.getElementById('trkjl-with-eq').textContent    = withEq;
+  document.getElementById('trkjl-plan-cost').textContent  = fmt(totalPlan);
+  document.getElementById('trkjl-act-cost').textContent   = fmt(totalAct);
+  document.getElementById('trkjl-rowCount').textContent   = `${total} baris`;
+
+  const pg         = getPg('trkjl');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = trkJlFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
+
+  const STATUS_COLOR = { 'REL': 'green', 'TECO': 'blue', 'CLSD': 'gray', 'CRTD': 'teal' };
+  const PROJ_COLOR   = { 'In Progress': 'green', 'Completed': 'blue', 'Planning': 'gray' };
+
+  document.getElementById('trkjl-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <!-- WO -->
+        <td><b style="color:#1a56db">${D(r.order)}</b></td>
+        <td><span class="badge badge-${STATUS_COLOR[r.system_status?.split(' ')[0]] || 'gray'}">${D(r.system_status)}</span></td>
+        <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
+        <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
+        <!-- Job Detail -->
+        <td style="font-size:11px;font-weight:600">${D(r.no_joblist_detail)}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jd_desc||''}">${D(r.jd_desc)}</td>
+        <td>${D(r.collective)}</td>
+        <td>${D(r.nomor_pm)}</td>
+        <td>${boolBadge(r.is_mechanical_integrity)}</td>
+        <td style="font-size:10px">${r.is_material==1?'<span class="badge badge-blue">MAT</span>':''}${r.is_jasa==1?'<span class="badge badge-teal">JASA</span>':''}${r.is_lldii==1?'<span class="badge badge-purple">LLDII</span>':''}</td>
+        <!-- Job List -->
+        <td style="font-size:11px;font-weight:600">${D(r.no_joblist)}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.jl_desc||''}">${D(r.jl_desc)}</td>
+        <td>${D(r.plant)}</td>
+        <!-- Project -->
+        <td style="font-weight:600">${D(r.project_number)}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.project_desc||''}">${D(r.project_desc)}</td>
+        <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}">${D(r.project_status)}</span></td>
+        <td style="font-size:11px">${fmtDate(r.finish_date)}</td>
+        <!-- Equipment -->
+        <td style="font-weight:600;color:#1a56db">${D(r.equipment_no) || '<span style="color:#d1d5db">—</span>'}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="${r.equipment_desc||''}">${D(r.equipment_desc)}</td>
+        <td style="font-size:11px">${D(r.functional_location)}</td>
+        <td><span class="badge badge-${DISIPLIN_COLOR[r.disiplin]||'gray'}">${D(r.disiplin)}</span></td>
+        <td><span class="badge badge-${CRIT_COLOR[r.criticallity_text]||'gray'}">${D(r.criticallity_text)}</span></td>
+      </tr>`).join('')
+    : '<tr><td colspan="22" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('trkjl-pagination', 'trkjl', total, pg.page, totalPages, pg.size, renderTrkJl);
+}
+
+function trkJlResetFilter() {
+  document.getElementById('trkjl-search').value = '';
+  ['trkjl-filter-project','trkjl-filter-collective','trkjl-filter-status','trkjl-filter-disiplin']
+    .forEach(id => document.getElementById(id).value = '');
+  resetPg('trkjl');
+  renderTrkJl();
+}
+
+function exportTrkJlExcel() {
+  if (!trkJlFiltered.length) return toast('Tidak ada data untuk diekspor','err');
+  const rows = trkJlFiltered.map(r => ({
+    // WO
+    Order:         r.order,
+    SystemStatus:  r.system_status,
+    TotalPlanCost: r.total_plnnd_costs,
+    TotalActCost:  r.totalact_costs,
+    BasicStart:    r.bas_start_date,
+    BasicFinish:   r.basic_fin_date,
+    ActualRelease: r.actual_release,
+    // Job Detail
+    NoJoblistDetail: r.no_joblist_detail,
+    DescJobDetail:   r.jd_desc,
+    Collective:      r.collective,
+    NomorPM:         r.nomor_pm,
+    IsMI:            r.is_mechanical_integrity == 1 ? 1 : 0,
+    IsMaterial:      r.is_material == 1 ? 1 : 0,
+    IsJasa:          r.is_jasa == 1 ? 1 : 0,
+    IsLLDII:         r.is_lldii == 1 ? 1 : 0,
+    // Job List
+    NoJoblist:       r.no_joblist,
+    DescJobList:     r.jl_desc,
+    Plant:           r.plant,
+    // Project
+    ProjectNumber:   r.project_number,
+    ProjectDesc:     r.project_desc,
+    ProjectStatus:   r.project_status,
+    FinishDate:      r.finish_date,
+    // Equipment
+    EquipmentNo:     r.equipment_no,
+    EquipmentDesc:   r.equipment_desc,
+    FunctionalLoc:   r.functional_location,
+    Disiplin:        r.disiplin,
+    Criticality:     r.criticallity_text,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'TrackingJoblist');
+  XLSX.writeFile(wb, `TrackingJoblist_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Tracking Joblist berhasil!', 'ok');
+}
 
 // ============================================================
 // BOOT

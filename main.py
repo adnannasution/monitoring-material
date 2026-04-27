@@ -2209,6 +2209,122 @@ def get_data_equipment(request: Request, page: int = 1, limit: int = 500):
                     "data": [map_equipment(r) for r in rows]})
 
 
+# ═══════════════════════════════════════════════════════════════
+# TRACKING JOBLIST
+# WO Detail → Job Detail → Job List → Project + Equipment
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking-joblist")
+def get_tracking_joblist(
+    request: Request,
+    project: str = None,
+    collective: str = None,
+    status: str = None,
+    disiplin: str = None,
+    q: str = None,
+):
+    check_api_key(request)
+
+    clauses = ["wo.is_deleted = 0"]
+    params  = []
+
+    if project:
+        clauses.append("p.project_number = %s"); params.append(project)
+    if collective:
+        clauses.append("jd.collective = %s"); params.append(collective)
+    if status:
+        clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
+    if disiplin:
+        clauses.append("eq.disiplin = %s"); params.append(disiplin)
+    if q:
+        clauses.append("""(
+            wo."order" ILIKE %s OR wo.equipment ILIKE %s OR
+            jd.no_joblist_detail ILIKE %s OR jd.joblist_detail_description ILIKE %s OR
+            jl.no_joblist ILIKE %s OR
+            p.project_number ILIKE %s OR
+            eq.equipment_no ILIKE %s OR eq.description_of_technical_object ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 8)
+
+    where = " AND ".join(clauses)
+
+    rows = query(f"""
+        SELECT
+            -- WO Detail
+            wo.id                         AS wo_id,
+            wo."order"                    AS "order",
+            wo.notification,
+            wo.superior_order,
+            wo.system_status,
+            wo.user_status,
+            wo.total_plnnd_costs,
+            wo.totalact_costs,
+            wo.bas_start_date,
+            wo.basic_fin_date,
+            wo.actual_release,
+            wo.wbs_ord_header,
+            wo.planner_group,
+            wo.main_work_ctr,
+            wo.cost_center,
+            wo.revision                   AS wo_revision,
+
+            -- Job Detail
+            jd.id                         AS jd_id,
+            jd.no_joblist_detail,
+            jd.joblist_detail_description AS jd_desc,
+            jd.collective,
+            jd.nomor_pm,
+            jd.is_mechanical_integrity,
+            jd.is_off_stream,
+            jd.is_material,
+            jd.is_jasa,
+            jd.is_lldii,
+            jd.status_id                  AS jd_status_id,
+            jd.planning_status_id,
+            jd.planning_material_status_id,
+            jd.planning_jasa_status_id,
+            jd.no_document,
+            jd.notes                      AS jd_notes,
+            jd.pic_planner_name,
+            jd.authparam_area,
+
+            -- Job List
+            jl.id                         AS jl_id,
+            jl.no_joblist,
+            jl.joblist_description        AS jl_desc,
+            jl.plant,
+
+            -- Project
+            p.id                          AS project_id,
+            p.project_number,
+            p.description                 AS project_desc,
+            p.project_status,
+            p.start_date                  AS project_start,
+            p.finish_date,
+            p.revision                    AS project_revision,
+
+            -- Equipment
+            eq.equipment_no,
+            eq.description_of_technical_object AS equipment_desc,
+            eq.functional_location,
+            eq.location                   AS eq_location,
+            eq.disiplin,
+            eq.criticallity_text,
+            eq.group_asset,
+            eq.main_work_center           AS eq_main_work_center,
+            eq.catalog_profile_text
+
+        FROM job_detail_work_order wo
+        LEFT JOIN job_detail       jd  ON wo.joblist_detail_id = jd.id
+        LEFT JOIN job_list         jl  ON jd.joblist_id        = jl.id
+        LEFT JOIN project          p   ON jl.project_id        = p.id
+        LEFT JOIN equipment_taex   eq  ON wo.equipment         = eq.equipment_no
+        WHERE {where}
+        ORDER BY p.project_number, jl.no_joblist, jd.no_joblist_detail, wo."order"
+    """, params)
+
+    return jsonify([dict(r) for r in rows])
+
+
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
     return FileResponse("public/index.html")
