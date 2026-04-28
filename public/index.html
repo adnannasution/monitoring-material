@@ -98,19 +98,24 @@ thead th {
 }
 /* trkjl: warna per group di header */
 /* ── TREE ACCORDION ── */
-.tree-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid #f0f0f0; cursor:pointer; user-select:none; transition:background 0.15s; }
-.tree-row:hover { filter: brightness(0.96); }
-.tree-arrow { font-size:10px; width:14px; flex-shrink:0; transition:transform 0.2s; color:#6b7280; }
-.tree-arrow.open { transform:rotate(90deg); }
-.tree-arrow.leaf { color:transparent; cursor:default; }
-.tree-children { display:none; }
-.tree-children.open { display:block; }
-.tree-badge { font-size:10px; background:rgba(0,0,0,0.12); border-radius:99px; padding:1px 6px; white-space:nowrap; }
-.tree-tag { font-size:10px; border-radius:3px; padding:1px 5px; font-weight:600; white-space:nowrap; }
-/* Nested table wrapper */
-#trkjl-tree { padding:8px; }
-#trkjl-tree table td, #trkjl-tree table th { white-space:nowrap; }
-#trkjl-tree > div { margin-bottom:8px; }
+.tree-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer; user-select: none;
+  color: white; font-size: 12px;
+  transition: filter 0.15s;
+}
+.tree-row:hover { filter: brightness(1.1); }
+.tree-badge {
+  font-size: 10px; background: rgba(255,255,255,0.2);
+  border-radius: 99px; padding: 1px 8px; white-space: nowrap; flex-shrink: 0;
+}
+.tree-tag { font-size: 10px; border-radius: 3px; padding: 1px 5px; font-weight: 600; white-space: nowrap; }
+.tree-children { display: none; }
+.tree-children.open { display: block; }
+/* Staircase connector line */
+#trkjl-tree > div { position: relative; }
+#trkjl-tree { padding: 8px 8px 8px 0; }
 thead th:last-child { border-right: none; }
 thead th:hover { background: #1245b5; }
 thead th.no-sort { cursor: default; }
@@ -7021,32 +7026,33 @@ function renderTrkJl() {
   document.getElementById('trkjl-act-cost').textContent  = fmt(totalAct);
   document.getElementById('trkjl-rowCount').textContent  = `${trkJlFiltered.length} baris`;
 
-  // Build tree: Area → Unit → Equipment → JL → JD → WO
-  const areaMap = new Map();
-  for (const r of trkJlFiltered) {
-    const aid  = r.area_id   || '__no_area__';
-    const uid  = r.unit_id   || '__no_unit__';
-    const eqid = r.eq_id     || '__no_eq__';
-    const jlid = r.jl_id     || '__no_jl__';
-    const jdid = r.jd_id     || '__no_jd__';
-
-    if (!areaMap.has(aid)) areaMap.set(aid, { r, unitMap: new Map() });
-    const area = areaMap.get(aid);
-    if (!area.unitMap.has(uid)) area.unitMap.set(uid, { r, eqMap: new Map() });
-    const unit = area.unitMap.get(uid);
-    if (!unit.eqMap.has(eqid)) unit.eqMap.set(eqid, { r, jlMap: new Map() });
-    const eq = unit.eqMap.get(eqid);
-    if (!eq.jlMap.has(jlid)) eq.jlMap.set(jlid, { r, jdMap: new Map() });
-    const jl = eq.jlMap.get(jlid);
-    if (!jl.jdMap.has(jdid)) jl.jdMap.set(jdid, { r, wos: [] });
-    if (r.order) jl.jdMap.get(jdid).wos.push(r);
-  }
-
-  // Also build projMap for project-level readiness display (separate from tree)
+  // Build tree: Project → Area → Unit → Equipment → Joblist → JobDetail → WO
   const projMap = new Map();
   for (const r of trkJlFiltered) {
-    const pid = r.project_id || '__no_proj__';
-    if (!projMap.has(pid)) projMap.set(pid, r);
+    const pid  = r.project_id  || '__no_proj__';
+    const aid  = r.area_id     || '__no_area__';
+    const uid  = r.unit_id     || '__no_unit__';
+    const eqid = r.eq_id       || '__no_eq__';
+    const jlid = r.jl_id       || '__no_jl__';
+    const jdid = r.jd_id       || '__no_jd__';
+
+    if (!projMap.has(pid)) projMap.set(pid, { r, areaMap: new Map() });
+    const proj = projMap.get(pid);
+
+    if (!proj.areaMap.has(aid)) proj.areaMap.set(aid, { r, unitMap: new Map() });
+    const area = proj.areaMap.get(aid);
+
+    if (!area.unitMap.has(uid)) area.unitMap.set(uid, { r, eqMap: new Map() });
+    const unit = area.unitMap.get(uid);
+
+    if (!unit.eqMap.has(eqid)) unit.eqMap.set(eqid, { r, jlMap: new Map() });
+    const eq = unit.eqMap.get(eqid);
+
+    if (!eq.jlMap.has(jlid)) eq.jlMap.set(jlid, { r, jdMap: new Map() });
+    const jl = eq.jlMap.get(jlid);
+
+    if (!jl.jdMap.has(jdid)) jl.jdMap.set(jdid, { r, wos: [] });
+    if (r.order) jl.jdMap.get(jdid).wos.push(r);
   }
 
   const PROJ_BG   = { 'In Progress':'#16a34a','Completed':'#2563eb','Planning':'#6b7280' };
@@ -7057,139 +7063,174 @@ function renderTrkJl() {
     ? `<span style="background:${bg||'#6b7280'};color:#fff;border-radius:3px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap">${txt}</span>`
     : '<span style="color:#d1d5db">—</span>';
 
-  const arrow = (type, id, open) =>
-    `<span id="trkjl-ar-${type}-${CSS.escape(id)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;color:#6b7280;${open?'transform:rotate(90deg)':''}">▶</span>`;
+  // Level label prefix
+  const lvLabel = (icon, name) =>
+    `<span style="font-size:9px;background:rgba(255,255,255,0.2);border-radius:3px;padding:1px 5px;margin-right:4px;font-weight:700;letter-spacing:0.5px">${icon} ${name}</span>`;
+
+  const arrowEl = (key, open) =>
+    `<span id="trkjl-ar-${CSS.escape(key)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;flex-shrink:0;${open?'transform:rotate(90deg)':''}">▶</span>`;
 
   let html = '';
 
-  // ── AREA LEVEL ───────────────────────────────────────────
-  for (const [aid, area] of areaMap) {
-    const ar = area.r;
-    const aOpen = trkJlExpanded.proj.has(aid); // reuse proj set for area
-    const unitCount = area.unitMap.size;
-    const woCount = [...area.unitMap.values()].reduce((s,u)=>[...u.eqMap.values()].reduce((s2,eq)=>[...eq.jlMap.values()].reduce((s3,jl)=>[...jl.jdMap.values()].reduce((s4,jd)=>s4+jd.wos.length,s3),s2),s),0);
+  // ── LEVEL 1: PROJECT ─────────────────────────────────────
+  for (const [pid, proj] of projMap) {
+    const pr    = proj.r;
+    const pKey  = 'p_'+pid;
+    const pOpen = trkJlExpanded.proj.has(pKey);
+    const aCount = proj.areaMap.size;
 
     html += `<div>
-      <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(aid)}')">
-        <span id="trkjl-ar-proj-${CSS.escape(aid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${aOpen?'transform:rotate(90deg)':''}">▶</span>
-        <b style="font-size:13px;flex:0 0 auto">🗺 ${D(ar.area_name)||D(ar.area_alias_name)||'No Area'}</b>
-        <span style="font-size:11px;opacity:0.85;flex:1">${D(ar.area_alias_name)||''}</span>
-        <span class="tree-badge">${unitCount} Unit · ${woCount} WO</span>
-        ${readinessBar(ar.area_readiness_pct, ar.area_ready)}
+      <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(pKey)}')" style="background:#7c2d12;margin-left:0px;border-left:4px solid #fca5a5">
+        ${arrowEl(pKey, pOpen)}
+        ${lvLabel('🏗','PROJECT')}
+        <b style="font-size:13px;flex:0 0 auto">${D(pr.project_number)||'—'}</b>
+        <span style="font-size:11px;opacity:0.85;flex:1;overflow:hidden;text-overflow:ellipsis">${D(pr.project_desc)||''}</span>
+        <span class="tree-badge">${aCount} Area</span>
+        <span style="font-size:10px;background:${PROJ_BG[pr.project_status]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 7px">${D(pr.project_status)||'—'}</span>
+        <span style="font-size:11px;opacity:0.8">${fmtDate(pr.finish_date)||''}</span>
+        ${readinessBar(pr.project_readiness_pct, pr.project_ready)}
       </div>
-      <div class="tree-children ${aOpen?'open':''}" id="trkjl-ch-proj-${CSS.escape(aid)}">`;
+      <div id="trkjl-ch-proj-${CSS.escape(pKey)}" style="display:${pOpen?'block':'none'}">`;
 
-    // ── UNIT LEVEL ─────────────────────────────────────────
-    for (const [uid, unit] of area.unitMap) {
-      const ur = unit.r;
-      const uOpen = trkJlExpanded.jl.has(uid); // reuse jl set for unit
-      const eqCount = unit.eqMap.size;
+    // ── LEVEL 2: AREA ───────────────────────────────────────
+    for (const [aid, area] of proj.areaMap) {
+      const ar    = area.r;
+      const aKey  = 'a_'+pid+'_'+aid;
+      const aOpen = trkJlExpanded.proj.has(aKey);
+      const uCount = area.unitMap.size;
 
       html += `<div>
-        <div class="tree-row tree-lv1" onclick="trkJlToggle('jl','${CSS.escape(uid)}')" style="padding-left:24px">
-          <span id="trkjl-ar-jl-${CSS.escape(uid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${uOpen?'transform:rotate(90deg)':''}">▶</span>
-          <b style="font-size:12px;color:#1e3a5f;flex:0 0 auto">🏭 ${D(ur.unit_name)||D(ur.unit_alias_name)||'No Unit'}</b>
-          <span style="font-size:11px;flex:1;color:#374151">${D(ur.unit_alias_name)||''}</span>
-          <span class="tree-badge" style="background:rgba(30,58,95,0.1);color:#1e3a5f">${eqCount} Eq.</span>
-          ${readinessBar(ur.unit_readiness_pct, ur.unit_ready)}
+        <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(aKey)}')" style="background:#065f46;margin-left:24px;border-left:4px solid #6ee7b7;padding-left:10px">
+          ${arrowEl(aKey, aOpen)}
+          ${lvLabel('🗺','AREA')}
+          <b style="font-size:12px;flex:0 0 auto">${D(ar.area_name)||D(ar.area_alias_name)||'No Area'}</b>
+          <span style="font-size:11px;opacity:0.85;flex:1">${D(ar.area_alias_name)||''}</span>
+          <span class="tree-badge">${uCount} Unit</span>
+          ${readinessBar(ar.area_readiness_pct, ar.area_ready)}
         </div>
-        <div class="tree-children ${uOpen?'open':''}" id="trkjl-ch-jl-${CSS.escape(uid)}">`;
+        <div id="trkjl-ch-proj-${CSS.escape(aKey)}" style="display:${aOpen?'block':'none'}">`;
 
-      // ── EQUIPMENT LEVEL ──────────────────────────────────
-      for (const [eqid, eq] of unit.eqMap) {
-        const er = eq.r;
-        const eqOpen = trkJlExpanded.jd.has(eqid); // reuse jd set for eq
-        const jlCount = eq.jlMap.size;
+      // ── LEVEL 3: UNIT ─────────────────────────────────────
+      for (const [uid, unit] of area.unitMap) {
+        const ur    = unit.r;
+        const uKey  = 'u_'+pid+'_'+aid+'_'+uid;
+        const uOpen = trkJlExpanded.proj.has(uKey);
+        const eCount = unit.eqMap.size;
 
         html += `<div>
-          <div class="tree-row tree-lv2" onclick="trkJlToggle('jd','${CSS.escape(eqid)}')" style="padding-left:48px">
-            <span id="trkjl-ar-jd-${CSS.escape(eqid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${eqOpen?'transform:rotate(90deg)':''}">▶</span>
-            <b style="font-size:11px;color:#1a56db;flex:0 0 auto">⚙️ ${D(er.equipment_no)||'No Eq'}</b>
-            <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(er.equipment_desc)||''}</span>
-            ${er.disiplin?`<span style="background:${DIS_COLOR[er.disiplin]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 6px;font-size:10px">${er.disiplin}</span>`:''}
-            <span class="tree-badge" style="background:rgba(26,86,219,0.1);color:#1a56db">${jlCount} JL</span>
-            ${readinessBar(er.eq_readiness_pct, er.eq_ready)}
+          <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(uKey)}')" style="background:#1e3a5f;margin-left:48px;border-left:4px solid #93c5fd;padding-left:10px">
+            ${arrowEl(uKey, uOpen)}
+            ${lvLabel('🏭','UNIT')}
+            <b style="font-size:12px;flex:0 0 auto">${D(ur.unit_name)||D(ur.unit_alias_name)||'No Unit'}</b>
+            <span style="font-size:11px;opacity:0.85;flex:1">${D(ur.unit_alias_name)||''}</span>
+            <span class="tree-badge">${eCount} Equipment</span>
+            ${readinessBar(ur.unit_readiness_pct, ur.unit_ready)}
           </div>
-          <div class="tree-children ${eqOpen?'open':''}" id="trkjl-ch-jd-${CSS.escape(eqid)}">`;
+          <div id="trkjl-ch-proj-${CSS.escape(uKey)}" style="display:${uOpen?'block':'none'}">`;
 
-        // ── JOBLIST LEVEL ─────────────────────────────────
-        for (const [jlid, jl] of eq.jlMap) {
-          const jr = jl.r;
-          const KEY_JL = 'jlx_'+jlid;
-          const jlOpen = trkJlExpanded.proj.has(KEY_JL);
-          const jdCount = jl.jdMap.size;
-
-          // Project info for this joblist
-          const projInfo = projMap.get(jr.project_id);
+        // ── LEVEL 4: EQUIPMENT ──────────────────────────────
+        for (const [eqid, eq] of unit.eqMap) {
+          const er    = eq.r;
+          const eKey  = 'e_'+pid+'_'+aid+'_'+uid+'_'+eqid;
+          const eOpen = trkJlExpanded.proj.has(eKey);
+          const jlCount = eq.jlMap.size;
 
           html += `<div>
-            <div class="tree-row" onclick="trkJlToggle('proj','${CSS.escape(KEY_JL)}')"
-              style="padding-left:72px;background:#f9fafb;border-left:3px solid #7c2d12">
-              <span id="trkjl-ar-proj-${CSS.escape(KEY_JL)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${jlOpen?'transform:rotate(90deg)':''}">▶</span>
-              <b style="font-size:11px;color:#7c2d12;flex:0 0 auto">📋 ${D(jr.no_joblist)||'—'}</b>
-              <span style="font-size:11px;flex:1;color:#374151">${D(jr.jl_desc)||''}</span>
-              ${projInfo?`<span style="font-size:10px;color:#6b7280">📁 ${D(jr.project_number)||''}</span>`:''}
-              <span class="tree-badge" style="background:rgba(124,45,18,0.1);color:#7c2d12">${jdCount} JD</span>
-              ${readinessBar(jr.jl_readiness_pct, jr.jl_ready)}
+            <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(eKey)}')" style="background:#3b1f6e;margin-left:72px;border-left:4px solid #c4b5fd;padding-left:10px">
+              ${arrowEl(eKey, eOpen)}
+              ${lvLabel('⚙️','EQUIPMENT')}
+              <b style="font-size:11px;flex:0 0 auto">${D(er.equipment_no)||'No Equipment'}</b>
+              <span style="font-size:11px;opacity:0.85;flex:1;overflow:hidden;text-overflow:ellipsis">${D(er.equipment_desc)||''}</span>
+              ${er.disiplin?`<span style="background:${DIS_COLOR[er.disiplin]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 6px;font-size:10px">${er.disiplin}</span>`:''}
+              <span class="tree-badge">${jlCount} Joblist</span>
+              ${readinessBar(er.eq_readiness_pct, er.eq_ready)}
             </div>
-            <div class="tree-children ${jlOpen?'open':''}" id="trkjl-ch-proj-${CSS.escape(KEY_JL)}">`;
+            <div id="trkjl-ch-proj-${CSS.escape(eKey)}" style="display:${eOpen?'block':'none'}">`;
 
-          // ── JOB DETAIL LEVEL ───────────────────────────
-          const jdCols = ['','No. JD','Deskripsi JD','Collective','PM','MI','Mat/Jasa','Readiness JD'];
-          const jdRows = [...jl.jdMap.entries()].map(([jdid,jd]) => {
-            const dr = jd.r;
-            const KEY_JD = 'jd_'+jdid;
-            const jdOpen2 = trkJlExpanded.jl.has(KEY_JD);
-            const tags = [
-              dr.is_mechanical_integrity==1?'<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">MI</span>':'',
-              dr.is_material==1?'<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">MAT</span>':'',
-              dr.is_jasa==1?'<span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">JASA</span>':'',
-              dr.is_lldii==1?'<span style="background:#ede9fe;color:#4c1d95;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">LLDII</span>':'',
-            ].join('') || '—';
+          // ── LEVEL 5: JOBLIST TABLE ───────────────────────
+          const jlCols = ['','📋 JOBLIST','Deskripsi','Plant','Project','# JD','Readiness JL'];
+          const jlRows = [...eq.jlMap.entries()].map(([jlid, jl]) => {
+            const jr   = jl.r;
+            const jKey = 'jl_'+pid+'_'+aid+'_'+uid+'_'+eqid+'_'+jlid;
+            const jlOpen = trkJlExpanded.proj.has(jKey);
             return [
-              `<span onclick="trkJlToggle('jl','${CSS.escape(KEY_JD)}')" style="cursor:pointer">
-                <span id="trkjl-ar-jl-${CSS.escape(KEY_JD)}" style="display:inline-block;transition:transform 0.2s;font-size:10px;${jdOpen2?'transform:rotate(90deg)':''}">▶</span>
-              </span>`,
-              `<b style="color:#14532d;font-size:11px">${D(dr.no_joblist_detail)||'—'}</b>`,
-              `<span style="color:#374151" title="${dr.jd_desc||''}">${D(dr.jd_desc)||''}</span>`,
-              D(dr.collective)||'—', D(dr.nomor_pm)||'—',
-              dr.is_mechanical_integrity==1?'<span style="color:#16a34a;font-weight:700">✔</span>':'—',
-              tags, readinessBar(dr.jd_readiness_pct, dr.jd_ready),
+              `<span onclick="trkJlToggle('proj','${CSS.escape(jKey)}')" style="cursor:pointer">${arrowEl(jKey, jlOpen)}</span>`,
+              `<b style="color:#7c2d12">${D(jr.no_joblist)||'—'}</b>`,
+              `<span>${D(jr.jl_desc)||''}</span>`,
+              D(jr.plant)||'—',
+              `<span style="font-size:10px;color:#6b7280">${D(jr.project_number)||'—'}</span>`,
+              `<span class="tree-badge" style="background:rgba(124,45,18,0.1);color:#7c2d12">${jl.jdMap.size}</span>`,
+              readinessBar(jr.jl_readiness_pct, jr.jl_ready),
             ];
           });
+          html += `<div style="margin:4px 0 0 0;border-left:4px solid #7c2d12;margin-left:96px">`;
+          html += trkTable(jlCols, jlRows, 0, '#7c2d12');
 
-          html += trkTable(jdCols, jdRows, 0, '#14532d');
+          // ── LEVEL 6: JOB DETAIL per JL ──────────────────
+          for (const [jlid, jl] of eq.jlMap) {
+            const jKey   = 'jl_'+pid+'_'+aid+'_'+uid+'_'+eqid+'_'+jlid;
+            const jlOpen = trkJlExpanded.proj.has(jKey);
+            html += `<div id="trkjl-ch-proj-${CSS.escape(jKey)}" style="display:${jlOpen?'block':'none'}">`;
 
-          // ── WO per JD ──────────────────────────────────
-          for (const [jdid, jd] of jl.jdMap) {
-            const KEY_JD = 'jd_'+jdid;
-            const jdOpen2 = trkJlExpanded.jl.has(KEY_JD);
-            html += `<div id="trkjl-ch-jl-${CSS.escape(KEY_JD)}" style="display:${jdOpen2?'block':'none'}">`;
-            const woCols = ['Order','System Status','Plan Cost','Act. Cost','Basic Start','Basic Finish','Readiness WO'];
-            const woRows = jd.wos.map(wo => {
-              const sc = ST_COLOR[wo.system_status?.split(' ')[0]]||'#6b7280';
+            const jdCols = ['','📝 JOB DETAIL','Deskripsi','Collective','PM','MI','Mat/Jasa','# WO','Readiness JD'];
+            const jdRows = [...jl.jdMap.entries()].map(([jdid, jd]) => {
+              const dr   = jd.r;
+              const dKey = 'jd_'+pid+'_'+aid+'_'+uid+'_'+eqid+'_'+jlid+'_'+jdid;
+              const dOpen = trkJlExpanded.proj.has(dKey);
+              const tags = [
+                dr.is_mechanical_integrity==1?`<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 4px;font-size:10px;font-weight:600">MI</span>`:'',
+                dr.is_material==1?`<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 4px;font-size:10px;font-weight:600">MAT</span>`:'',
+                dr.is_jasa==1?`<span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 4px;font-size:10px;font-weight:600">JASA</span>`:'',
+                dr.is_lldii==1?`<span style="background:#ede9fe;color:#4c1d95;border-radius:3px;padding:1px 4px;font-size:10px;font-weight:600">LLDII</span>`:'',
+              ].join('') || '—';
               return [
-                `<b style="color:#1a56db">${D(wo.order)}</b>`,
-                badge(wo.system_status, sc),
-                `<span style="font-family:monospace">${fmtCost(wo.total_plnnd_costs)}</span>`,
-                `<span style="font-family:monospace">${fmtCost(wo.totalact_costs)}</span>`,
-                `<span style="font-size:11px">${fmtDate(wo.bas_start_date)||'—'}</span>`,
-                `<span style="font-size:11px">${fmtDate(wo.basic_fin_date)||'—'}</span>`,
-                readinessBar(wo.order_readiness_pct, wo.order_ready),
+                `<span onclick="trkJlToggle('proj','${CSS.escape(dKey)}')" style="cursor:pointer">${arrowEl(dKey, dOpen)}</span>`,
+                `<b style="color:#14532d;font-size:11px">${D(dr.no_joblist_detail)||'—'}</b>`,
+                `<span title="${dr.jd_desc||''}">${D(dr.jd_desc)||''}</span>`,
+                D(dr.collective)||'—', D(dr.nomor_pm)||'—',
+                dr.is_mechanical_integrity==1?'<span style="color:#16a34a;font-weight:700">✔</span>':'—',
+                tags,
+                `<span class="tree-badge" style="background:rgba(20,83,45,0.1);color:#14532d">${jd.wos.length}</span>`,
+                readinessBar(dr.jd_readiness_pct, dr.jd_ready),
               ];
             });
-            html += trkTable(woCols, woRows, 0, '#374151');
-            html += `</div>`;
+            html += `<div style="border-left:4px solid #14532d;margin-left:120px">`;
+            html += trkTable(jdCols, jdRows, 0, '#14532d');
+
+            // ── LEVEL 7: WO per JD ───────────────────────
+            for (const [jdid, jd] of jl.jdMap) {
+              const dKey  = 'jd_'+pid+'_'+aid+'_'+uid+'_'+eqid+'_'+jlid+'_'+jdid;
+              const dOpen = trkJlExpanded.proj.has(dKey);
+              html += `<div id="trkjl-ch-proj-${CSS.escape(dKey)}" style="display:${dOpen?'block':'none'}">`;
+              const woCols = ['🔧 ORDER','System Status','Plan Cost','Act. Cost','Basic Start','Basic Finish','Readiness WO'];
+              const woRows = jd.wos.map(wo => {
+                const sc = ST_COLOR[wo.system_status?.split(' ')[0]]||'#6b7280';
+                return [
+                  `<b style="color:#1a56db">${D(wo.order)}</b>`,
+                  badge(wo.system_status, sc),
+                  `<span style="font-family:monospace">${fmtCost(wo.total_plnnd_costs)}</span>`,
+                  `<span style="font-family:monospace">${fmtCost(wo.totalact_costs)}</span>`,
+                  `<span style="font-size:11px">${fmtDate(wo.bas_start_date)||'—'}</span>`,
+                  `<span style="font-size:11px">${fmtDate(wo.basic_fin_date)||'—'}</span>`,
+                  readinessBar(wo.order_readiness_pct, wo.order_ready),
+                ];
+              });
+              html += `<div style="border-left:4px solid #374151;margin-left:144px">`;
+              html += trkTable(woCols, woRows, 0, '#374151');
+              html += `</div></div>`; // end WO div + dKey children
+            }
+
+            html += `</div></div>`; // end JD table wrapper + jKey children
           }
 
-          html += `</div></div>`; // end jl children + jl div
+          html += `</div>`; // end joblist table wrapper
+          html += `</div></div>`; // end eq children + eq div
         }
-
-        html += `</div></div>`; // end eq children + eq div
+        html += `</div></div>`; // end unit children + unit div
       }
-      html += `</div></div>`; // end unit children + unit div
+      html += `</div></div>`; // end area children + area div
     }
-    html += `</div></div>`; // end area children + area div
+    html += `</div></div>`; // end project children + project div
   }
 
   document.getElementById('trkjl-tree').innerHTML = html ||
