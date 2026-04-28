@@ -501,6 +501,9 @@ def migrate():
         'CREATE INDEX IF NOT EXISTS idx_kumpulan_code   ON kumpulan_summary(code_tracking)',
         'CREATE INDEX IF NOT EXISTS idx_sap_po_po              ON sap_po(po)',
         'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq        ON sap_po(purchreq)',
+        'CREATE INDEX IF NOT EXISTS idx_job_area_plant      ON job_area(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_job_unit_area       ON job_unit(area_id)',
+        'CREATE INDEX IF NOT EXISTS idx_job_unit_plant      ON job_unit(plant)',
         'CREATE INDEX IF NOT EXISTS idx_equipment_no            ON equipment_taex(equipment_no)',
         'CREATE INDEX IF NOT EXISTS idx_equipment_plant         ON equipment_taex(plant)',
         'CREATE INDEX IF NOT EXISTS idx_equipment_func_loc      ON equipment_taex(functional_location)',
@@ -517,6 +520,37 @@ def migrate():
             execute(sql)
         except Exception:
             pass
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS job_area (
+            id              TEXT PRIMARY KEY,
+            area_name       TEXT,
+            plant           TEXT,
+            created         TEXT,
+            created_by      TEXT,
+            is_deleted      INTEGER DEFAULT 0,
+            modified        TEXT,
+            modified_by     TEXT,
+            area_alias_name TEXT,
+            inserted_at     TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS job_unit (
+            id              TEXT PRIMARY KEY,
+            area_id         TEXT REFERENCES job_area(id) ON DELETE SET NULL,
+            unit_name       TEXT,
+            plant           TEXT,
+            created         TEXT,
+            created_by      TEXT,
+            is_deleted      INTEGER DEFAULT 0,
+            modified        TEXT,
+            modified_by     TEXT,
+            unit_alias_name TEXT,
+            inserted_at     TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
 
     # ── Auth tables ──────────────────────────────────────────
     execute("""

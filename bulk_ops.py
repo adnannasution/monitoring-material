@@ -610,3 +610,78 @@ def bulk_replace_equipment_taex(df: pd.DataFrame) -> int:
         raise e
     finally:
         release_conn(conn)
+
+
+# ─── JOB AREA ────────────────────────────────────────────────
+def bulk_replace_job_area(df) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM job_area WHERE is_deleted = 0")
+            sql = """
+                INSERT INTO job_area
+                (id, area_name, plant, created, created_by, is_deleted,
+                 modified, modified_by, area_alias_name)
+                VALUES %s
+                ON CONFLICT (id) DO UPDATE SET
+                    area_name=EXCLUDED.area_name,
+                    plant=EXCLUDED.plant,
+                    modified=EXCLUDED.modified,
+                    modified_by=EXCLUDED.modified_by,
+                    area_alias_name=EXCLUDED.area_alias_name,
+                    is_deleted=EXCLUDED.is_deleted
+            """
+            rows = []
+            for _, r in df.iterrows():
+                rows.append((
+                    _s(r.get("Id")), _s(r.get("AreaName")), _s(r.get("Plant")),
+                    _s(r.get("Created")), _s(r.get("CreatedBy")),
+                    int(r.get("IsDeleted") or 0),
+                    _s(r.get("Modified")), _s(r.get("ModifiedBy")),
+                    _s(r.get("AreaAliasName")),
+                ))
+            execute_values(cur, sql, rows)
+        conn.commit()
+        return len(rows)
+    except Exception as e:
+        conn.rollback(); raise e
+    finally:
+        release_conn(conn)
+
+
+# ─── JOB UNIT ────────────────────────────────────────────────
+def bulk_replace_job_unit(df) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM job_unit WHERE is_deleted = 0")
+            sql = """
+                INSERT INTO job_unit
+                (id, area_id, unit_name, plant, created, created_by, is_deleted,
+                 modified, modified_by, unit_alias_name)
+                VALUES %s
+                ON CONFLICT (id) DO UPDATE SET
+                    area_id=EXCLUDED.area_id,
+                    unit_name=EXCLUDED.unit_name,
+                    plant=EXCLUDED.plant,
+                    modified=EXCLUDED.modified,
+                    modified_by=EXCLUDED.modified_by,
+                    unit_alias_name=EXCLUDED.unit_alias_name,
+                    is_deleted=EXCLUDED.is_deleted
+            """
+            rows = []
+            for _, r in df.iterrows():
+                rows.append((
+                    _s(r.get("Id")), _s(r.get("AreaId")), _s(r.get("UnitName")),
+                    _s(r.get("Plant")), _s(r.get("Created")), _s(r.get("CreatedBy")),
+                    int(r.get("IsDeleted") or 0),
+                    _s(r.get("Modified")), _s(r.get("ModifiedBy")),
+                    _s(r.get("UnitAliasName")),
+                ))
+            execute_values(cur, sql, rows)
+        conn.commit()
+        return len(rows)
+    except Exception as e:
+        conn.rollback(); raise e
+    finally:
+        release_conn(conn)

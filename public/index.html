@@ -724,6 +724,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-jobdetail" onclick="switchApp('jobdetail')">📝 Job Detail<span class="tab-badge" id="badge-jobdetail">0</span></div>
   <div class="tab" id="tab-jobdetailworkorder" onclick="switchApp('jobdetailworkorder')">🔧 WO Detail<span class="tab-badge" id="badge-jdwo">0</span></div>
   <div class="tab" id="tab-equipment" onclick="switchApp('equipment')">⚙️ Equipment<span class="tab-badge" id="badge-equipment">0</span></div>
+  <div class="tab" id="tab-jobarea" onclick="switchApp('jobarea')">🗺 Area<span class="tab-badge" id="badge-jobarea">0</span></div>
+  <div class="tab" id="tab-jobunit" onclick="switchApp('jobunit')">🏭 Unit<span class="tab-badge" id="badge-jobunit">0</span></div>
   <div class="tab" id="tab-tracking-joblist" onclick="switchApp('tracking-joblist')">🔗 Tracking Joblist<span class="tab-badge" id="badge-trk-jl">0</span></div>
 </div>
 
@@ -1910,6 +1912,68 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
+<!-- PAGE: JOB AREA -->
+<div class="page" id="page-jobarea">
+  <div class="info-bar">
+    <span>Total Area: <b id="jobarea-total">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJobAreaUploadModal()">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="jobarea-search" placeholder="Nama area, alias, plant..." oninput="debounceRender('jobarea')">
+      <span class="search-clear" onclick="clearSearch('jobarea-search','jobarea')">✕</span>
+    </span>
+    <label>Plant:</label>
+    <select id="jobarea-filter-plant" onchange="renderJobArea()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderJobArea()">Cari</button>
+    <button class="btn btn-reset" onclick="jobAreaResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJobAreaExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="jobarea-rowCount"></span>
+  </div>
+  <div class="table-container"><div class="table-wrap">
+    <table id="jobarea-table">
+      <thead><tr>
+        <th>Area Name</th><th>Alias</th><th>Plant</th><th>Created By</th>
+      </tr></thead>
+      <tbody id="jobarea-tbody"><tr class="loading-row"><td colspan="4">Memuat...</td></tr></tbody>
+    </table>
+  </div></div>
+</div>
+
+<!-- PAGE: JOB UNIT -->
+<div class="page" id="page-jobunit">
+  <div class="info-bar">
+    <span>Total Unit: <b id="jobunit-total">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJobUnitUploadModal()">📥 Upload Excel</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="jobunit-search" placeholder="Nama unit, alias, plant..." oninput="debounceRender('jobunit')">
+      <span class="search-clear" onclick="clearSearch('jobunit-search','jobunit')">✕</span>
+    </span>
+    <label>Plant:</label>
+    <select id="jobunit-filter-plant" onchange="renderJobUnit()"><option value="">Semua</option></select>
+    <label>Area:</label>
+    <select id="jobunit-filter-area" onchange="renderJobUnit()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderJobUnit()">Cari</button>
+    <button class="btn btn-reset" onclick="jobUnitResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJobUnitExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="jobunit-rowCount"></span>
+  </div>
+  <div class="table-container"><div class="table-wrap">
+    <table id="jobunit-table">
+      <thead><tr>
+        <th>Unit Name</th><th>Alias</th><th>Area</th><th>Plant</th><th>Created By</th>
+      </tr></thead>
+      <tbody id="jobunit-tbody"><tr class="loading-row"><td colspan="5">Memuat...</td></tr></tbody>
+    </table>
+  </div></div>
+</div>
+
 </div><!-- /pages -->
 </div><!-- /body -->
 
@@ -2125,6 +2189,75 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     </div>
   </div>
 </div>
+
+<!-- MODAL: UPLOAD JOB AREA -->
+<div class="modal-overlay" id="modal-jobarea-upload">
+  <div class="modal" style="width:580px">
+    <div class="modal-header" style="background:#065f46"><h3>📥 Upload Excel Area</h3>
+      <button class="modal-close" onclick="closeModal('modal-jobarea-upload')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#065f46">
+        <b>Kolom:</b> Id, AreaName, Plant, Created, CreatedBy, IsDeleted, Modified, ModifiedBy, AreaAliasName
+      </div>
+      <div class="upload-zone" id="jobarea-upload-zone" onclick="document.getElementById('jobarea-file-input').click()"
+        ondragover="handleDrag(event,'jobarea-upload-zone')" ondragleave="handleDragLeave(event,'jobarea-upload-zone')"
+        ondrop="handleDropNew(event,'jobarea')">
+        <input type="file" id="jobarea-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'jobarea')">
+        <div class="upload-icon">🗺</div><p>Klik atau seret file Excel</p><span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="jobarea-upload-preview" style="display:none">
+        <span id="jobarea-preview-info" style="font-size:12px;font-weight:600;display:block;margin-top:10px"></span>
+      </div>
+      <div id="jobarea-progress-panel" style="display:none;margin-top:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span id="jobarea-progress-msg" style="font-size:12px;font-weight:600"></span>
+          <span id="jobarea-progress-pct" style="font-size:13px;font-weight:700;color:#065f46"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden">
+          <div id="jobarea-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#065f46,#34d399);border-radius:99px;transition:width 0.4s"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="jobarea-cancel-btn" onclick="closeModal('modal-jobarea-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UPLOAD JOB UNIT -->
+<div class="modal-overlay" id="modal-jobunit-upload">
+  <div class="modal" style="width:580px">
+    <div class="modal-header" style="background:#1e40af"><h3>📥 Upload Excel Unit</h3>
+      <button class="modal-close" onclick="closeModal('modal-jobunit-upload')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e40af">
+        <b>Kolom:</b> Id, AreaId, UnitName, Plant, Created, CreatedBy, IsDeleted, Modified, ModifiedBy, UnitAliasName
+      </div>
+      <div class="upload-zone" id="jobunit-upload-zone" onclick="document.getElementById('jobunit-file-input').click()"
+        ondragover="handleDrag(event,'jobunit-upload-zone')" ondragleave="handleDragLeave(event,'jobunit-upload-zone')"
+        ondrop="handleDropNew(event,'jobunit')">
+        <input type="file" id="jobunit-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'jobunit')">
+        <div class="upload-icon">🏭</div><p>Klik atau seret file Excel</p><span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="jobunit-upload-preview" style="display:none">
+        <span id="jobunit-preview-info" style="font-size:12px;font-weight:600;display:block;margin-top:10px"></span>
+      </div>
+      <div id="jobunit-progress-panel" style="display:none;margin-top:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span id="jobunit-progress-msg" style="font-size:12px;font-weight:600"></span>
+          <span id="jobunit-progress-pct" style="font-size:13px;font-weight:700;color:#1e40af"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden">
+          <div id="jobunit-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#1e40af,#60a5fa);border-radius:99px;transition:width 0.4s"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="jobunit-cancel-btn" onclick="closeModal('modal-jobunit-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-project-upload">
   <div class="modal" style="width:640px;">
     <div class="modal-header" style="background:#7c3aed;">
@@ -2774,6 +2907,8 @@ const SIDEBAR_MENUS = {
   'jobdetail':         [{icon:'📝', label:'Job Detail', active:true}],
   'jobdetailworkorder':[{icon:'🔧', label:'WO Detail', active:true}],
   'equipment':         [{icon:'⚙️', label:'Equipment', active:true}],
+  'jobarea':           [{icon:'🗺', label:'Area', active:true}],
+  'jobunit':           [{icon:'🏭', label:'Unit', active:true}],
   'tracking-joblist':  [{icon:'🔗', label:'Tracking Joblist', active:true}],
 };
 const HEADER_TITLES = {
@@ -2792,6 +2927,8 @@ const HEADER_TITLES = {
   'jobdetail':        ['Job Detail', 'Detail Pekerjaan & Perencanaan'],
   'jobdetailworkorder':['Work Order', 'Job Detail Work Order SAP'],
   'equipment':         ['Equipment', 'Master Data Equipment TA-ex'],
+  'jobarea':           ['Area', 'Master Data Area'],
+  'jobunit':           ['Unit', 'Master Data Unit'],
   'tracking-joblist':  ['Tracking Joblist', 'WO → Job Detail → Job List → Project + Equipment'],
 };
 
@@ -2827,6 +2964,8 @@ function renderPage(app) {
   else if (app==='jobdetail') { if (!state.jobdetailData.length) fetchAndRenderJobdetail(); else renderJobdetail(); }
   else if (app==='jobdetailworkorder') { if (!state.jdwoData.length) fetchAndRenderJdwo(); else renderJdwo(); }
   else if (app==='equipment') { if (!state.equipmentData.length) fetchAndRenderEquipment(); else renderEquipment(); }
+  else if (app==='jobarea')   { if (!state.jobAreaData.length) fetchAndRenderJobArea(); else renderJobArea(); }
+  else if (app==='jobunit')   { if (!state.jobUnitData.length) fetchAndRenderJobUnit(); else renderJobUnit(); }
   else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
 }
 
@@ -4221,6 +4360,8 @@ function renderPageByKey(key) {
   else if (key==='jobdetail') renderJobdetail();
   else if (key==='jdwo')      renderJdwo();
   else if (key==='equipment') renderEquipment();
+  else if (key==='jobarea')   renderJobArea();
+  else if (key==='jobunit')   renderJobUnit();
   else if (key==='trkjl')    renderTrkJl();
 }
 
@@ -4251,6 +4392,7 @@ function appToKey(app) {
     'kumpulan':'ks','pr':'sap','order':'order','po':'po','tracking':'trk','audit':'audit',
     'project':'project','joblist':'joblist','jobdetail':'jobdetail',
     'jobdetailworkorder':'jdwo','equipment':'equipment',
+    'jobarea':'jobarea','jobunit':'jobunit',
     'tracking-joblist':'trkjl',
   };
   return m[app] || app;
@@ -6125,8 +6267,138 @@ if (_eqZone) {
   _eqZone.addEventListener('dragleave', () => _eqZone.classList.remove('drag'));
 }
 
-// ============================================================
-// PROJECT · JOB LIST · JOB DETAIL · WORK ORDER
+// ── JOB AREA ────────────────────────────────────────────────
+state.jobAreaData = [];
+let jobAreaFiltered = [];
+
+async function fetchAndRenderJobArea() {
+  try {
+    const rows = await apiFetch('/jobarea');
+    state.jobAreaData = Array.isArray(rows) ? rows : [];
+    const plants = [...new Set(state.jobAreaData.map(r=>r.Plant).filter(Boolean))].sort();
+    document.getElementById('jobarea-filter-plant').innerHTML =
+      '<option value="">Semua</option>' + plants.map(p=>`<option value="${p}">${p}</option>`).join('');
+    resetPg('jobarea');
+    renderJobArea();
+    document.getElementById('badge-jobarea').textContent = state.jobAreaData.length;
+  } catch(e) {
+    document.getElementById('jobarea-tbody').innerHTML =
+      `<tr><td colspan="4" style="color:red">Gagal: ${e.message}</td></tr>`;
+  }
+}
+
+function renderJobArea() {
+  const q   = (document.getElementById('jobarea-search').value||'').toLowerCase();
+  const fPl = document.getElementById('jobarea-filter-plant').value;
+  jobAreaFiltered = state.jobAreaData.filter(r => {
+    if (fPl && r.Plant !== fPl) return false;
+    if (q && !`${r.AreaName} ${r.AreaAliasName} ${r.Plant}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  document.getElementById('jobarea-total').textContent    = jobAreaFiltered.length;
+  document.getElementById('jobarea-rowCount').textContent = `${jobAreaFiltered.length} baris`;
+  const pg = getPg('jobarea');
+  const totalPages = Math.ceil(jobAreaFiltered.length / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice = jobAreaFiltered.slice((pg.page-1)*pg.size, pg.page*pg.size);
+  document.getElementById('jobarea-tbody').innerHTML = slice.length
+    ? slice.map(r=>`<tr>
+        <td><b>${D(r.AreaName)}</b></td>
+        <td>${D(r.AreaAliasName)}</td>
+        <td>${D(r.Plant)}</td>
+        <td style="font-size:11px">${D(r.CreatedBy)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+  renderPagination('jobarea-pagination','jobarea',jobAreaFiltered.length,pg.page,totalPages,pg.size,renderJobArea);
+}
+function jobAreaResetFilter() {
+  document.getElementById('jobarea-search').value='';
+  document.getElementById('jobarea-filter-plant').value='';
+  resetPg('jobarea'); renderJobArea();
+}
+function exportJobAreaExcel() {
+  if (!jobAreaFiltered.length) return toast('Tidak ada data','err');
+  const ws = XLSX.utils.json_to_sheet(jobAreaFiltered.map(r=>({AreaName:r.AreaName,Alias:r.AreaAliasName,Plant:r.Plant})));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Area');
+  XLSX.writeFile(wb,`Area_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Area berhasil!','ok');
+}
+function openJobAreaUploadModal() { document.getElementById('jobarea-file-input').value=''; openModal('modal-jobarea-upload'); }
+
+// ── JOB UNIT ────────────────────────────────────────────────
+state.jobUnitData = [];
+let jobUnitFiltered = [];
+
+async function fetchAndRenderJobUnit() {
+  try {
+    const rows = await apiFetch('/jobunit');
+    state.jobUnitData = Array.isArray(rows) ? rows : [];
+    const plants = [...new Set(state.jobUnitData.map(r=>r.Plant).filter(Boolean))].sort();
+    document.getElementById('jobunit-filter-plant').innerHTML =
+      '<option value="">Semua</option>' + plants.map(p=>`<option value="${p}">${p}</option>`).join('');
+    const areaMap = {};
+    state.jobAreaData.forEach(a => areaMap[a.ID] = a.AreaName || a.AreaAliasName || a.ID);
+    const areaIds = [...new Set(state.jobUnitData.map(r=>r.AreaId).filter(Boolean))].sort();
+    document.getElementById('jobunit-filter-area').innerHTML =
+      '<option value="">Semua</option>' + areaIds.map(id=>`<option value="${id}">${areaMap[id]||id}</option>`).join('');
+    resetPg('jobunit');
+    renderJobUnit();
+    document.getElementById('badge-jobunit').textContent = state.jobUnitData.length;
+  } catch(e) {
+    document.getElementById('jobunit-tbody').innerHTML =
+      `<tr><td colspan="5" style="color:red">Gagal: ${e.message}</td></tr>`;
+  }
+}
+
+function renderJobUnit() {
+  const q    = (document.getElementById('jobunit-search').value||'').toLowerCase();
+  const fPl  = document.getElementById('jobunit-filter-plant').value;
+  const fAr  = document.getElementById('jobunit-filter-area').value;
+  const areaMap = {};
+  state.jobAreaData.forEach(a => areaMap[a.ID] = a.AreaName || a.AreaAliasName);
+  jobUnitFiltered = state.jobUnitData.filter(r => {
+    if (fPl && r.Plant !== fPl) return false;
+    if (fAr && r.AreaId !== fAr) return false;
+    if (q && !`${r.UnitName} ${r.UnitAliasName} ${r.Plant}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  document.getElementById('jobunit-total').textContent    = jobUnitFiltered.length;
+  document.getElementById('jobunit-rowCount').textContent = `${jobUnitFiltered.length} baris`;
+  const pg = getPg('jobunit');
+  const totalPages = Math.ceil(jobUnitFiltered.length / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice = jobUnitFiltered.slice((pg.page-1)*pg.size, pg.page*pg.size);
+  document.getElementById('jobunit-tbody').innerHTML = slice.length
+    ? slice.map(r=>`<tr>
+        <td><b>${D(r.UnitName)}</b></td>
+        <td>${D(r.UnitAliasName)}</td>
+        <td>${D(areaMap[r.AreaId]||r.AreaId)}</td>
+        <td>${D(r.Plant)}</td>
+        <td style="font-size:11px">${D(r.CreatedBy)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+  renderPagination('jobunit-pagination','jobunit',jobUnitFiltered.length,pg.page,totalPages,pg.size,renderJobUnit);
+}
+function jobUnitResetFilter() {
+  document.getElementById('jobunit-search').value='';
+  document.getElementById('jobunit-filter-plant').value='';
+  document.getElementById('jobunit-filter-area').value='';
+  resetPg('jobunit'); renderJobUnit();
+}
+function exportJobUnitExcel() {
+  if (!jobUnitFiltered.length) return toast('Tidak ada data','err');
+  const areaMap = {}; state.jobAreaData.forEach(a=>areaMap[a.ID]=a.AreaName);
+  const ws = XLSX.utils.json_to_sheet(jobUnitFiltered.map(r=>({
+    UnitName:r.UnitName, Alias:r.UnitAliasName, Area:areaMap[r.AreaId]||r.AreaId, Plant:r.Plant
+  })));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Unit');
+  XLSX.writeFile(wb,`Unit_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Unit berhasil!','ok');
+}
+function openJobUnitUploadModal() { document.getElementById('jobunit-file-input').value=''; openModal('modal-jobunit-upload'); }
+
+
+
 // ============================================================
 
 state.projectData    = [];
@@ -6524,6 +6796,8 @@ const NEW_UPLOAD_META = {
   jobdetail:{ backendType: 'jobdetail',          reloadFn: fetchAndRenderJobdetail, modalId: 'modal-jobdetail-upload'  },
   jdwo:     { backendType: 'jobdetailworkorder', reloadFn: fetchAndRenderJdwo,      modalId: 'modal-jdwo-upload'      },
   equipment:{ backendType: 'equipment',          reloadFn: fetchAndRenderEquipment, modalId: 'modal-equipment-upload' },
+  jobarea:  { backendType: 'jobarea',            reloadFn: fetchAndRenderJobArea,   modalId: 'modal-jobarea-upload'   },
+  jobunit:  { backendType: 'jobunit',            reloadFn: fetchAndRenderJobUnit,   modalId: 'modal-jobunit-upload'   },
 };
 
 function handleDropNew(e, type) {
@@ -6747,18 +7021,32 @@ function renderTrkJl() {
   document.getElementById('trkjl-act-cost').textContent  = fmt(totalAct);
   document.getElementById('trkjl-rowCount').textContent  = `${trkJlFiltered.length} baris`;
 
-  // Build tree map
+  // Build tree: Area → Unit → Equipment → JL → JD → WO
+  const areaMap = new Map();
+  for (const r of trkJlFiltered) {
+    const aid  = r.area_id   || '__no_area__';
+    const uid  = r.unit_id   || '__no_unit__';
+    const eqid = r.eq_id     || '__no_eq__';
+    const jlid = r.jl_id     || '__no_jl__';
+    const jdid = r.jd_id     || '__no_jd__';
+
+    if (!areaMap.has(aid)) areaMap.set(aid, { r, unitMap: new Map() });
+    const area = areaMap.get(aid);
+    if (!area.unitMap.has(uid)) area.unitMap.set(uid, { r, eqMap: new Map() });
+    const unit = area.unitMap.get(uid);
+    if (!unit.eqMap.has(eqid)) unit.eqMap.set(eqid, { r, jlMap: new Map() });
+    const eq = unit.eqMap.get(eqid);
+    if (!eq.jlMap.has(jlid)) eq.jlMap.set(jlid, { r, jdMap: new Map() });
+    const jl = eq.jlMap.get(jlid);
+    if (!jl.jdMap.has(jdid)) jl.jdMap.set(jdid, { r, wos: [] });
+    if (r.order) jl.jdMap.get(jdid).wos.push(r);
+  }
+
+  // Also build projMap for project-level readiness display (separate from tree)
   const projMap = new Map();
   for (const r of trkJlFiltered) {
-    const pid  = r.project_id  || '__no_proj__';
-    const jlid = r.jl_id       || '__no_jl__';
-    const jdid = r.jd_id       || '__no_jd__';
-    if (!projMap.has(pid))                  projMap.set(pid,  { r, jlMap: new Map() });
-    const proj = projMap.get(pid);
-    if (!proj.jlMap.has(jlid))             proj.jlMap.set(jlid, { r, jdMap: new Map() });
-    const jl   = proj.jlMap.get(jlid);
-    if (!jl.jdMap.has(jdid))              jl.jdMap.set(jdid, { r, wos: [] });
-    if (r.order) jl.jdMap.get(jdid).wos.push(r);
+    const pid = r.project_id || '__no_proj__';
+    if (!projMap.has(pid)) projMap.set(pid, r);
   }
 
   const PROJ_BG   = { 'In Progress':'#16a34a','Completed':'#2563eb','Planning':'#6b7280' };
@@ -6770,128 +7058,138 @@ function renderTrkJl() {
     : '<span style="color:#d1d5db">—</span>';
 
   const arrow = (type, id, open) =>
-    `<span id="trkjl-ar-${type}-${id}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;color:#6b7280;${open?'transform:rotate(90deg)':''}">▶</span>`;
+    `<span id="trkjl-ar-${type}-${CSS.escape(id)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;color:#6b7280;${open?'transform:rotate(90deg)':''}">▶</span>`;
 
   let html = '';
 
-  // ── PROJECT TABLE ────────────────────────────────────────
-  const projCols = ['', 'No. Project', 'Deskripsi Project', 'Status', 'Finish Date', 'Readiness Project'];
-  const projRows = [...projMap.entries()].map(([pid, proj]) => {
-    const pr = proj.r;
-    const open = trkJlExpanded.proj.has(pid);
-    return [
-      `<span onclick="trkJlToggle('proj','${pid}')" style="cursor:pointer">${arrow('proj', pid, open)}</span>`,
-      `<b>${D(pr.project_number)||'—'}</b>`,
-      `<span style="color:#374151">${D(pr.project_desc)||''}</span>`,
-      badge(pr.project_status, PROJ_BG[pr.project_status]),
-      `<span style="font-size:11px">${fmtDate(pr.finish_date)||'—'}</span>`,
-      readinessBar(pr.project_readiness_pct, pr.project_ready),
-    ];
-  });
+  // ── AREA LEVEL ───────────────────────────────────────────
+  for (const [aid, area] of areaMap) {
+    const ar = area.r;
+    const aOpen = trkJlExpanded.proj.has(aid); // reuse proj set for area
+    const unitCount = area.unitMap.size;
+    const woCount = [...area.unitMap.values()].reduce((s,u)=>[...u.eqMap.values()].reduce((s2,eq)=>[...eq.jlMap.values()].reduce((s3,jl)=>[...jl.jdMap.values()].reduce((s4,jd)=>s4+jd.wos.length,s3),s2),s),0);
 
-  html += `<div style="margin-bottom:4px;padding:4px 8px;background:#7c2d12;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
-    🏗 Project (${projMap.size})
-  </div>`;
-  html += trkTable(projCols, projRows, 0, '#7c2d12');
+    html += `<div>
+      <div class="tree-row tree-lv0" onclick="trkJlToggle('proj','${CSS.escape(aid)}')">
+        <span id="trkjl-ar-proj-${CSS.escape(aid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${aOpen?'transform:rotate(90deg)':''}">▶</span>
+        <b style="font-size:13px;flex:0 0 auto">🗺 ${D(ar.area_name)||D(ar.area_alias_name)||'No Area'}</b>
+        <span style="font-size:11px;opacity:0.85;flex:1">${D(ar.area_alias_name)||''}</span>
+        <span class="tree-badge">${unitCount} Unit · ${woCount} WO</span>
+        ${readinessBar(ar.area_readiness_pct, ar.area_ready)}
+      </div>
+      <div class="tree-children ${aOpen?'open':''}" id="trkjl-ch-proj-${CSS.escape(aid)}">`;
 
-  // ── Per Project: Joblist + nested ───────────────────────
-  for (const [pid, proj] of projMap) {
-    const open = trkJlExpanded.proj.has(pid);
+    // ── UNIT LEVEL ─────────────────────────────────────────
+    for (const [uid, unit] of area.unitMap) {
+      const ur = unit.r;
+      const uOpen = trkJlExpanded.jl.has(uid); // reuse jl set for unit
+      const eqCount = unit.eqMap.size;
 
-    html += `<div id="trkjl-ch-proj-${pid}" style="display:${open?'block':'none'}">`;
+      html += `<div>
+        <div class="tree-row tree-lv1" onclick="trkJlToggle('jl','${CSS.escape(uid)}')" style="padding-left:24px">
+          <span id="trkjl-ar-jl-${CSS.escape(uid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${uOpen?'transform:rotate(90deg)':''}">▶</span>
+          <b style="font-size:12px;color:#1e3a5f;flex:0 0 auto">🏭 ${D(ur.unit_name)||D(ur.unit_alias_name)||'No Unit'}</b>
+          <span style="font-size:11px;flex:1;color:#374151">${D(ur.unit_alias_name)||''}</span>
+          <span class="tree-badge" style="background:rgba(30,58,95,0.1);color:#1e3a5f">${eqCount} Eq.</span>
+          ${readinessBar(ur.unit_readiness_pct, ur.unit_ready)}
+        </div>
+        <div class="tree-children ${uOpen?'open':''}" id="trkjl-ch-jl-${CSS.escape(uid)}">`;
 
-    // ── JOBLIST TABLE ──────────────────────────────────────
-    const jlCols = ['', 'No. Joblist', 'Deskripsi JL', 'Plant', 'Equipment No.', 'Deskripsi Eq.', 'Disiplin', 'Criticality', 'Readiness JL'];
-    const jlRows = [...proj.jlMap.entries()].map(([jlid, jl]) => {
-      const jr   = jl.r;
-      const jlOpen = trkJlExpanded.jl.has(jlid);
-      return [
-        `<span onclick="trkJlToggle('jl','${jlid}')" style="cursor:pointer">${arrow('jl', jlid, jlOpen)}</span>`,
-        `<b style="color:#1e3a5f">${D(jr.no_joblist)||'—'}</b>`,
-        `<span style="color:#374151">${D(jr.jl_desc)||''}</span>`,
-        D(jr.plant)||'—',
-        jr.equipment_no ? `<b style="color:#1a56db">${D(jr.equipment_no)}</b>` : '<span style="color:#d1d5db">—</span>',
-        `<span style="color:#374151">${D(jr.equipment_desc)||'—'}</span>`,
-        jr.disiplin ? badge(jr.disiplin, DIS_COLOR[jr.disiplin]||'#6b7280') : '<span style="color:#d1d5db">—</span>',
-        `<span style="font-size:11px">${D(jr.criticallity_text)||'—'}</span>`,
-        readinessBar(jr.jl_readiness_pct, jr.jl_ready),
-      ];
-    });
+      // ── EQUIPMENT LEVEL ──────────────────────────────────
+      for (const [eqid, eq] of unit.eqMap) {
+        const er = eq.r;
+        const eqOpen = trkJlExpanded.jd.has(eqid); // reuse jd set for eq
+        const jlCount = eq.jlMap.size;
 
-    html += `<div style="margin:6px 0 2px 16px;padding:3px 8px;background:#1e3a5f;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
-      📋 Job List (${proj.jlMap.size})
-    </div>`;
-    html += trkTable(jlCols, jlRows, 16, '#1e3a5f');
+        html += `<div>
+          <div class="tree-row tree-lv2" onclick="trkJlToggle('jd','${CSS.escape(eqid)}')" style="padding-left:48px">
+            <span id="trkjl-ar-jd-${CSS.escape(eqid)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${eqOpen?'transform:rotate(90deg)':''}">▶</span>
+            <b style="font-size:11px;color:#1a56db;flex:0 0 auto">⚙️ ${D(er.equipment_no)||'No Eq'}</b>
+            <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;color:#374151">${D(er.equipment_desc)||''}</span>
+            ${er.disiplin?`<span style="background:${DIS_COLOR[er.disiplin]||'#6b7280'};color:#fff;border-radius:3px;padding:1px 6px;font-size:10px">${er.disiplin}</span>`:''}
+            <span class="tree-badge" style="background:rgba(26,86,219,0.1);color:#1a56db">${jlCount} JL</span>
+            ${readinessBar(er.eq_readiness_pct, er.eq_ready)}
+          </div>
+          <div class="tree-children ${eqOpen?'open':''}" id="trkjl-ch-jd-${CSS.escape(eqid)}">`;
 
-    // ── Per Joblist: Job Detail + nested ──────────────────
-    for (const [jlid, jl] of proj.jlMap) {
-      const jlOpen = trkJlExpanded.jl.has(jlid);
-      html += `<div id="trkjl-ch-jl-${jlid}" style="display:${jlOpen?'block':'none'}">`;
+        // ── JOBLIST LEVEL ─────────────────────────────────
+        for (const [jlid, jl] of eq.jlMap) {
+          const jr = jl.r;
+          const KEY_JL = 'jlx_'+jlid;
+          const jlOpen = trkJlExpanded.proj.has(KEY_JL);
+          const jdCount = jl.jdMap.size;
 
-      // ── JOB DETAIL TABLE ──────────────────────────────
-      const jdCols = ['', 'No. JD', 'Deskripsi JD', 'Collective', 'Nomor PM', 'MI', 'Off Stream', 'Material/Jasa', 'Planning Status', 'Readiness JD'];
-      const jdRows = [...jl.jdMap.entries()].map(([jdid, jd]) => {
-        const dr   = jd.r;
-        const jdOpen = trkJlExpanded.jd.has(jdid);
-        const matTags = [
-          dr.is_material==1?`<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600;margin-right:2px">MAT</span>`:'',
-          dr.is_jasa==1?`<span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600;margin-right:2px">JASA</span>`:'',
-          dr.is_lldii==1?`<span style="background:#ede9fe;color:#4c1d95;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">LLDII</span>`:'',
-        ].join('') || '<span style="color:#d1d5db">—</span>';
-        return [
-          `<span onclick="trkJlToggle('jd','${jdid}')" style="cursor:pointer">${arrow('jd', jdid, jdOpen)}</span>`,
-          `<b style="color:#14532d;font-size:11px">${D(dr.no_joblist_detail)||'—'}</b>`,
-          `<span style="color:#374151;max-width:200px;overflow:hidden;text-overflow:ellipsis;display:inline-block" title="${dr.jd_desc||''}">${D(dr.jd_desc)||''}</span>`,
-          D(dr.collective)||'—',
-          D(dr.nomor_pm)||'—',
-          dr.is_mechanical_integrity==1 ? '<span style="color:#16a34a;font-weight:700">✔</span>' : '<span style="color:#d1d5db">—</span>',
-          dr.is_off_stream==1 ? '<span style="color:#dc2626;font-weight:700">✔</span>' : '<span style="color:#d1d5db">—</span>',
-          matTags,
-          `<span style="font-size:10px;color:#6b7280">${D(dr.planning_status_id)||'—'}</span>`,
-          readinessBar(dr.jd_readiness_pct, dr.jd_ready),
-        ];
-      });
+          // Project info for this joblist
+          const projInfo = projMap.get(jr.project_id);
 
-      html += `<div style="margin:6px 0 2px 32px;padding:3px 8px;background:#14532d;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
-        📝 Job Detail (${jl.jdMap.size})
-      </div>`;
-      html += trkTable(jdCols, jdRows, 32, '#14532d');
+          html += `<div>
+            <div class="tree-row" onclick="trkJlToggle('proj','${CSS.escape(KEY_JL)}')"
+              style="padding-left:72px;background:#f9fafb;border-left:3px solid #7c2d12">
+              <span id="trkjl-ar-proj-${CSS.escape(KEY_JL)}" style="display:inline-block;transition:transform 0.2s;cursor:pointer;font-size:10px;${jlOpen?'transform:rotate(90deg)':''}">▶</span>
+              <b style="font-size:11px;color:#7c2d12;flex:0 0 auto">📋 ${D(jr.no_joblist)||'—'}</b>
+              <span style="font-size:11px;flex:1;color:#374151">${D(jr.jl_desc)||''}</span>
+              ${projInfo?`<span style="font-size:10px;color:#6b7280">📁 ${D(jr.project_number)||''}</span>`:''}
+              <span class="tree-badge" style="background:rgba(124,45,18,0.1);color:#7c2d12">${jdCount} JD</span>
+              ${readinessBar(jr.jl_readiness_pct, jr.jl_ready)}
+            </div>
+            <div class="tree-children ${jlOpen?'open':''}" id="trkjl-ch-proj-${CSS.escape(KEY_JL)}">`;
 
-      // ── Per Job Detail: WO Table ───────────────────────
-      for (const [jdid, jd] of jl.jdMap) {
-        const jdOpen = trkJlExpanded.jd.has(jdid);
-        html += `<div id="trkjl-ch-jd-${jdid}" style="display:${jdOpen?'block':'none'}">`;
+          // ── JOB DETAIL LEVEL ───────────────────────────
+          const jdCols = ['','No. JD','Deskripsi JD','Collective','PM','MI','Mat/Jasa','Readiness JD'];
+          const jdRows = [...jl.jdMap.entries()].map(([jdid,jd]) => {
+            const dr = jd.r;
+            const KEY_JD = 'jd_'+jdid;
+            const jdOpen2 = trkJlExpanded.jl.has(KEY_JD);
+            const tags = [
+              dr.is_mechanical_integrity==1?'<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">MI</span>':'',
+              dr.is_material==1?'<span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">MAT</span>':'',
+              dr.is_jasa==1?'<span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">JASA</span>':'',
+              dr.is_lldii==1?'<span style="background:#ede9fe;color:#4c1d95;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">LLDII</span>':'',
+            ].join('') || '—';
+            return [
+              `<span onclick="trkJlToggle('jl','${CSS.escape(KEY_JD)}')" style="cursor:pointer">
+                <span id="trkjl-ar-jl-${CSS.escape(KEY_JD)}" style="display:inline-block;transition:transform 0.2s;font-size:10px;${jdOpen2?'transform:rotate(90deg)':''}">▶</span>
+              </span>`,
+              `<b style="color:#14532d;font-size:11px">${D(dr.no_joblist_detail)||'—'}</b>`,
+              `<span style="color:#374151" title="${dr.jd_desc||''}">${D(dr.jd_desc)||''}</span>`,
+              D(dr.collective)||'—', D(dr.nomor_pm)||'—',
+              dr.is_mechanical_integrity==1?'<span style="color:#16a34a;font-weight:700">✔</span>':'—',
+              tags, readinessBar(dr.jd_readiness_pct, dr.jd_ready),
+            ];
+          });
 
-        const woCols = ['Order', 'Notifikasi', 'System Status', 'User Status', 'Plan Cost', 'Act. Cost', 'Basic Start', 'Basic Finish', 'Actual Release', 'Planner Group', 'WBS', 'Readiness WO'];
-        const woRows = jd.wos.map(wo => {
-          const sc = ST_COLOR[wo.system_status?.split(' ')[0]] || '#6b7280';
-          return [
-            `<b style="color:#1a56db">${D(wo.order)}</b>`,
-            `<span style="font-size:11px">${D(wo.notification)||'—'}</span>`,
-            badge(wo.system_status, sc),
-            `<span style="font-size:10px">${D(wo.user_status)||'—'}</span>`,
-            `<span style="font-family:monospace">${fmtCost(wo.total_plnnd_costs)}</span>`,
-            `<span style="font-family:monospace">${fmtCost(wo.totalact_costs)}</span>`,
-            `<span style="font-size:11px">${fmtDate(wo.bas_start_date)||'—'}</span>`,
-            `<span style="font-size:11px">${fmtDate(wo.basic_fin_date)||'—'}</span>`,
-            `<span style="font-size:11px">${fmtDate(wo.actual_release)||'—'}</span>`,
-            `<span style="font-size:11px">${D(wo.planner_group)||'—'}</span>`,
-            `<span style="font-size:10px">${D(wo.wbs_ord_header)||'—'}</span>`,
-            readinessBar(wo.order_readiness_pct, wo.order_ready),
-          ];
-        });
+          html += trkTable(jdCols, jdRows, 0, '#14532d');
 
-        html += `<div style="margin:6px 0 2px 48px;padding:3px 8px;background:#374151;color:white;font-size:11px;font-weight:700;border-radius:4px 4px 0 0">
-          🔧 Work Order (${jd.wos.length})
-        </div>`;
-        html += trkTable(woCols, woRows, 48, '#374151');
-        html += `</div>`; // end jd children
+          // ── WO per JD ──────────────────────────────────
+          for (const [jdid, jd] of jl.jdMap) {
+            const KEY_JD = 'jd_'+jdid;
+            const jdOpen2 = trkJlExpanded.jl.has(KEY_JD);
+            html += `<div id="trkjl-ch-jl-${CSS.escape(KEY_JD)}" style="display:${jdOpen2?'block':'none'}">`;
+            const woCols = ['Order','System Status','Plan Cost','Act. Cost','Basic Start','Basic Finish','Readiness WO'];
+            const woRows = jd.wos.map(wo => {
+              const sc = ST_COLOR[wo.system_status?.split(' ')[0]]||'#6b7280';
+              return [
+                `<b style="color:#1a56db">${D(wo.order)}</b>`,
+                badge(wo.system_status, sc),
+                `<span style="font-family:monospace">${fmtCost(wo.total_plnnd_costs)}</span>`,
+                `<span style="font-family:monospace">${fmtCost(wo.totalact_costs)}</span>`,
+                `<span style="font-size:11px">${fmtDate(wo.bas_start_date)||'—'}</span>`,
+                `<span style="font-size:11px">${fmtDate(wo.basic_fin_date)||'—'}</span>`,
+                readinessBar(wo.order_readiness_pct, wo.order_ready),
+              ];
+            });
+            html += trkTable(woCols, woRows, 0, '#374151');
+            html += `</div>`;
+          }
+
+          html += `</div></div>`; // end jl children + jl div
+        }
+
+        html += `</div></div>`; // end eq children + eq div
       }
-
-      html += `</div>`; // end jl children
+      html += `</div></div>`; // end unit children + unit div
     }
-
-    html += `</div>`; // end proj children
+    html += `</div></div>`; // end area children + area div
   }
 
   document.getElementById('trkjl-tree').innerHTML = html ||

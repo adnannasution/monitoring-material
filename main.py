@@ -30,6 +30,7 @@ from bulk_ops import (
     bulk_replace_project, bulk_replace_job_list,
     bulk_replace_job_detail, bulk_replace_job_detail_work_order,
     bulk_replace_equipment_taex,
+    bulk_replace_job_area, bulk_replace_job_unit,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
 
@@ -438,7 +439,8 @@ async def upload_excel(upload_type: str, request: Request,
                        file: UploadFile = File(...),
                        mode: Optional[str] = Form(None)):
     check_api_key(request)
-    if upload_type not in ("taex","prisma","pr","po","project","joblist","jobdetail","jobdetailworkorder","equipment"):
+    if upload_type not in ("taex","prisma","pr","po","project","joblist","jobdetail",
+                           "jobdetailworkorder","equipment","jobarea","jobunit"):
         raise HTTPException(400, "Type tidak valid")
 
     content = await file.read()
@@ -481,6 +483,10 @@ async def upload_excel(upload_type: str, request: Request,
                 cnt = bulk_replace_job_detail_work_order(df)
             elif upload_type == "equipment":
                 cnt = bulk_replace_equipment_taex(df)
+            elif upload_type == "jobarea":
+                cnt = bulk_replace_job_area(df)
+            elif upload_type == "jobunit":
+                cnt = bulk_replace_job_unit(df)
             else:
                 cnt = 0
 
@@ -2321,13 +2327,83 @@ def get_data_equipment(request: Request, page: int = 1, limit: int = 500):
 
 
 # ═══════════════════════════════════════════════════════════════
-# TRACKING JOBLIST
-# WO Detail → Job Detail → Job List → Project + Equipment
+# JOB AREA
+# ═══════════════════════════════════════════════════════════════
+def map_area(r):
+    return {
+        "ID": r["id"], "AreaName": r["area_name"], "Plant": r["plant"],
+        "AreaAliasName": r["area_alias_name"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+    }
+
+@app.get("/api/jobarea")
+def get_job_area(request: Request, plant: str = None):
+    check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["is_deleted=0"], []
+    if plant:
+        clauses.append("plant=%s"); params.append(plant)
+    else:
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM job_area WHERE {where} ORDER BY area_name", params)
+    return jsonify([map_area(r) for r in rows])
+
+@app.post("/api/jobarea/replace")
+async def replace_job_area(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+    cnt = bulk_replace_job_area(df)
+    return {"inserted": cnt}
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOB UNIT
+# ═══════════════════════════════════════════════════════════════
+def map_unit(r):
+    return {
+        "ID": r["id"], "AreaId": r["area_id"],
+        "UnitName": r["unit_name"], "Plant": r["plant"],
+        "UnitAliasName": r["unit_alias_name"],
+        "Created": r["created"], "CreatedBy": r["created_by"],
+        "IsDeleted": r["is_deleted"],
+    }
+
+@app.get("/api/jobunit")
+def get_job_unit(request: Request, plant: str = None, area_id: str = None):
+    check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["is_deleted=0"], []
+    if area_id:
+        clauses.append("area_id=%s"); params.append(area_id)
+    elif plant:
+        clauses.append("plant=%s"); params.append(plant)
+    else:
+        pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f"SELECT * FROM job_unit WHERE {where} ORDER BY unit_name", params)
+    return jsonify([map_unit(r) for r in rows])
+
+@app.post("/api/jobunit/replace")
+async def replace_job_unit(request: Request, file: UploadFile = File(...)):
+    check_api_key(request)
+    content = await file.read()
+    df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+    cnt = bulk_replace_job_unit(df)
+    return {"inserted": cnt}
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRACKING JOBLIST (updated with area + unit JOIN)
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/tracking-joblist")
 def get_tracking_joblist(
     request: Request,
     project: str = None,
+    area: str = None,
+    unit: str = None,
     collective: str = None,
     status: str = None,
     disiplin: str = None,
@@ -2343,6 +2419,10 @@ def get_tracking_joblist(
 
     if project:
         clauses.append("p.project_number = %s"); params.append(project)
+    if area:
+        clauses.append("a.id = %s"); params.append(area)
+    if unit:
+        clauses.append("u.id = %s"); params.append(unit)
     if collective:
         clauses.append("jd.collective = %s"); params.append(collective)
     if status:
@@ -2353,11 +2433,11 @@ def get_tracking_joblist(
         clauses.append("""(
             wo."order" ILIKE %s OR wo.equipment ILIKE %s OR
             jd.no_joblist_detail ILIKE %s OR jd.joblist_detail_description ILIKE %s OR
-            jl.no_joblist ILIKE %s OR
-            p.project_number ILIKE %s OR
+            jl.no_joblist ILIKE %s OR p.project_number ILIKE %s OR
+            a.area_name ILIKE %s OR u.unit_name ILIKE %s OR
             eq.equipment_no ILIKE %s OR eq.description_of_technical_object ILIKE %s
         )""")
-        params.extend([f"%{q}%"] * 8)
+        params.extend([f"%{q}%"] * 10)
 
     where = " AND ".join(clauses)
 
@@ -2417,6 +2497,7 @@ def get_tracking_joblist(
             p.revision                    AS project_revision,
 
             -- Equipment
+            eq.id                         AS eq_id,
             eq.equipment_no,
             eq.description_of_technical_object AS equipment_desc,
             eq.functional_location,
@@ -2425,305 +2506,141 @@ def get_tracking_joblist(
             eq.criticallity_text,
             eq.group_asset,
             eq.main_work_center           AS eq_main_work_center,
-            eq.catalog_profile_text
+            eq.catalog_profile_text,
+            eq.unit_id                    AS eq_unit_id,
+
+            -- Unit
+            u.id                          AS unit_id,
+            u.unit_name,
+            u.unit_alias_name,
+
+            -- Area
+            a.id                          AS area_id,
+            a.area_name,
+            a.area_alias_name
 
         FROM job_detail_work_order wo
         LEFT JOIN job_detail       jd  ON wo.joblist_detail_id = jd.id
         LEFT JOIN job_list         jl  ON jd.joblist_id        = jl.id
         LEFT JOIN project          p   ON jl.project_id        = p.id
         LEFT JOIN equipment_taex   eq  ON jl.equipment_id      = eq.id
+        LEFT JOIN job_unit         u   ON eq.unit_id           = u.id
+        LEFT JOIN job_area         a   ON u.area_id            = a.id
         WHERE {where}
-        ORDER BY p.project_number, jl.no_joblist, jd.no_joblist_detail, wo."order"
+        ORDER BY a.area_name, u.unit_name, eq.equipment_no,
+                 p.project_number, jl.no_joblist, jd.no_joblist_detail, wo."order"
     """, params)
 
-    # ── Hitung readiness dari taex_reservasi ──────────────────
-    # Ambil semua order yang muncul di hasil, cek di taex_reservasi
+    # ── Readiness calculation ─────────────────────────────────
     orders = list({r["order"] for r in rows if r["order"]})
-
-    order_readiness = {}  # order → {ready: bool, pct: float, total_mat: int, ready_mat: int}
+    order_readiness = {}
 
     if orders:
         placeholders = ",".join(["%s"] * len(orders))
         mat_rows = query(f"""
-            SELECT
-                "order",
-                COUNT(*) AS total_mat,
-                SUM(CASE
-                    WHEN COALESCE(qty_deliv, 0) >= qty_reqmts
-                     AND qty_reqmts > 0
-                    THEN 1 ELSE 0
-                END) AS ready_mat
+            SELECT "order",
+                   COUNT(*) AS total_mat,
+                   SUM(CASE WHEN COALESCE(qty_deliv,0) >= qty_reqmts AND qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
             FROM taex_reservasi
             WHERE "order" IN ({placeholders})
             GROUP BY "order"
         """, orders)
-
         for m in mat_rows:
             total = int(m["total_mat"] or 0)
             ready = int(m["ready_mat"] or 0)
-            pct   = round((ready / total * 100), 1) if total > 0 else 0
             order_readiness[m["order"]] = {
-                "order_ready":     total > 0 and ready == total,
-                "order_readiness_pct": pct,
+                "order_ready": total > 0 and ready == total,
+                "order_readiness_pct": round(ready / total * 100, 1) if total > 0 else 0,
                 "order_total_mat": total,
                 "order_ready_mat": ready,
             }
-
-    # Order tanpa data di taex = tidak ready
     for o in orders:
         if o not in order_readiness:
-            order_readiness[o] = {
-                "order_ready": False,
-                "order_readiness_pct": 0,
-                "order_total_mat": 0,
-                "order_ready_mat": 0,
-            }
+            order_readiness[o] = {"order_ready": False, "order_readiness_pct": 0,
+                                  "order_total_mat": 0, "order_ready_mat": 0}
 
-    # ── Hitung readiness per JD ───────────────────────────────
-    # Group WO per jd_id, hitung berapa WO yang ready
     from collections import defaultdict
-    jd_orders = defaultdict(list)   # jd_id → [order, ...]
-    jl_jds    = defaultdict(set)    # jl_id → {jd_id, ...}
-    proj_jls  = defaultdict(set)    # project_id → {jl_id, ...}
+    jd_orders  = defaultdict(list)
+    jl_jds     = defaultdict(set)
+    eq_jls     = defaultdict(set)
+    unit_eqs   = defaultdict(set)
+    area_units = defaultdict(set)
+    proj_jls   = defaultdict(set)
 
     for r in rows:
-        if r["jd_id"]:
-            jd_orders[r["jd_id"]].append(r["order"])
-        if r["jl_id"] and r["jd_id"]:
-            jl_jds[r["jl_id"]].add(r["jd_id"])
-        if r["project_id"] and r["jl_id"]:
-            proj_jls[r["project_id"]].add(r["jl_id"])
+        if r["jd_id"]:  jd_orders[r["jd_id"]].append(r["order"])
+        if r["jl_id"] and r["jd_id"]:  jl_jds[r["jl_id"]].add(r["jd_id"])
+        if r["eq_id"] and r["jl_id"]:  eq_jls[r["eq_id"]].add(r["jl_id"])
+        if r["unit_id"] and r["eq_id"]: unit_eqs[r["unit_id"]].add(r["eq_id"])
+        if r["area_id"] and r["unit_id"]: area_units[r["area_id"]].add(r["unit_id"])
+        if r["project_id"] and r["jl_id"]: proj_jls[r["project_id"]].add(r["jl_id"])
 
-    def jd_readiness(jd_id):
-        orders_in_jd = jd_orders.get(jd_id, [])
-        if not orders_in_jd:
-            return False, 0
-        ready_count = sum(1 for o in orders_in_jd if order_readiness.get(o, {}).get("order_ready"))
-        pct = round(ready_count / len(orders_in_jd) * 100, 1)
-        return ready_count == len(orders_in_jd), pct
+    def _pct(ready, total):
+        return round(ready / total * 100, 1) if total > 0 else 0
 
-    def jl_readiness(jl_id):
+    def jd_ready_info(jd_id):
+        os = jd_orders.get(jd_id, [])
+        if not os: return False, 0
+        rc = sum(1 for o in os if order_readiness.get(o, {}).get("order_ready"))
+        return rc == len(os), _pct(rc, len(os))
+
+    def jl_ready_info(jl_id):
         jds = jl_jds.get(jl_id, set())
-        if not jds:
-            return False, 0
-        ready_count = sum(1 for jd in jds if jd_readiness(jd)[0])
-        pct = round(ready_count / len(jds) * 100, 1)
-        return ready_count == len(jds), pct
+        if not jds: return False, 0
+        rc = sum(1 for jd in jds if jd_ready_info(jd)[0])
+        return rc == len(jds), _pct(rc, len(jds))
 
-    def proj_readiness(project_id):
+    def eq_ready_info(eq_id):
+        jls = eq_jls.get(eq_id, set())
+        if not jls: return False, 0
+        rc = sum(1 for jl in jls if jl_ready_info(jl)[0])
+        return rc == len(jls), _pct(rc, len(jls))
+
+    def unit_ready_info(unit_id):
+        eqs = unit_eqs.get(unit_id, set())
+        if not eqs: return False, 0
+        rc = sum(1 for eq in eqs if eq_ready_info(eq)[0])
+        return rc == len(eqs), _pct(rc, len(eqs))
+
+    def area_ready_info(area_id):
+        units = area_units.get(area_id, set())
+        if not units: return False, 0
+        rc = sum(1 for u in units if unit_ready_info(u)[0])
+        return rc == len(units), _pct(rc, len(units))
+
+    def proj_ready_info(project_id):
         jls = proj_jls.get(project_id, set())
-        if not jls:
-            return False, 0
-        ready_count = sum(1 for jl in jls if jl_readiness(jl)[0])
-        pct = round(ready_count / len(jls) * 100, 1)
-        return ready_count == len(jls), pct
+        if not jls: return False, 0
+        rc = sum(1 for jl in jls if jl_ready_info(jl)[0])
+        return rc == len(jls), _pct(rc, len(jls))
 
-    # ── Gabungkan ke setiap baris ─────────────────────────────
     result = []
     for r in rows:
         d = dict(r)
         o = d.get("order")
+        d.update(order_readiness.get(o, {"order_ready": False, "order_readiness_pct": 0,
+                                         "order_total_mat": 0, "order_ready_mat": 0}))
+        jd_r, jd_p = jd_ready_info(d.get("jd_id")) if d.get("jd_id") else (False, 0)
+        d["jd_ready"] = jd_r; d["jd_readiness_pct"] = jd_p
 
-        # Order readiness
-        ord_info = order_readiness.get(o, {"order_ready": False, "order_readiness_pct": 0,
-                                           "order_total_mat": 0, "order_ready_mat": 0})
-        d.update(ord_info)
+        jl_r, jl_p = jl_ready_info(d.get("jl_id")) if d.get("jl_id") else (False, 0)
+        d["jl_ready"] = jl_r; d["jl_readiness_pct"] = jl_p
 
-        # JD readiness
-        jd_ready, jd_pct = jd_readiness(d.get("jd_id")) if d.get("jd_id") else (False, 0)
-        d["jd_ready"]         = jd_ready
-        d["jd_readiness_pct"] = jd_pct
+        eq_r, eq_p = eq_ready_info(d.get("eq_id")) if d.get("eq_id") else (False, 0)
+        d["eq_ready"] = eq_r; d["eq_readiness_pct"] = eq_p
 
-        # JL readiness
-        jl_ready, jl_pct = jl_readiness(d.get("jl_id")) if d.get("jl_id") else (False, 0)
-        d["jl_ready"]         = jl_ready
-        d["jl_readiness_pct"] = jl_pct
+        u_r, u_p = unit_ready_info(d.get("unit_id")) if d.get("unit_id") else (False, 0)
+        d["unit_ready"] = u_r; d["unit_readiness_pct"] = u_p
 
-        # Project readiness
-        pr_ready, pr_pct = proj_readiness(d.get("project_id")) if d.get("project_id") else (False, 0)
-        d["project_ready"]         = pr_ready
-        d["project_readiness_pct"] = pr_pct
+        a_r, a_p = area_ready_info(d.get("area_id")) if d.get("area_id") else (False, 0)
+        d["area_ready"] = a_r; d["area_readiness_pct"] = a_p
+
+        pr_r, pr_p = proj_ready_info(d.get("project_id")) if d.get("project_id") else (False, 0)
+        d["project_ready"] = pr_r; d["project_readiness_pct"] = pr_p
 
         result.append(d)
 
     return jsonify(result)
-
-
-# ═══════════════════════════════════════════════════════════════
-# AUTH ENDPOINTS
-# ═══════════════════════════════════════════════════════════════
-@app.post("/api/auth/login")
-async def login(request: Request):
-    try:
-        body = await request.json()
-        username = body.get("username", "").strip()
-        password = body.get("password", "")
-        if not username or not password:
-            raise HTTPException(400, "Username dan password wajib diisi")
-        user = query_one("SELECT * FROM users WHERE username=%s AND is_active=TRUE", (username,))
-        if not user or not _verify_password(password, user["password_hash"]):
-            raise HTTPException(401, "Username atau password salah")
-        token = _create_session(user["id"])
-        return jsonify({
-            "token": token,
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "plant_code": user["plant_code"],
-                "pg_role": user["pg_role"],
-                "is_admin": user["is_admin"],
-            }
-        })
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Login error: {e}")
-        raise HTTPException(500, f"Server error: {str(e)}")
-
-@app.get("/api/auth/reset-admin")
-def reset_admin():
-    """Emergency reset admin password ke Admin@123. Hapus endpoint ini setelah dipakai."""
-    pw_hash = _hash_password("Admin@123")
-    existing = query_one("SELECT id FROM users WHERE username='admin'")
-    if existing:
-        execute("UPDATE users SET password_hash=%s, is_active=TRUE WHERE username='admin'", (pw_hash,))
-        return {"ok": True, "message": "Password admin direset ke Admin@123"}
-    else:
-        execute(
-            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES ('admin',%s,NULL,'Admin',TRUE)",
-            (pw_hash,)
-        )
-        return {"ok": True, "message": "Admin dibuat dengan password Admin@123"}
-
-@app.post("/api/auth/logout")
-def logout(request: Request):
-    token = request.headers.get("x-auth-token", "")
-    if token:
-        execute("DELETE FROM user_sessions WHERE token=%s", (token,))
-    return {"ok": True}
-
-@app.get("/api/auth/me")
-def me(request: Request):
-    user = get_current_user(request)
-    return jsonify(user)
-
-
-# ═══════════════════════════════════════════════════════════════
-# ADMIN — PLANT MASTER
-# ═══════════════════════════════════════════════════════════════
-@app.get("/api/admin/plants")
-def admin_get_plants(request: Request):
-    require_admin(request)
-    rows = query("SELECT * FROM plants ORDER BY plant_code")
-    return jsonify([dict(r) for r in rows])
-
-@app.post("/api/admin/plants")
-async def admin_create_plant(request: Request):
-    require_admin(request)
-    body = await request.json()
-    code = body.get("plant_code", "").strip().upper()
-    name = body.get("plant_name", "").strip()
-    if not code:
-        raise HTTPException(400, "plant_code wajib diisi")
-    execute(
-        "INSERT INTO plants (plant_code, plant_name) VALUES (%s, %s) ON CONFLICT (plant_code) DO UPDATE SET plant_name=%s",
-        (code, name, name)
-    )
-    return {"ok": True, "plant_code": code}
-
-@app.delete("/api/admin/plants/{code}")
-def admin_delete_plant(code: str, request: Request):
-    require_admin(request)
-    execute("DELETE FROM plants WHERE plant_code=%s", (code,))
-    return {"ok": True}
-
-
-# ═══════════════════════════════════════════════════════════════
-# ADMIN — USER MANAGEMENT
-# ═══════════════════════════════════════════════════════════════
-@app.get("/api/admin/users")
-def admin_get_users(request: Request):
-    require_admin(request)
-    rows = query("""
-        SELECT id, username, plant_code, pg_role, is_admin, is_active, created_at
-        FROM users ORDER BY created_at DESC
-    """)
-    return jsonify([dict(r) for r in rows])
-
-@app.post("/api/admin/users")
-async def admin_create_user(request: Request):
-    require_admin(request)
-    body     = await request.json()
-    username = body.get("username", "").strip()
-    password = body.get("password", "").strip()
-    plant    = body.get("plant_code") or None
-    pg_role  = body.get("pg_role", "TA")
-    is_admin = bool(body.get("is_admin", False))
-
-    if not username or not password:
-        raise HTTPException(400, "username dan password wajib")
-    if len(password) < 6:
-        raise HTTPException(400, "Password minimal 6 karakter")
-
-    pw_hash = _hash_password(password)
-    try:
-        execute(
-            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES (%s,%s,%s,%s,%s)",
-            (username, pw_hash, plant, pg_role, is_admin)
-        )
-    except Exception as e:
-        if "unique" in str(e).lower():
-            raise HTTPException(400, "Username sudah digunakan")
-        raise e
-    return {"ok": True}
-
-@app.put("/api/admin/users/{user_id}")
-async def admin_update_user(user_id: int, request: Request):
-    require_admin(request)
-    body     = await request.json()
-    sets     = []
-    params   = []
-
-    if "plant_code" in body:
-        sets.append("plant_code=%s"); params.append(body["plant_code"] or None)
-    if "pg_role" in body:
-        sets.append("pg_role=%s"); params.append(body["pg_role"])
-    if "is_admin" in body:
-        sets.append("is_admin=%s"); params.append(bool(body["is_admin"]))
-    if "is_active" in body:
-        sets.append("is_active=%s"); params.append(bool(body["is_active"]))
-    if "password" in body and body["password"]:
-        if len(body["password"]) < 6:
-            raise HTTPException(400, "Password minimal 6 karakter")
-        sets.append("password_hash=%s"); params.append(_hash_password(body["password"]))
-
-    if not sets:
-        raise HTTPException(400, "Tidak ada field yang diupdate")
-
-    params.append(user_id)
-    execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", params)
-    # Hapus session user jika dinonaktifkan
-    if body.get("is_active") == False:
-        execute("DELETE FROM user_sessions WHERE user_id=%s", (user_id,))
-    return {"ok": True}
-
-@app.delete("/api/admin/users/{user_id}")
-def admin_delete_user(user_id: int, request: Request):
-    require_admin(request)
-    execute("DELETE FROM users WHERE id=%s AND is_admin=FALSE", (user_id,))
-    return {"ok": True}
-
-@app.get("/api/admin/pg-options")
-def pg_options(request: Request):
-    """List PG role options untuk dropdown."""
-    get_current_user(request)
-    return jsonify([
-        {"value": "TA",    "label": "TA (Turnaround)"},
-        {"value": "OH",    "label": "OH (Overhaul)"},
-        {"value": "Rutin", "label": "Rutin"},
-        {"value": "Admin", "label": "Admin"},
-    ])
-
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
