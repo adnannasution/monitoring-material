@@ -2642,6 +2642,158 @@ def get_tracking_joblist(
 
     return jsonify(result)
 
+# ═══════════════════════════════════════════════════════════════
+# AUTH ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/auth/reset-admin")
+def reset_admin():
+    pw_hash = _hash_password("Admin@123")
+    existing = query_one("SELECT id FROM users WHERE username='admin'")
+    if existing:
+        execute("UPDATE users SET password_hash=%s, is_active=TRUE WHERE username='admin'", (pw_hash,))
+        return {"ok": True, "message": "Password admin direset ke Admin@123"}
+    else:
+        execute(
+            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES ('admin',%s,NULL,'Admin',TRUE)",
+            (pw_hash,)
+        )
+        return {"ok": True, "message": "Admin dibuat dengan password Admin@123"}
+
+@app.post("/api/auth/login")
+async def login(request: Request):
+    try:
+        body = await request.json()
+        username = body.get("username", "").strip()
+        password = body.get("password", "")
+        if not username or not password:
+            raise HTTPException(400, "Username dan password wajib diisi")
+        user = query_one("SELECT * FROM users WHERE username=%s AND is_active=TRUE", (username,))
+        if not user or not _verify_password(password, user["password_hash"]):
+            raise HTTPException(401, "Username atau password salah")
+        token = _create_session(user["id"])
+        return jsonify({
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "plant_code": user["plant_code"],
+                "pg_role": user["pg_role"],
+                "is_admin": user["is_admin"],
+            }
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        raise HTTPException(500, f"Server error: {str(e)}")
+
+@app.post("/api/auth/logout")
+def logout(request: Request):
+    token = request.headers.get("x-auth-token", "")
+    if token:
+        execute("DELETE FROM user_sessions WHERE token=%s", (token,))
+    return {"ok": True}
+
+@app.get("/api/auth/me")
+def me(request: Request):
+    user = get_current_user(request)
+    return jsonify(user)
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN — PLANT MASTER
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/admin/plants")
+def admin_get_plants(request: Request):
+    require_admin(request)
+    rows = query("SELECT * FROM plants ORDER BY plant_code")
+    return jsonify([dict(r) for r in rows])
+
+@app.post("/api/admin/plants")
+async def admin_create_plant(request: Request):
+    require_admin(request)
+    body = await request.json()
+    code = body.get("plant_code", "").strip().upper()
+    name = body.get("plant_name", "").strip()
+    if not code:
+        raise HTTPException(400, "plant_code wajib diisi")
+    execute(
+        "INSERT INTO plants (plant_code, plant_name) VALUES (%s,%s) ON CONFLICT (plant_code) DO UPDATE SET plant_name=%s",
+        (code, name, name)
+    )
+    return {"ok": True, "plant_code": code}
+
+@app.delete("/api/admin/plants/{code}")
+def admin_delete_plant(code: str, request: Request):
+    require_admin(request)
+    execute("DELETE FROM plants WHERE plant_code=%s", (code,))
+    return {"ok": True}
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN — USER MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/admin/users")
+def admin_get_users(request: Request):
+    require_admin(request)
+    rows = query("SELECT id,username,plant_code,pg_role,is_admin,is_active,created_at FROM users ORDER BY created_at DESC")
+    return jsonify([dict(r) for r in rows])
+
+@app.post("/api/admin/users")
+async def admin_create_user(request: Request):
+    require_admin(request)
+    body     = await request.json()
+    username = body.get("username", "").strip()
+    password = body.get("password", "").strip()
+    plant    = body.get("plant_code") or None
+    pg_role  = body.get("pg_role", "TA")
+    is_admin = bool(body.get("is_admin", False))
+    if not username or not password:
+        raise HTTPException(400, "username dan password wajib")
+    if len(password) < 6:
+        raise HTTPException(400, "Password minimal 6 karakter")
+    pw_hash = _hash_password(password)
+    try:
+        execute(
+            "INSERT INTO users (username,password_hash,plant_code,pg_role,is_admin) VALUES (%s,%s,%s,%s,%s)",
+            (username, pw_hash, plant, pg_role, is_admin)
+        )
+    except Exception as e:
+        if "unique" in str(e).lower():
+            raise HTTPException(400, "Username sudah digunakan")
+        raise e
+    return {"ok": True}
+
+@app.put("/api/admin/users/{user_id}")
+async def admin_update_user(user_id: int, request: Request):
+    require_admin(request)
+    body   = await request.json()
+    sets   = []; params = []
+    if "plant_code" in body:
+        sets.append("plant_code=%s"); params.append(body["plant_code"] or None)
+    if "pg_role" in body:
+        sets.append("pg_role=%s"); params.append(body["pg_role"])
+    if "is_admin" in body:
+        sets.append("is_admin=%s"); params.append(bool(body["is_admin"]))
+    if "is_active" in body:
+        sets.append("is_active=%s"); params.append(bool(body["is_active"]))
+    if body.get("password"):
+        if len(body["password"]) < 6:
+            raise HTTPException(400, "Password minimal 6 karakter")
+        sets.append("password_hash=%s"); params.append(_hash_password(body["password"]))
+    if not sets:
+        raise HTTPException(400, "Tidak ada field yang diupdate")
+    params.append(user_id)
+    execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", params)
+    if body.get("is_active") == False:
+        execute("DELETE FROM user_sessions WHERE user_id=%s", (user_id,))
+    return {"ok": True}
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(user_id: int, request: Request):
+    require_admin(request)
+    execute("DELETE FROM users WHERE id=%s AND is_admin=FALSE", (user_id,))
+    return {"ok": True}
+
+
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
     return FileResponse("public/index.html")

@@ -490,37 +490,6 @@ def migrate():
         )
     """)
 
-    # Indexes
-    for sql in [
-        'CREATE INDEX IF NOT EXISTS idx_taex_material ON taex_reservasi(material)',
-        'CREATE INDEX IF NOT EXISTS idx_taex_order    ON taex_reservasi("order")',
-        'CREATE UNIQUE INDEX IF NOT EXISTS idx_taex_upsert_key ON taex_reservasi("order", material, itm)',
-        'CREATE INDEX IF NOT EXISTS idx_prisma_material ON prisma_reservasi(material)',
-        'CREATE INDEX IF NOT EXISTS idx_prisma_order    ON prisma_reservasi("order")',
-        'CREATE INDEX IF NOT EXISTS idx_sap_pr          ON sap_pr(pr)',
-        'CREATE INDEX IF NOT EXISTS idx_kumpulan_code   ON kumpulan_summary(code_tracking)',
-        'CREATE INDEX IF NOT EXISTS idx_sap_po_po              ON sap_po(po)',
-        'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq        ON sap_po(purchreq)',
-        'CREATE INDEX IF NOT EXISTS idx_job_area_plant      ON job_area(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_job_unit_area       ON job_unit(area_id)',
-        'CREATE INDEX IF NOT EXISTS idx_job_unit_plant      ON job_unit(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_equipment_no            ON equipment_taex(equipment_no)',
-        'CREATE INDEX IF NOT EXISTS idx_equipment_plant         ON equipment_taex(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_equipment_func_loc      ON equipment_taex(functional_location)',
-        'CREATE INDEX IF NOT EXISTS idx_project_number         ON project(project_number)',
-        'CREATE INDEX IF NOT EXISTS idx_project_plant          ON project(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_joblist_project        ON job_list(project_id)',
-        'CREATE INDEX IF NOT EXISTS idx_joblist_plant          ON job_list(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_jobdetail_joblist      ON job_detail(joblist_id)',
-        'CREATE INDEX IF NOT EXISTS idx_jobdetail_plant        ON job_detail(plant)',
-        'CREATE INDEX IF NOT EXISTS idx_jdwo_joblist_detail    ON job_detail_work_order(joblist_detail_id)',
-        'CREATE INDEX IF NOT EXISTS idx_jdwo_order             ON job_detail_work_order("order")',
-    ]:
-        try:
-            execute(sql)
-        except Exception:
-            pass
-
     execute("""
         CREATE TABLE IF NOT EXISTS job_area (
             id              TEXT PRIMARY KEY,
@@ -594,5 +563,36 @@ def migrate():
             (f"admin", f"{pw}:{salt}")
         )
         print("✅ Default admin created: admin / Admin@123")
+
+    # Indexes
+    for sql in [
+        'CREATE INDEX IF NOT EXISTS idx_taex_material ON taex_reservasi(material)',
+        'CREATE INDEX IF NOT EXISTS idx_taex_order    ON taex_reservasi("order")',
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_taex_upsert_key ON taex_reservasi("order", material, itm)',
+        'CREATE INDEX IF NOT EXISTS idx_prisma_material ON prisma_reservasi(material)',
+        'CREATE INDEX IF NOT EXISTS idx_prisma_order    ON prisma_reservasi("order")',
+        'CREATE INDEX IF NOT EXISTS idx_sap_pr          ON sap_pr(pr)',
+        'CREATE INDEX IF NOT EXISTS idx_kumpulan_code   ON kumpulan_summary(code_tracking)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_po_po              ON sap_po(po)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq        ON sap_po(purchreq)',
+        'CREATE INDEX IF NOT EXISTS idx_job_area_plant      ON job_area(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_job_unit_area       ON job_unit(area_id)',
+        'CREATE INDEX IF NOT EXISTS idx_job_unit_plant      ON job_unit(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_no            ON equipment_taex(equipment_no)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_plant         ON equipment_taex(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_equipment_func_loc      ON equipment_taex(functional_location)',
+        'CREATE INDEX IF NOT EXISTS idx_project_number         ON project(project_number)',
+        'CREATE INDEX IF NOT EXISTS idx_project_plant          ON project(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_joblist_project        ON job_list(project_id)',
+        'CREATE INDEX IF NOT EXISTS idx_joblist_plant          ON job_list(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_jobdetail_joblist      ON job_detail(joblist_id)',
+        'CREATE INDEX IF NOT EXISTS idx_jobdetail_plant        ON job_detail(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_jdwo_joblist_detail    ON job_detail_work_order(joblist_detail_id)',
+        'CREATE INDEX IF NOT EXISTS idx_jdwo_order             ON job_detail_work_order("order")',
+    ]:
+        try:
+            execute(sql)
+        except Exception:
+            pass
 
     print("✅ Migration complete")
