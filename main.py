@@ -2554,23 +2554,46 @@ def get_tracking_joblist(
 # ═══════════════════════════════════════════════════════════════
 @app.post("/api/auth/login")
 async def login(request: Request):
-    body = await request.json()
-    username = body.get("username", "").strip()
-    password = body.get("password", "")
-    user = query_one("SELECT * FROM users WHERE username=%s AND is_active=TRUE", (username,))
-    if not user or not _verify_password(password, user["password_hash"]):
-        raise HTTPException(401, "Username atau password salah")
-    token = _create_session(user["id"])
-    return jsonify({
-        "token": token,
-        "user": {
-            "id": user["id"],
-            "username": user["username"],
-            "plant_code": user["plant_code"],
-            "pg_role": user["pg_role"],
-            "is_admin": user["is_admin"],
-        }
-    })
+    try:
+        body = await request.json()
+        username = body.get("username", "").strip()
+        password = body.get("password", "")
+        if not username or not password:
+            raise HTTPException(400, "Username dan password wajib diisi")
+        user = query_one("SELECT * FROM users WHERE username=%s AND is_active=TRUE", (username,))
+        if not user or not _verify_password(password, user["password_hash"]):
+            raise HTTPException(401, "Username atau password salah")
+        token = _create_session(user["id"])
+        return jsonify({
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "plant_code": user["plant_code"],
+                "pg_role": user["pg_role"],
+                "is_admin": user["is_admin"],
+            }
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        raise HTTPException(500, f"Server error: {str(e)}")
+
+@app.get("/api/auth/reset-admin")
+def reset_admin():
+    """Emergency reset admin password ke Admin@123. Hapus endpoint ini setelah dipakai."""
+    pw_hash = _hash_password("Admin@123")
+    existing = query_one("SELECT id FROM users WHERE username='admin'")
+    if existing:
+        execute("UPDATE users SET password_hash=%s, is_active=TRUE WHERE username='admin'", (pw_hash,))
+        return {"ok": True, "message": "Password admin direset ke Admin@123"}
+    else:
+        execute(
+            "INSERT INTO users (username, password_hash, plant_code, pg_role, is_admin) VALUES ('admin',%s,NULL,'Admin',TRUE)",
+            (pw_hash,)
+        )
+        return {"ok": True, "message": "Admin dibuat dengan password Admin@123"}
 
 @app.post("/api/auth/logout")
 def logout(request: Request):

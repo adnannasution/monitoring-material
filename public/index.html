@@ -6978,7 +6978,11 @@ async function doLogin() {
   const errEl    = document.getElementById('login-error');
   const btn      = document.getElementById('login-btn');
   errEl.style.display = 'none';
-  if (!username || !password) { errEl.textContent = 'Username dan password wajib diisi'; errEl.style.display = 'block'; return; }
+  if (!username || !password) {
+    errEl.textContent = 'Username dan password wajib diisi';
+    errEl.style.display = 'block';
+    return;
+  }
   btn.textContent = '⏳ Masuk...'; btn.disabled = true;
   try {
     const res = await fetch(`${API}/auth/login`, {
@@ -6986,13 +6990,23 @@ async function doLogin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Login gagal');
+    // Handle non-JSON response (server error)
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(e) {
+      throw new Error(`Server error: ${text.slice(0, 100)}`);
+    }
+    if (!res.ok) throw new Error(data.detail || data.message || 'Login gagal');
     setToken(data.token);
     _currentUser = data.user;
     hidLoginPage();
     updateUserUI();
-    init();
+    await init();
+    switchApp('taex');
+    initAllResizable();
+    initColVisibility();
+    initFreezeListeners();
   } catch(e) {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
