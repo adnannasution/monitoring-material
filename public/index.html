@@ -2527,8 +2527,14 @@ const API = window.location.hostname === 'localhost' || window.location.hostname
 // ============================================================
 async function apiFetch(path, opts = {}) {
   try {
+    const token = typeof getToken === 'function' ? getToken() : '';
     const res = await fetch(API + path, {
-      headers: { 'Content-Type': 'application/json', 'x-api-key': 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK', ...opts.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK',
+        ...(token ? { 'x-auth-token': token } : {}),
+        ...opts.headers
+      },
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
@@ -6963,14 +6969,7 @@ function getToken() { return localStorage.getItem('auth_token') || ''; }
 function setToken(t) { localStorage.setItem('auth_token', t); }
 function clearToken() { localStorage.removeItem('auth_token'); }
 
-// Patch apiFetch to always send auth token
-const _origApiFetch = apiFetch;
-async function apiFetch(path, opts = {}) {
-  opts.headers = opts.headers || {};
-  const token = getToken();
-  if (token) opts.headers['x-auth-token'] = token;
-  return _origApiFetch(path, opts);
-}
+// apiFetch token injection — handled in original apiFetch via getToken()
 
 async function doLogin() {
   const username = document.getElementById('login-username').value.trim();
