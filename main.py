@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from database import migrate, query, execute, get_state, set_state
+from database import migrate, query, query_one, execute, get_state, set_state
 from bulk_ops import (
     bulk_replace_taex, bulk_replace_prisma, bulk_replace_pr,
     bulk_replace_po, bulk_replace_kumpulan, bulk_replace_order,
