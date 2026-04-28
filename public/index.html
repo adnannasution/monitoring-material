@@ -697,6 +697,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 <div class="header">
   <h1 id="appTitle">PRISMA · TA-ex System</h1>
   <div style="display:flex;align-items:center;gap:12px;">
+    <span id="headerSubtitle" class="header-right" style="font-size:12px;color:rgba(255,255,255,0.8)"></span>
     <div class="header-right" id="headerRight" style="display:flex;align-items:center;gap:12px">
       <span id="header-user-info" style="font-size:11px;opacity:0.85"></span>
       <button id="btn-admin-panel" onclick="openAdminPanel()" style="display:none;padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer">⚙️ Admin</button>
@@ -2802,7 +2803,7 @@ function switchApp(app) {
   document.getElementById('page-' + app).classList.add('active');
   const [title, right] = HEADER_TITLES[app] || ['PRISMA',''];
   document.getElementById('appTitle').textContent = title;
-  document.getElementById('headerRight').textContent = right;
+  document.getElementById('headerSubtitle').textContent = right;
   document.getElementById('sidebarMenu').innerHTML = (SIDEBAR_MENUS[app]||[]).map(m =>
     `<div class="menu-item ${m.active?'active':''}"><span class="icon">${m.icon}</span><span class="label">${m.label}</span></div>`
   ).join('');
