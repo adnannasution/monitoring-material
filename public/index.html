@@ -3918,25 +3918,23 @@ async function openKertasKerjaModal() {
   let code = generateKKCode();
   while (existingCodes.has(code)) code = generateKKCode();
   document.getElementById('kk-input-code').value = code;
-  // Reset pilihan PG dan sembunyikan WO list
   document.getElementById('kk-pg-type').value = '';
-  // Filter PG dropdown berdasarkan role user
   const pgSel = document.getElementById('kk-pg-type');
-  if (_currentUser && !_currentUser.is_admin) {
-    // Non-admin: hanya bisa pilih PG sesuai role + auto-select
+  const isInventory = _currentUser && _currentUser.pg_role === 'Inventory';
+  const isAdminOrInventory = (_currentUser && _currentUser.is_admin) || isInventory;
+
+  if (!isAdminOrInventory) {
+    // TA / OH / Rutin: hanya bisa pilih PG sesuai role, auto-select
     pgSel.innerHTML = `<option value="${_currentUser.pg_role}">${_currentUser.pg_role}</option>`;
     pgSel.value = _currentUser.pg_role;
     pgSel.disabled = true;
   } else {
+    // Admin & Inventory: bisa pilih semua PG termasuk All
     pgSel.innerHTML = `<option value="">-- Pilih Planner Group --</option>
       <option value="TA">TA</option>
       <option value="OH">OH</option>
       <option value="Rutin">Rutin</option>
       <option value="All">All &nbsp;(Semua PG)</option>`;
-    // Inventory bisa pilih semua PG
-    if (_currentUser && _currentUser.pg_role === 'Inventory') {
-      pgSel.disabled = false;
-    }
     pgSel.disabled = false;
     pgSel.value = '';
   }
@@ -7378,6 +7376,24 @@ function updateUserUI() {
   document.getElementById('header-user-info').textContent =
     `${u.username} · ${u.pg_role}${u.plant_code ? ' · '+u.plant_code : ''}`;
   document.getElementById('btn-admin-panel').style.display = u.is_admin ? 'inline-block' : 'none';
+
+  // Tab visibility per role
+  // Project management tabs — hanya untuk TA, OH, Rutin, Admin
+  const PROJECT_TABS = [
+    'tab-project','tab-joblist','tab-jobdetail',
+    'tab-jobdetailworkorder','tab-equipment',
+    'tab-jobarea','tab-jobunit','tab-tracking-joblist'
+  ];
+  // Inventory material tabs — hanya untuk Inventory
+  // (tab TA-ex, PRISMA, KK, Summary, Kumpulan, SAP PR, Order, PO, Tracking, Audit
+  //  semua sudah tampil by default, tidak perlu di-hide)
+
+  const showProjectTabs = u.is_admin || u.pg_role !== 'Inventory';
+
+  PROJECT_TABS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showProjectTabs ? '' : 'none';
+  });
 }
 
 async function checkAuth() {
