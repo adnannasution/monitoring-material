@@ -124,7 +124,7 @@ def require_admin(request: Request) -> dict:
     return user
 
 # ── PG Filter mapping ─────────────────────────────────────────
-PG_SUFFIX = { "TA": "T", "OH": "O", "Rutin": "R" }
+PG_SUFFIX = { "TA": "T", "OH": "O", "Rutin": "R", "Inventory": None }
 
 def plant_clause(user: dict, col: str = "plant") -> tuple:
     """Return (sql_clause, params) untuk filter plant."""
@@ -154,7 +154,7 @@ def apply_filters(user: dict, base_clauses: list, base_params: list,
     return clauses, params
 
 # ── Kertas kerja prefix ───────────────────────────────────────
-KK_PREFIX = { "TA": "TA", "OH": "OH", "Rutin": "RT", "Admin": "AD" }
+KK_PREFIX = { "TA": "TA", "OH": "OH", "Rutin": "RT", "Admin": "AD", "Inventory": "IV" }
 
 
 _jobs: dict = {}

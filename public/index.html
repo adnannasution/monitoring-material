@@ -650,6 +650,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
                 <option value="TA">TA (Turnaround)</option>
                 <option value="OH">OH (Overhaul)</option>
                 <option value="Rutin">Rutin</option>
+                <option value="Inventory">Inventory (Semua PG)</option>
                 <option value="Admin">Admin</option>
               </select>
             </div>
@@ -3898,7 +3899,7 @@ async function syncWithTaex() {
 // KERTAS KERJA MODAL & CREATE
 // ============================================================
 function generateKKCode() {
-  const prefixMap = { TA:'TA', OH:'OH', Rutin:'RT', Admin:'AD' };
+  const prefixMap = { TA:'TA', OH:'OH', Rutin:'RT', Admin:'AD', Inventory:'IV' };
   const prefix = (_currentUser && prefixMap[_currentUser.pg_role]) || 'TA';
   const digits = '0123456789';
   let num = '';
@@ -3932,6 +3933,10 @@ async function openKertasKerjaModal() {
       <option value="OH">OH</option>
       <option value="Rutin">Rutin</option>
       <option value="All">All &nbsp;(Semua PG)</option>`;
+    // Inventory bisa pilih semua PG
+    if (_currentUser && _currentUser.pg_role === 'Inventory') {
+      pgSel.disabled = false;
+    }
     pgSel.disabled = false;
     pgSel.value = '';
   }
@@ -7441,7 +7446,7 @@ async function loadAdminUsers() {
         ${rows.map(r => `<tr style="border-bottom:1px solid #f0f0f0">
           <td style="padding:7px 10px;font-weight:600">${r.username}</td>
           <td style="padding:7px 10px;text-align:center">${r.plant_code||'—'}</td>
-          <td style="padding:7px 10px;text-align:center"><span class="badge badge-${r.pg_role==='Admin'?'purple':r.pg_role==='TA'?'blue':r.pg_role==='OH'?'green':'teal'}">${r.pg_role}</span></td>
+          <td style="padding:7px 10px;text-align:center"><span class="badge badge-${r.pg_role==='Admin'?'purple':r.pg_role==='TA'?'blue':r.pg_role==='OH'?'green':r.pg_role==='Inventory'?'teal':'gray'}">${r.pg_role}</span></td>
           <td style="padding:7px 10px;text-align:center">${r.is_admin?'✅':''}</td>
           <td style="padding:7px 10px;text-align:center"><span class="badge badge-${r.is_active?'green':'gray'}">${r.is_active?'Aktif':'Nonaktif'}</span></td>
           <td style="padding:7px 10px;text-align:center;display:flex;gap:4px;justify-content:center">
