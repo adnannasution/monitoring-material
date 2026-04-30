@@ -39,7 +39,8 @@ load_dotenv()
 # ─── APP ────────────────────────────────────────────────────────
 app = FastAPI(title="PRISMA · TA-ex System", version="2.0.0")
 
-API_KEY = os.getenv("API_KEY", "")
+API_KEY        = os.getenv("API_KEY", "")
+PUBLIC_API_KEY = os.getenv("PUBLIC_API_KEY", "")
 ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "*")
 
 app.add_middleware(
@@ -74,6 +75,16 @@ def check_api_key(request: Request):
     key = request.headers.get("x-api-key") or request.query_params.get("api_key")
     if key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized: API key tidak valid")
+
+def check_public_api_key(request: Request):
+    """Validator untuk public API — terima API_KEY atau PUBLIC_API_KEY."""
+    key = (request.headers.get("x-api-key") or
+           request.headers.get("Authorization","").replace("Bearer ","") or
+           request.query_params.get("api_key") or "")
+    if not key:
+        raise HTTPException(401, "API key diperlukan. Sertakan header 'x-api-key' atau query param 'api_key'")
+    if key not in (API_KEY, PUBLIC_API_KEY):
+        raise HTTPException(403, "API key tidak valid")
 
 
 # ─── USER AUTH ───────────────────────────────────────────────────
@@ -2792,6 +2803,252 @@ def admin_delete_user(user_id: int, request: Request):
     require_admin(request)
     execute("DELETE FROM users WHERE id=%s AND is_admin=FALSE", (user_id,))
     return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# PUBLIC API — TRACKING & TRACKING JOBLIST
+# Akses dengan header: x-api-key: <PUBLIC_API_KEY>
+# atau query param:    ?api_key=<PUBLIC_API_KEY>
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/public/tracking")
+def public_tracking(
+    request: Request,
+    page: int = 1,
+    limit: int = 99999,
+    q: str = "",
+    order_val: str = "",
+    material: str = "",
+    pr: str = "",
+    po: str = "",
+    status: str = "",
+    plant: str = "",
+    order_by: str = "t.id",
+    order_dir: str = "ASC",
+):
+    """
+    Public API — Tracking material (TA-ex Reservasi + PR/PO).
+
+    **Auth:** Header `x-api-key` atau query `?api_key=`
+
+    **Filter params:**
+    - `q` — pencarian bebas (order, material, equipment)
+    - `order_val` — filter by order number
+    - `material` — filter by material number
+    - `pr` — filter by PR number
+    - `po` — filter by PO number
+    - `status` — `with_pr`, `without_pr`, `with_po`, `without_po`
+    - `plant` — filter by plant code
+    - `page`, `limit` — pagination (max limit 500)
+    - `order_by`, `order_dir` — sorting
+    """
+    check_public_api_key(request)
+
+    # Delegate ke fungsi tracking internal
+    from fastapi import Request as FRequest
+    clauses = ["1=1"]
+    params  = []
+
+    if plant:
+        clauses.append("t.plant = %s"); params.append(plant)
+    if order_val:
+        clauses.append('t."order" ILIKE %s'); params.append(f"%{order_val}%")
+    if material:
+        clauses.append("t.material ILIKE %s"); params.append(f"%{material}%")
+    if pr:
+        clauses.append("t.pr ILIKE %s"); params.append(f"%{pr}%")
+    if po:
+        clauses.append("t.po ILIKE %s"); params.append(f"%{po}%")
+    if q:
+        clauses.append("""(t."order" ILIKE %s OR t.material ILIKE %s
+            OR t.material_description ILIKE %s OR t.equipment ILIKE %s)""")
+        params.extend([f"%{q}%"]*4)
+    if status == "with_pr":
+        clauses.append("t.pr IS NOT NULL AND t.pr != ''")
+    elif status == "without_pr":
+        clauses.append("(t.pr IS NULL OR t.pr = '')")
+    elif status == "with_po":
+        clauses.append("t.po IS NOT NULL AND t.po != ''")
+    elif status == "without_po":
+        clauses.append("(t.po IS NULL OR t.po = '')")
+
+    safe_cols = {"t.id","t.plant","t.equipment","t.order","t.material",
+                 "t.qty_reqmts","t.qty_stock","t.pr","t.po","t.qty_deliv"}
+    if order_by not in safe_cols:
+        order_by = "t.id"
+    order_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
+
+    where  = " AND ".join(clauses)
+    offset = (page - 1) * limit
+    total  = query(f'SELECT COUNT(*) AS n FROM taex_reservasi t WHERE {where}', params)[0]["n"]
+    rows   = query(f"""
+        SELECT
+            t.plant, t.equipment, t."order", t.material,
+            t.material_description, t.qty_reqmts, t.qty_stock,
+            t.pr, t.item, t.qty_pr, t.cost_ctrs,
+            t.po, t.po_date, t.qty_deliv, t.delivery_date,
+            t.reqmts_date, t.uom, t.sloc, t.reservno,
+            -- PR data from sap_pr
+            sp.release_date AS pr_release_date, sp.req_date AS pr_req_date,
+            sp.tracking AS pr_tracking, sp.pgr AS pr_pgr,
+            -- PO data from sap_po
+            spo.doc_date AS po_doc_date, spo.deliv_date AS po_deliv_date,
+            spo.net_price AS po_net_price, spo.crcy AS po_currency
+        FROM taex_reservasi t
+        LEFT JOIN sap_pr  sp  ON sp.pr = t.pr  AND sp.item = t.item  AND sp.plant = t.plant
+        LEFT JOIN sap_po  spo ON spo.purchreq = t.pr AND spo.item = t.item
+        WHERE {where}
+        ORDER BY {order_by} {order_dir}
+        LIMIT %s OFFSET %s
+    """, params + [limit, offset])
+
+    data = [dict(r) for r in rows]
+    return jsonify({
+        "@odata.count": int(total),
+        "meta": {
+            "total": int(total), "page": page, "limit": limit,
+            "total_pages": max(1, -(-int(total)//limit)),
+        },
+        "value": data,
+        "data":  data,
+    })
+
+
+@app.get("/api/public/tracking-joblist")
+def public_tracking_joblist(
+    request: Request,
+    page: int = 1,
+    limit: int = 99999,
+    q: str = "",
+    project: str = "",
+    area: str = "",
+    unit: str = "",
+    collective: str = "",
+    status: str = "",
+    plant: str = "",
+    equipment: str = "",
+    order_by: str = "wo.\"order\"",
+    order_dir: str = "ASC",
+):
+    """
+    Public API — Tracking Joblist (WO + Job Detail + Job List + Project + Equipment + Area + Unit).
+
+    **Auth:** Header `x-api-key` atau query `?api_key=`
+
+    **Filter params:**
+    - `q` — pencarian bebas
+    - `project` — filter by project number
+    - `area` — filter by area name
+    - `unit` — filter by unit name
+    - `collective` — filter by collective
+    - `status` — filter by system status WO
+    - `plant` — filter by plant
+    - `equipment` — filter by equipment number
+    - `page`, `limit` — pagination (max 500)
+    """
+    check_public_api_key(request)
+
+    clauses = ["wo.is_deleted = 0"]
+    params  = []
+
+    if plant:
+        clauses.append("jl.plant = %s"); params.append(plant)
+    if project:
+        clauses.append("p.project_number ILIKE %s"); params.append(f"%{project}%")
+    if area:
+        clauses.append("a.area_name ILIKE %s"); params.append(f"%{area}%")
+    if unit:
+        clauses.append("u.unit_name ILIKE %s"); params.append(f"%{unit}%")
+    if collective:
+        clauses.append("jd.collective = %s"); params.append(collective)
+    if status:
+        clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
+    if equipment:
+        clauses.append("eq.equipment_no ILIKE %s"); params.append(f"%{equipment}%")
+    if q:
+        clauses.append("""(wo."order" ILIKE %s OR eq.equipment_no ILIKE %s OR
+            jd.no_joblist_detail ILIKE %s OR jl.no_joblist ILIKE %s OR
+            p.project_number ILIKE %s OR a.area_name ILIKE %s)""")
+        params.extend([f"%{q}%"]*6)
+
+    where  = " AND ".join(clauses)
+    offset = (page-1)*limit
+    total  = query(f"""
+        SELECT COUNT(*) AS n
+        FROM job_detail_work_order wo
+        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        LEFT JOIN job_list       jl  ON jd.joblist_id = jl.id
+        LEFT JOIN project        p   ON jl.project_id = p.id
+        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
+        LEFT JOIN job_unit       u   ON eq.unit_id = u.id
+        LEFT JOIN job_area       a   ON u.area_id = a.id
+        WHERE {where}
+    """, params)[0]["n"]
+
+    rows = query(f"""
+        SELECT
+            p.project_number, p.description AS project_desc,
+            p.project_status, p.finish_date,
+            a.area_name, a.area_alias_name,
+            u.unit_name, u.unit_alias_name,
+            eq.equipment_no, eq.description_of_technical_object AS equipment_desc,
+            eq.functional_location, eq.disiplin, eq.criticallity_text,
+            jl.no_joblist, jl.joblist_description AS jl_desc, jl.plant,
+            jd.no_joblist_detail, jd.joblist_detail_description AS jd_desc,
+            jd.collective, jd.nomor_pm,
+            jd.is_mechanical_integrity, jd.is_material, jd.is_jasa, jd.is_lldii,
+            jd.planning_status_id, jd.planning_material_status_id, jd.planning_jasa_status_id,
+            wo."order", wo.notification, wo.system_status, wo.user_status,
+            wo.total_plnnd_costs, wo.totalact_costs,
+            wo.bas_start_date, wo.basic_fin_date, wo.actual_release,
+            wo.planner_group, wo.wbs_ord_header, wo.cost_center
+        FROM job_detail_work_order wo
+        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        LEFT JOIN job_list       jl  ON jd.joblist_id = jl.id
+        LEFT JOIN project        p   ON jl.project_id = p.id
+        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
+        LEFT JOIN job_unit       u   ON eq.unit_id = u.id
+        LEFT JOIN job_area       a   ON u.area_id = a.id
+        WHERE {where}
+        ORDER BY p.project_number, a.area_name, u.unit_name,
+                 eq.equipment_no, jl.no_joblist, jd.no_joblist_detail, wo."order"
+        LIMIT %s OFFSET %s
+    """, params + [limit, offset])
+
+    data = [dict(r) for r in rows]
+    return jsonify({
+        "@odata.count": int(total),
+        "meta": {
+            "total": int(total), "page": page, "limit": limit,
+            "total_pages": max(1, -(-int(total)//limit)),
+        },
+        "value": data,
+        "data":  data,
+    })
+
+
+@app.get("/api/public/info")
+def public_info(request: Request):
+    """Info public API endpoints yang tersedia."""
+    check_public_api_key(request)
+    return jsonify({
+        "endpoints": [
+            {
+                "method": "GET",
+                "path": "/api/public/tracking",
+                "description": "Tracking material (TA-ex + PR + PO)",
+                "params": ["page","limit","q","order_val","material","pr","po","status","plant"]
+            },
+            {
+                "method": "GET",
+                "path": "/api/public/tracking-joblist",
+                "description": "Tracking Joblist (WO + JD + JL + Project + Equipment + Area + Unit)",
+                "params": ["page","limit","q","project","area","unit","collective","status","plant","equipment"]
+            }
+        ],
+        "auth": "Header 'x-api-key: <key>' atau query param '?api_key=<key>'",
+        "note": "PUBLIC_API_KEY tersedia di environment variable server"
+    })
 
 
 @app.get("/{full_path:path}")
