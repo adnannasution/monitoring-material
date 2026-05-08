@@ -5202,7 +5202,7 @@ async function renderTracking() {
   const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value;
   const fPlant = document.getElementById('trk-filterPlant').value;
-  const pgS    = initPg('trk');
+  const pgS    = getPg('trk');
   const sort   = getSort('trk');
 
   const params = new URLSearchParams({
