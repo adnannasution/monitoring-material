@@ -1015,6 +1015,7 @@ def get_tracking(
     plant: str = "",
     status: str = "",   # "with_pr","without_pr","with_po","without_po","no-pr","pr-created","po-created","partial","complete"
     order_by: str = "t.id", order_dir: str = "ASC",
+    known_total: int = 0,
 ):
     """
     Tracking view berbasis taex_reservasi.
@@ -1178,24 +1179,25 @@ def get_tracking(
         ) wo ON TRUE
     """
 
-    # COUNT tanpa LATERAL JOIN kecuali status partial/complete yang butuh po data
-    needs_po_join = status in ("partial", "complete", "po-created")
-    if needs_po_join:
-        count_res = query(f"SELECT COUNT(*) AS c {base_sql} {where}", params)
+    # COUNT — skip jika known_total sudah ada (page nav tanpa filter berubah)
+    if known_total > 0:
+        total = known_total
     else:
-        # Query COUNT ringan — hanya dari taex_reservasi (index scan, cepat)
-        simple_base = """
-            FROM taex_reservasi t
-            LEFT JOIN LATERAL (
-                SELECT sp.tracking, sp.tracking_no, sp.req_date,
-                       sp.valn_price, sp.pr_curr, sp.pr_per, sp.release_date,
-                       sp.pgr AS pr_pgr
-                FROM sap_pr sp
-                WHERE sp.pr = t.pr AND sp.material = t.material
-                ORDER BY sp.id LIMIT 1
-            ) sp ON TRUE
-        """
-        count_res = query(f"SELECT COUNT(*) AS c {simple_base} {where}", params)
+        needs_po_join = status in ("partial", "complete", "po-created")
+        if needs_po_join:
+            count_res = query(f"SELECT COUNT(*) AS c {base_sql} {where}", params)
+        else:
+            sb = """
+                FROM taex_reservasi t
+                LEFT JOIN LATERAL (
+                    SELECT sp.tracking FROM sap_pr sp
+                    WHERE sp.pr = t.pr AND sp.material = t.material
+                    ORDER BY sp.id LIMIT 1
+                ) sp ON TRUE
+            """
+            count_res = query(f"SELECT COUNT(*) AS c {sb} {where}", params)
+        total = int(count_res[0]["c"])
+
     data_res  = query(
         f"""SELECT
             -- ── Semua kolom taex_reservasi ──
@@ -1347,7 +1349,6 @@ def get_tracking(
             "Changed_by":           r["wo_changed_by"],
         }
 
-    total = int(count_res[0]["c"])
     return jsonify({
         "data": [map_tracking(r) for r in data_res],
         "pagination": {
@@ -1437,7 +1438,7 @@ def get_tracking_counts(request: Request):
     """)
 
     # Query lambat — butuh JOIN ke sap_po (dipisah agar tidak blok load awal)
-    slow = query_one("""
+    slow = query_one(f"""
         SELECT
             COUNT(*) FILTER (
                 WHERE COALESCE(po.po_qty_delivered, 0) > 0

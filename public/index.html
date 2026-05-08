@@ -1356,7 +1356,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="filter-bar">
     <label>Cari:</label>
     <span class="search-wrap">
-      <input type="text" id="trk-search" placeholder="Order, material, PR, PO..." oninput="debounceRender('tracking')">
+      <input type="text" id="trk-search" placeholder="Order, material, PR, PO..." onkeydown="if(event.key==='Enter') trkApplyFilter()">
       <span class="search-clear" onclick="clearSearch('trk-search','tracking')">✕</span>
     </span>
     <label>Status:</label>
@@ -5000,7 +5000,7 @@ function setTrkView(mode) {
 }
 
 function trkSort(key) { setSort('trk', key); renderTracking(); }
-function trkApplyFilter() { resetPg('trk'); renderTracking(); }
+function trkApplyFilter() { trkServerMeta.total = 0; resetPg('trk'); renderTracking(); }
 function trkSearch() { resetPg('trk'); renderTracking(); }
 function trkResetFilter() {
   document.getElementById('trk-search').value = '';
@@ -5210,6 +5210,7 @@ async function renderTracking() {
     plant: fPlant, status: fStat || '',
     order_by: sort.key || 't.id',
     order_dir: sort.dir > 0 ? 'ASC' : 'DESC',
+    known_total: trkServerMeta.total || 0,  // skip COUNT jika filter tidak berubah
   });
 
   const tbody = document.getElementById('trk-tbody');
@@ -5263,7 +5264,7 @@ async function renderTracking() {
 
   const html = [];
 
-  trkFiltered.forEach(item => {
+  rows.forEach(item => {
     const rowCls = (item.Qty_Delivered||0) > 0 ? 'has-po' : item.PO_num ? 'has-po' : item.PR ? 'has-pr' : '';
     html.push(`<tr class="${rowCls}">
       <td class="mono">${D(item.Plant)}</td>
