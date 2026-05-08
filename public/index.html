@@ -4977,6 +4977,7 @@ function exportPoExcel() {
 let trkFiltered = [];
 let trkExpanded = {}; // { orderId: bool } level1 expand state
 let trkExpandedL2 = {}; // { orderId_material: bool } level2 expand state
+let trkServerMeta = { total: 0, totalPages: 1, page: 1, limit: 100 };
 let trkViewMode = 'row'; // 'row' | 'expand'
 
 function setTrkView(mode) {
@@ -5000,6 +5001,7 @@ function setTrkView(mode) {
 
 function trkSort(key) { setSort('trk', key); renderTracking(); }
 function trkApplyFilter() { resetPg('trk'); renderTracking(); }
+function trkSearch() { resetPg('trk'); renderTracking(); }
 function trkResetFilter() {
   document.getElementById('trk-search').value = '';
   document.getElementById('trk-filterStatus').value = '';
@@ -5196,43 +5198,69 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-function renderTracking() {
-  const q      = (document.getElementById('trk-search').value || '').toLowerCase();
+async function renderTracking() {
+  const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value;
   const fPlant = document.getElementById('trk-filterPlant').value;
+  const pgS    = initPg('trk');
+  const sort   = getSort('trk');
 
-  const allRows = buildTrackingData();
-
-  // Populate plant filter
-  const plantSel = document.getElementById('trk-filterPlant');
-  const curPlant = plantSel.value;
-  const plants   = [...new Set(allRows.map(r => r.Plant).filter(Boolean))].sort();
-  plantSel.innerHTML = '<option value="">Semua</option>' + plants.map(p => `<option value="${p}" ${p===curPlant?'selected':''}>${p}</option>`).join('');
-
-  // Filter items
-  let filtered = allRows.filter(r => {
-    const mq = !q || Object.values(r).some(v => v && String(v).toLowerCase().includes(q));
-    const ms = !fStat  || r._status === fStat;
-    const mp = !fPlant || r.Plant   === fPlant;
-    return mq && ms && mp;
+  const params = new URLSearchParams({
+    page: pgS.page, limit: pgS.size, q,
+    plant: fPlant, status: fStat || '',
+    order_by: sort.key || 't.id',
+    order_dir: sort.dir > 0 ? 'ASC' : 'DESC',
   });
 
-  // Update summary cards
-  updateTrackingCards();
-
-  // Sort flat rows
-  trkFiltered = applySort(filtered, 'trk');
-
   const tbody = document.getElementById('trk-tbody');
-  if (!trkFiltered.length) {
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="58">Tidak ada data tracking. Pastikan data TA-ex, Order, PR, dan PO sudah diupload.</td></tr>';
-    document.getElementById('trk-rowCount').textContent = '0 item';
-    renderPagination('trk-pagination','trk',0,1,1,100,renderTracking);
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat data tracking...</td></tr>';
+
+  let result;
+  try { result = await apiFetch(`/api/tracking?${params}`); }
+  catch(e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat: ${e.message}</td></tr>`;
     return;
   }
 
-  const pg   = paginate(trkFiltered, 'trk');
-  const rows = pg.rows;
+  trkServerMeta = result.pagination || { total: 0, totalPages: 1, page: pgS.page, limit: pgS.size };
+  pgState['trk'] = { page: trkServerMeta.page, size: trkServerMeta.limit };
+
+  trkFiltered = (result.data || []).map(r => ({
+    ...r,
+    PR_Item:           r.PR_Item   || r.Item,
+    PO_num:            r.PO        || r.PO_PO,
+    PO_Item:           r.PO_PO_Item,
+    PO_Quantity:       r.PO_Quantity,
+    Qty_Delivered:     r.PO_Qty_Delivered,
+    Deliv_Date:        r.PO_Deliv_Date,
+    Net_Price:         r.PO_Net_Price,
+    Crcy:              r.PO_Crcy,
+    Doc_Date:          r.PO_Doc_Date,
+    Description:       r.WO_Description,
+    System_Status:     r.WO_System_Status,
+    User_Status:       r.WO_User_Status,
+    FunctLocation:     r.WO_Funct_Location,
+    Notification:      r.WO_Notification,
+    Planner_Group:     r.WO_Planner_Group,
+    MainWorkCtr:       r.WO_Main_Work_Ctr,
+    Basic_start_date:  r.WO_Basic_Start,
+    Basic_finish_date: r.WO_Basic_Finish,
+    Actual_Release:    r.WO_Actual_Release,
+    _status: calcItemStatus({
+      PR: r.PR, PO: r.PO || r.PO_PO,
+      PO_Quantity: r.PO_Quantity, Qty_Delivered: r.PO_Qty_Delivered,
+    }),
+  }));
+
+  updateTrackingCards();
+
+  if (!trkFiltered.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="58">Tidak ada data tracking.</td></tr>';
+    document.getElementById('trk-rowCount').textContent = '0 item';
+    renderPagination('trk-pagination','trk',0,1,1,pgS.size,renderTracking);
+    return;
+  }
+
   const html = [];
 
   rows.forEach(item => {
@@ -5300,8 +5328,8 @@ function renderTracking() {
   });
 
   tbody.innerHTML = html.join('');
-  document.getElementById('trk-rowCount').textContent = trkFiltered.length + ' item';
-  renderPagination('trk-pagination','trk',pg.total,pg.page,pg.totalPages,pg.size,renderTracking);
+  document.getElementById('trk-rowCount').textContent = trkServerMeta.total.toLocaleString('id-ID') + ' item';
+  renderPagination('trk-pagination','trk',trkServerMeta.total,trkServerMeta.page,trkServerMeta.totalPages,trkServerMeta.limit,renderTracking);
   reapplyColAfterRender('trk');
 }
 
@@ -5316,26 +5344,22 @@ function toggleTrkL2(l2key) {
   renderTracking();
 }
 
-function updateTrackingCards() {
-  // Gunakan data yang sudah ada di memory, tidak fetch ulang ke server
-  const totalMaterial = taexServerMeta.total || 0;
-  const totalOrder    = [...new Set((state.orderData || []).map(r => r.Order).filter(Boolean))].length;
-  const totalPR       = state._totalPR || 0;
-  const totalPO       = state._totalPO || 0;
-  const noPR          = Math.max(0, totalMaterial - totalPR);
-  const totalNilai    = (state.poData || []).reduce((s, r) => s + (r.Net_Price || 0), 0);
-  const partial       = (state.poData || []).filter(r => (r.Qty_Delivered||0) > 0 && (r.Qty_Delivered||0) < (r.PO_Quantity||0)).length;
-  const complete      = (state.poData || []).filter(r => (r.Qty_Delivered||0) >= (r.PO_Quantity||0) && (r.PO_Quantity||0) > 0).length;
-
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('trk-total-order',    totalOrder);
-  set('trk-total-material', totalMaterial);
-  set('trk-total-pr',       totalPR);
-  set('trk-total-po',       totalPO);
-  set('trk-total-partial',  partial);
-  set('trk-total-complete', complete);
-  set('trk-total-noPR',     noPR);
-  set('trk-total-nilai',    'Rp ' + totalNilai.toLocaleString('id-ID'));
+async function updateTrackingCards() {
+  // Fetch angka card dari server — akurat dari DB, tidak bergantung pada data halaman
+  try {
+    const c = await apiFetch('/api/tracking/counts');
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('trk-total-order',    c.total_order.toLocaleString('id-ID'));
+    set('trk-total-material', c.total_material.toLocaleString('id-ID'));
+    set('trk-total-pr',       c.sudah_pr.toLocaleString('id-ID'));
+    set('trk-total-po',       c.sudah_po.toLocaleString('id-ID'));
+    set('trk-total-partial',  c.partial.toLocaleString('id-ID'));
+    set('trk-total-complete', c.complete.toLocaleString('id-ID'));
+    set('trk-total-noPR',     c.belum_pr.toLocaleString('id-ID'));
+    set('trk-total-nilai',    'Rp ' + c.total_nilai_po.toLocaleString('id-ID'));
+  } catch(e) {
+    console.warn('updateTrackingCards gagal:', e.message);
+  }
 }
 
 function exportTrackingExcel() {

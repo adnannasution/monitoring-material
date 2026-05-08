@@ -1012,7 +1012,8 @@ def get_tracking(
     material: str = "",
     pr: str = "",
     po: str = "",
-    status: str = "",   # "with_pr", "without_pr", "with_po", "without_po"
+    plant: str = "",
+    status: str = "",   # "with_pr","without_pr","with_po","without_po","no-pr","pr-created","po-created","partial","complete"
     order_by: str = "t.id", order_dir: str = "ASC",
 ):
     """
@@ -1058,15 +1059,27 @@ def get_tracking(
     if po:
         conds.append("t.po ILIKE %s"); params.append(f"%{po}%")
 
-    # Filter status PR/PO
-    if status == "with_pr":
+    # Filter plant
+    if plant:
+        conds.append("t.plant = %s"); params.append(plant)
+
+    # Filter status PR/PO/Delivery
+    if status in ("with_pr",):
         conds.append("t.pr IS NOT NULL AND t.pr <> ''")
-    elif status == "without_pr":
+    elif status in ("without_pr", "no-pr"):
         conds.append("(t.pr IS NULL OR t.pr = '')")
     elif status == "with_po":
         conds.append("t.po IS NOT NULL AND t.po <> ''")
     elif status == "without_po":
         conds.append("(t.po IS NULL OR t.po = '')")
+    elif status == "pr-created":
+        conds.append("t.pr IS NOT NULL AND t.pr <> '' AND (t.po IS NULL OR t.po = '')")
+    elif status == "po-created":
+        conds.append("t.po IS NOT NULL AND t.po <> '' AND COALESCE(po.po_qty_delivered, 0) = 0")
+    elif status == "partial":
+        conds.append("COALESCE(po.po_qty_delivered, 0) > 0 AND COALESCE(po.po_qty_delivered, 0) < COALESCE(po.po_quantity, 0)")
+    elif status == "complete":
+        conds.append("COALESCE(po.po_quantity, 0) > 0 AND COALESCE(po.po_qty_delivered, 0) >= COALESCE(po.po_quantity, 0)")
 
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
 
@@ -1135,7 +1148,7 @@ def get_tracking(
             ORDER BY po.id
             LIMIT 1
         ) po ON TRUE
-        -- work_order: kolom yang relevan untuk tracking progress reservasi
+        -- work_order: kolom lengkap untuk tracking
         LEFT JOIN LATERAL (
             SELECT wo.description,
                    wo.system_status,
@@ -1146,7 +1159,18 @@ def get_tracking(
                    wo.notification,
                    wo.funct_location,
                    wo.planner_group,
-                   wo.main_work_ctr
+                   wo.main_work_ctr,
+                   wo.superior_order,
+                   wo.created_on,
+                   wo.location,
+                   wo.wbs_ord_header,
+                   wo.cost_center,
+                   wo.total_plan_cost,
+                   wo.total_act_cost,
+                   wo.entry_by,
+                   wo.changed_by,
+                   wo.revision,
+                   wo.equipment AS wo_equipment
             FROM work_order wo
             WHERE wo."order" = t."order"
             ORDER BY wo.id
@@ -1182,16 +1206,25 @@ def get_tracking(
             po.po_deliv_date, po.po_oun,
             po.po_net_price, po.po_crcy, po.po_per,
             -- ── Kolom work_order yang relevan untuk tracking progress ──
-            wo.description      AS wo_description,
-            wo.system_status    AS wo_system_status,
-            wo.user_status      AS wo_user_status,
-            wo.basic_start_date AS wo_basic_start_date,
+            wo.description       AS wo_description,
+            wo.system_status     AS wo_system_status,
+            wo.user_status       AS wo_user_status,
+            wo.basic_start_date  AS wo_basic_start_date,
             wo.basic_finish_date AS wo_basic_finish_date,
-            wo.actual_release   AS wo_actual_release,
-            wo.notification     AS wo_notification,
-            wo.funct_location   AS wo_funct_location,
-            wo.planner_group    AS wo_planner_group,
-            wo.main_work_ctr    AS wo_main_work_ctr
+            wo.actual_release    AS wo_actual_release,
+            wo.notification      AS wo_notification,
+            wo.funct_location    AS wo_funct_location,
+            wo.planner_group     AS wo_planner_group,
+            wo.main_work_ctr     AS wo_main_work_ctr,
+            wo.superior_order    AS wo_superior_order,
+            wo.created_on        AS wo_created_on,
+            wo.location          AS wo_location,
+            wo.wbs_ord_header    AS wo_wbs_ord_header,
+            wo.cost_center       AS wo_cost_center,
+            wo.total_plan_cost   AS wo_total_plan_cost,
+            wo.total_act_cost    AS wo_total_act_cost,
+            wo.entry_by          AS wo_entry_by,
+            wo.changed_by        AS wo_changed_by
         {base_sql} {where}
         ORDER BY {safe_ob} {safe_dir}
         LIMIT %s OFFSET %s
@@ -1285,6 +1318,16 @@ def get_tracking(
             "WO_Funct_Location":    r["wo_funct_location"],
             "WO_Planner_Group":     r["wo_planner_group"],
             "WO_Main_Work_Ctr":     r["wo_main_work_ctr"],
+            # ── work_order extra fields ──
+            "Superior_Order":       r["wo_superior_order"],
+            "Created_On":           r["wo_created_on"],
+            "Location":             r["wo_location"],
+            "WBS_Ord_header":       r["wo_wbs_ord_header"],
+            "CostCenter":           r["wo_cost_center"],
+            "Total_Plan_Cost":      _n(r["wo_total_plan_cost"]),
+            "Total_Act_Cost":       _n(r["wo_total_act_cost"]),
+            "Entry_by":             r["wo_entry_by"],
+            "Changed_by":           r["wo_changed_by"],
         }
 
     total = int(count_res[0]["c"])
@@ -1349,6 +1392,57 @@ def get_tracking_summary(request: Request):
         "Tracking":       r["tracking"] or "",
         "TrackingNo":     r["tracking_no"] or "",
     } for r in summary])
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRACKING COUNTS — angka untuk summary card di halaman tracking
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking/counts")
+def get_tracking_counts(request: Request):
+    """
+    Hitung semua angka card tracking dalam satu query:
+    - total_material, total_order
+    - sudah_pr, sudah_po, belum_pr
+    - partial, complete
+    - total_nilai_po
+    """
+    check_api_key(request)
+
+    row = query_one("""
+        SELECT
+            COUNT(*)                                                    AS total_material,
+            COUNT(DISTINCT t."order")                                   AS total_order,
+            COUNT(*) FILTER (WHERE t.pr IS NOT NULL AND t.pr <> '')     AS sudah_pr,
+            COUNT(*) FILTER (WHERE t.po IS NOT NULL AND t.po <> '')     AS sudah_po,
+            COUNT(*) FILTER (WHERE t.pr IS NULL    OR  t.pr = '')       AS belum_pr,
+            COUNT(*) FILTER (
+                WHERE COALESCE(po.po_qty_delivered, 0) > 0
+                  AND COALESCE(po.po_qty_delivered, 0) < COALESCE(po.po_quantity, 0)
+            )                                                           AS partial,
+            COUNT(*) FILTER (
+                WHERE COALESCE(po.po_quantity, 0) > 0
+                  AND COALESCE(po.po_qty_delivered, 0) >= COALESCE(po.po_quantity, 0)
+            )                                                           AS complete,
+            COALESCE(SUM(po.po_net_price), 0)                           AS total_nilai_po
+        FROM taex_reservasi t
+        LEFT JOIN LATERAL (
+            SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered, po.net_price AS po_net_price
+            FROM sap_po po
+            WHERE po.po = t.po AND po.material = t.material
+            ORDER BY po.id LIMIT 1
+        ) po ON TRUE
+    """)
+
+    return jsonify({
+        "total_material": int(row["total_material"] or 0),
+        "total_order":    int(row["total_order"]    or 0),
+        "sudah_pr":       int(row["sudah_pr"]       or 0),
+        "sudah_po":       int(row["sudah_po"]       or 0),
+        "belum_pr":       int(row["belum_pr"]       or 0),
+        "partial":        int(row["partial"]        or 0),
+        "complete":       int(row["complete"]       or 0),
+        "total_nilai_po": float(row["total_nilai_po"] or 0),
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
