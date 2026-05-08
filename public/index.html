@@ -5216,7 +5216,7 @@ async function renderTracking() {
   tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat data tracking...</td></tr>';
 
   let result;
-  try { result = await apiFetch(`/api/tracking?${params}`); }
+  try { result = await apiFetch(`/tracking?${params}`); }
   catch(e) {
     tbody.innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat: ${e.message}</td></tr>`;
     return;
@@ -5347,7 +5347,7 @@ function toggleTrkL2(l2key) {
 async function updateTrackingCards() {
   // Fetch angka card dari server — akurat dari DB, tidak bergantung pada data halaman
   try {
-    const c = await apiFetch('/api/tracking/counts');
+    const c = await apiFetch('/tracking/counts');
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('trk-total-order',    c.total_order.toLocaleString('id-ID'));
     set('trk-total-material', c.total_material.toLocaleString('id-ID'));
