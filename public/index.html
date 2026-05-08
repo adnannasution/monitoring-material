@@ -2704,6 +2704,7 @@ let state = {
   taexData: [], prismaReservasiData: [], kkData: [], kkCode: null,
   summaryData: [], kumpulanData: [], prData: [], orderData: [], poData: [], currentApp: 'taex',
   kkCounter: 0, prCounter: 0,
+  taexAllData: null, // cache semua baris taex untuk Tracking (null = belum di-fetch)
 };
 const sortState = {};
 function getSort(tbl) { return sortState[tbl] || {key:null, dir:1}; }
@@ -3646,6 +3647,7 @@ async function pollUploadProgress(jobId, type, meta) {
           setTimeout(() => {
             const meta2 = UPLOAD_META[type];
             if (meta2) {
+              if (type === 'taex') state.taexAllData = null; // invalidate cache tracking
               meta2.renderFn();
               const _p2 = document.getElementById(meta2.previewId); if (_p2) _p2.style.display = 'none';
             }
@@ -5065,7 +5067,7 @@ function buildTrackingData() {
 
   const hasVal = v => v !== null && v !== undefined && String(v).trim() !== '';
 
-  const rows = taexFiltered
+  const rows = (state.taexAllData || [])
     .filter(t => t.Material && String(t.Material).trim() !== '')
     .map(t => {
       const orderKey = String(t.Order || '');
@@ -5196,7 +5198,28 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-function renderTracking() {
+async function renderTracking() {
+  // Pastikan semua data TA-ex sudah di-fetch sebelum build tracking
+  if (!state.taexAllData) {
+    const tbody = document.getElementById('trk-tbody');
+    try {
+      const LIMIT = 5000;
+      tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat semua data TA-ex untuk Tracking...</td></tr>';
+      const first = await apiFetch(`/data/taex?page=1&limit=${LIMIT}`);
+      state.taexAllData = first.data || [];
+      const total = first.pagination?.total || state.taexAllData.length;
+      const totalPages = Math.ceil(total / LIMIT);
+      for (let p = 2; p <= totalPages; p++) {
+        tbody.innerHTML = `<tr class="loading-row"><td colspan="58">⏳ Memuat data TA-ex... (${state.taexAllData.length.toLocaleString('id-ID')} / ${total.toLocaleString('id-ID')} baris)</td></tr>`;
+        const r = await apiFetch(`/data/taex?page=${p}&limit=${LIMIT}`);
+        state.taexAllData.push(...(r.data || []));
+      }
+    } catch(e) {
+      document.getElementById('trk-tbody').innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat data TA-ex: ${e.message}</td></tr>`;
+      return;
+    }
+  }
+
   const q      = (document.getElementById('trk-search').value || '').toLowerCase();
   const fStat  = document.getElementById('trk-filterStatus').value;
   const fPlant = document.getElementById('trk-filterPlant').value;
