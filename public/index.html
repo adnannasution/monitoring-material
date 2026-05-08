@@ -5252,7 +5252,7 @@ async function renderTracking() {
     }),
   }));
 
-  updateTrackingCards();
+  updateTrackingCards(); // fire & forget — jalan paralel dengan render tabel
 
   if (!trkFiltered.length) {
     tbody.innerHTML = '<tr class="loading-row"><td colspan="58">Tidak ada data tracking.</td></tr>';

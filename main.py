@@ -1178,7 +1178,24 @@ def get_tracking(
         ) wo ON TRUE
     """
 
-    count_res = query(f"SELECT COUNT(*) AS c {base_sql} {where}", params)
+    # COUNT tanpa LATERAL JOIN kecuali status partial/complete yang butuh po data
+    needs_po_join = status in ("partial", "complete", "po-created")
+    if needs_po_join:
+        count_res = query(f"SELECT COUNT(*) AS c {base_sql} {where}", params)
+    else:
+        # Query COUNT ringan — hanya dari taex_reservasi (index scan, cepat)
+        simple_base = """
+            FROM taex_reservasi t
+            LEFT JOIN LATERAL (
+                SELECT sp.tracking, sp.tracking_no, sp.req_date,
+                       sp.valn_price, sp.pr_curr, sp.pr_per, sp.release_date,
+                       sp.pgr AS pr_pgr
+                FROM sap_pr sp
+                WHERE sp.pr = t.pr AND sp.material = t.material
+                ORDER BY sp.id LIMIT 1
+            ) sp ON TRUE
+        """
+        count_res = query(f"SELECT COUNT(*) AS c {simple_base} {where}", params)
     data_res  = query(
         f"""SELECT
             -- ── Semua kolom taex_reservasi ──
@@ -1408,40 +1425,49 @@ def get_tracking_counts(request: Request):
     """
     check_api_key(request)
 
-    row = query_one("""
+    # Query cepat — tidak butuh JOIN (index scan saja)
+    fast = query_one("""
         SELECT
-            COUNT(*)                                                    AS total_material,
-            COUNT(DISTINCT t."order")                                   AS total_order,
-            COUNT(*) FILTER (WHERE t.pr IS NOT NULL AND t.pr <> '')     AS sudah_pr,
-            COUNT(*) FILTER (WHERE t.po IS NOT NULL AND t.po <> '')     AS sudah_po,
-            COUNT(*) FILTER (WHERE t.pr IS NULL    OR  t.pr = '')       AS belum_pr,
+            COUNT(*)                                                AS total_material,
+            COUNT(DISTINCT t."order")                               AS total_order,
+            COUNT(*) FILTER (WHERE t.pr IS NOT NULL AND t.pr <> '') AS sudah_pr,
+            COUNT(*) FILTER (WHERE t.po IS NOT NULL AND t.po <> '') AS sudah_po,
+            COUNT(*) FILTER (WHERE t.pr IS NULL OR t.pr = '')       AS belum_pr
+        FROM taex_reservasi t
+    """)
+
+    # Query lambat — butuh JOIN ke sap_po (dipisah agar tidak blok load awal)
+    slow = query_one("""
+        SELECT
             COUNT(*) FILTER (
                 WHERE COALESCE(po.po_qty_delivered, 0) > 0
                   AND COALESCE(po.po_qty_delivered, 0) < COALESCE(po.po_quantity, 0)
-            )                                                           AS partial,
+            )                               AS partial,
             COUNT(*) FILTER (
                 WHERE COALESCE(po.po_quantity, 0) > 0
                   AND COALESCE(po.po_qty_delivered, 0) >= COALESCE(po.po_quantity, 0)
-            )                                                           AS complete,
-            COALESCE(SUM(po.po_net_price), 0)                           AS total_nilai_po
+            )                               AS complete,
+            COALESCE(SUM(po.po_net_price), 0) AS total_nilai_po
         FROM taex_reservasi t
         LEFT JOIN LATERAL (
-            SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered, po.net_price AS po_net_price
+            SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered,
+                   po.net_price AS po_net_price
             FROM sap_po po
             WHERE po.po = t.po AND po.material = t.material
             ORDER BY po.id LIMIT 1
         ) po ON TRUE
+        WHERE t.po IS NOT NULL AND t.po <> ''
     """)
 
     return jsonify({
-        "total_material": int(row["total_material"] or 0),
-        "total_order":    int(row["total_order"]    or 0),
-        "sudah_pr":       int(row["sudah_pr"]       or 0),
-        "sudah_po":       int(row["sudah_po"]       or 0),
-        "belum_pr":       int(row["belum_pr"]       or 0),
-        "partial":        int(row["partial"]        or 0),
-        "complete":       int(row["complete"]       or 0),
-        "total_nilai_po": float(row["total_nilai_po"] or 0),
+        "total_material": int(fast["total_material"] or 0),
+        "total_order":    int(fast["total_order"]    or 0),
+        "sudah_pr":       int(fast["sudah_pr"]       or 0),
+        "sudah_po":       int(fast["sudah_po"]       or 0),
+        "belum_pr":       int(fast["belum_pr"]       or 0),
+        "partial":        int(slow["partial"]        or 0),
+        "complete":       int(slow["complete"]       or 0),
+        "total_nilai_po": float(slow["total_nilai_po"] or 0),
     })
 
 
