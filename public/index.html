@@ -5263,7 +5263,7 @@ async function renderTracking() {
 
   const html = [];
 
-  rows.forEach(item => {
+  trkFiltered.forEach(item => {
     const rowCls = (item.Qty_Delivered||0) > 0 ? 'has-po' : item.PO_num ? 'has-po' : item.PR ? 'has-pr' : '';
     html.push(`<tr class="${rowCls}">
       <td class="mono">${D(item.Plant)}</td>
