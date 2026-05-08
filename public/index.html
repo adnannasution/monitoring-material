@@ -2704,7 +2704,6 @@ let state = {
   taexData: [], prismaReservasiData: [], kkData: [], kkCode: null,
   summaryData: [], kumpulanData: [], prData: [], orderData: [], poData: [], currentApp: 'taex',
   kkCounter: 0, prCounter: 0,
-  taexAllData: null, // cache semua baris taex untuk Tracking (null = belum di-fetch)
 };
 const sortState = {};
 function getSort(tbl) { return sortState[tbl] || {key:null, dir:1}; }
@@ -3647,7 +3646,6 @@ async function pollUploadProgress(jobId, type, meta) {
           setTimeout(() => {
             const meta2 = UPLOAD_META[type];
             if (meta2) {
-              if (type === 'taex') state.taexAllData = null; // invalidate cache tracking
               meta2.renderFn();
               const _p2 = document.getElementById(meta2.previewId); if (_p2) _p2.style.display = 'none';
             }
@@ -5067,7 +5065,7 @@ function buildTrackingData() {
 
   const hasVal = v => v !== null && v !== undefined && String(v).trim() !== '';
 
-  const rows = (state.taexAllData || [])
+  const rows = taexFiltered
     .filter(t => t.Material && String(t.Material).trim() !== '')
     .map(t => {
       const orderKey = String(t.Order || '');
@@ -5198,28 +5196,7 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-async function renderTracking() {
-  // Pastikan semua data TA-ex sudah di-fetch sebelum build tracking
-  if (!state.taexAllData) {
-    const tbody = document.getElementById('trk-tbody');
-    try {
-      const LIMIT = 5000;
-      tbody.innerHTML = '<tr class="loading-row"><td colspan="58">⏳ Memuat semua data TA-ex untuk Tracking...</td></tr>';
-      const first = await apiFetch(`/data/taex?page=1&limit=${LIMIT}`);
-      state.taexAllData = first.data || [];
-      const total = first.pagination?.total || state.taexAllData.length;
-      const totalPages = Math.ceil(total / LIMIT);
-      for (let p = 2; p <= totalPages; p++) {
-        tbody.innerHTML = `<tr class="loading-row"><td colspan="58">⏳ Memuat data TA-ex... (${state.taexAllData.length.toLocaleString('id-ID')} / ${total.toLocaleString('id-ID')} baris)</td></tr>`;
-        const r = await apiFetch(`/data/taex?page=${p}&limit=${LIMIT}`);
-        state.taexAllData.push(...(r.data || []));
-      }
-    } catch(e) {
-      document.getElementById('trk-tbody').innerHTML = `<tr class="loading-row"><td colspan="58">❌ Gagal memuat data TA-ex: ${e.message}</td></tr>`;
-      return;
-    }
-  }
-
+function renderTracking() {
   const q      = (document.getElementById('trk-search').value || '').toLowerCase();
   const fStat  = document.getElementById('trk-filterStatus').value;
   const fPlant = document.getElementById('trk-filterPlant').value;
@@ -5241,7 +5218,7 @@ async function renderTracking() {
   });
 
   // Update summary cards
-  updateTrackingCards(allRows);
+  updateTrackingCards();
 
   // Sort flat rows
   trkFiltered = applySort(filtered, 'trk');
@@ -5339,19 +5316,22 @@ function toggleTrkL2(l2key) {
   renderTracking();
 }
 
-function updateTrackingCards(rows) {
-  const orders   = [...new Set(rows.map(r => r.Order).filter(Boolean))];
-  const hasPR    = rows.filter(r => r.PR).length;
-  const hasPO    = rows.filter(r => r.PO).length;
-  const partial  = rows.filter(r => r._status === 'partial').length;
-  const complete = rows.filter(r => r._status === 'complete').length;
-  const noPR     = rows.filter(r => r._status === 'no-pr').length;
-  const totalNilai = rows.reduce((s, r) => s + (r.Net_Price || 0), 0);
+function updateTrackingCards() {
+  // Gunakan data yang sudah ada di memory, tidak fetch ulang ke server
+  const totalMaterial = taexServerMeta.total || 0;
+  const totalOrder    = [...new Set((state.orderData || []).map(r => r.Order).filter(Boolean))].length;
+  const totalPR       = state._totalPR || 0;
+  const totalPO       = state._totalPO || 0;
+  const noPR          = Math.max(0, totalMaterial - totalPR);
+  const totalNilai    = (state.poData || []).reduce((s, r) => s + (r.Net_Price || 0), 0);
+  const partial       = (state.poData || []).filter(r => (r.Qty_Delivered||0) > 0 && (r.Qty_Delivered||0) < (r.PO_Quantity||0)).length;
+  const complete      = (state.poData || []).filter(r => (r.Qty_Delivered||0) >= (r.PO_Quantity||0) && (r.PO_Quantity||0) > 0).length;
+
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('trk-total-order',    orders.length);
-  set('trk-total-material', rows.length);
-  set('trk-total-pr',       hasPR);
-  set('trk-total-po',       hasPO);
+  set('trk-total-order',    totalOrder);
+  set('trk-total-material', totalMaterial);
+  set('trk-total-pr',       totalPR);
+  set('trk-total-po',       totalPO);
   set('trk-total-partial',  partial);
   set('trk-total-complete', complete);
   set('trk-total-noPR',     noPR);
@@ -7508,6 +7488,6 @@ document.getElementById('login-page').style.display = 'none';
 })();
 
 </script>
- 
+
 </body>
 </html>
