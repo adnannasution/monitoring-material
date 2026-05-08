@@ -575,6 +575,13 @@ def migrate():
         'CREATE INDEX IF NOT EXISTS idx_kumpulan_code   ON kumpulan_summary(code_tracking)',
         'CREATE INDEX IF NOT EXISTS idx_sap_po_po              ON sap_po(po)',
         'CREATE INDEX IF NOT EXISTS idx_sap_po_purchreq        ON sap_po(purchreq)',
+        # ── Index untuk /api/tracking (JOIN + filter) ──
+        'CREATE INDEX IF NOT EXISTS idx_taex_pr        ON taex_reservasi(pr)',
+        'CREATE INDEX IF NOT EXISTS idx_taex_po        ON taex_reservasi(po)',
+        'CREATE INDEX IF NOT EXISTS idx_taex_plant     ON taex_reservasi(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_pr_pr_mat  ON sap_pr(pr, material)',
+        'CREATE INDEX IF NOT EXISTS idx_sap_po_po_mat  ON sap_po(po, material)',
+        'CREATE INDEX IF NOT EXISTS idx_wo_order       ON work_order("order")',
         'CREATE INDEX IF NOT EXISTS idx_job_area_plant      ON job_area(plant)',
         'CREATE INDEX IF NOT EXISTS idx_job_unit_area       ON job_unit(area_id)',
         'CREATE INDEX IF NOT EXISTS idx_job_unit_plant      ON job_unit(plant)',
