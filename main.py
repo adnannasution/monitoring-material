@@ -1058,17 +1058,58 @@ def delete_order(row_id: int, request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
-# VW JOBLIST WO
+# VW JOBLIST WO  — server-side pagination
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/vwjoblistwo")
-def get_vw_joblist_wo(request: Request):
+def get_vw_joblist_wo(
+    request: Request,
+    page: int = 1, limit: int = 100,
+    q: str = "", revision: str = "", disiplin: str = "",
+    planning_jasa: str = "", planning_material: str = "",
+    known_total: int = 0,
+):
     check_api_key(request)
     user = get_current_user(request)
-    clauses, params = ["1=1"], []
-    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
-    where = " AND ".join(clauses)
-    rows = query(f'SELECT * FROM vw_joblist_wo WHERE {where} ORDER BY id', params)
-    return jsonify([map_vw_joblist_wo(r) for r in rows])
+    limit  = min(5000, max(1, limit))
+    offset = (page - 1) * limit
+
+    conds, params = [], []
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+
+    if q:
+        conds.append("""(
+            "order" ILIKE %s OR equipment_no ILIKE %s OR
+            joblist_description ILIKE %s OR description ILIKE %s OR
+            revision ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 5)
+    if revision:
+        conds.append("revision = %s"); params.append(revision)
+    if disiplin:
+        conds.append("disiplin = %s"); params.append(disiplin)
+    if planning_jasa:
+        conds.append("planning_jasa_status = %s"); params.append(planning_jasa)
+    if planning_material:
+        conds.append("planning_material_status = %s"); params.append(planning_material)
+
+    where = " AND ".join(conds) if conds else "1=1"
+
+    total = known_total
+    if not total:
+        total = int(query(f'SELECT COUNT(*) AS c FROM vw_joblist_wo WHERE {where}', params)[0]["c"])
+
+    rows = query(
+        f'SELECT * FROM vw_joblist_wo WHERE {where} ORDER BY id LIMIT %s OFFSET %s',
+        params + [limit, offset]
+    )
+    return jsonify({
+        "data": [map_vw_joblist_wo(r) for r in rows],
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+            "hasMore": offset + limit < total,
+        },
+    })
 
 @app.delete("/api/vwjoblistwo")
 def delete_vw_joblist_wo(request: Request):
@@ -1078,23 +1119,58 @@ def delete_vw_joblist_wo(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
-# VW JOBLIST DETAIL
+# VW JOBLIST DETAIL  — server-side pagination
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/vwjoblistdetail")
-def get_vw_joblist_detail(request: Request):
+def get_vw_joblist_detail(
+    request: Request,
+    page: int = 1, limit: int = 100,
+    q: str = "", revision: str = "", disiplin: str = "",
+    planning_material: str = "", project_status: str = "",
+    known_total: int = 0,
+):
     check_api_key(request)
     user = get_current_user(request)
-    clauses, params = ["1=1"], []
-    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
-    where = " AND ".join(clauses)
-    rows = query(f'SELECT * FROM vw_joblist_detail WHERE {where} ORDER BY inserted_at DESC', params)
-    return jsonify([map_vw_joblist_detail(r) for r in rows])
+    limit  = min(5000, max(1, limit))
+    offset = (page - 1) * limit
 
-@app.delete("/api/vwjoblistdetail")
-def delete_vw_joblist_detail(request: Request):
-    check_api_key(request)
-    execute("DELETE FROM vw_joblist_detail")
-    return {"ok": True}
+    conds, params = [], []
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+
+    if q:
+        conds.append("""(
+            equipment_no ILIKE %s OR no_joblist ILIKE %s OR
+            joblist_detail_desc ILIKE %s OR project_number ILIKE %s OR
+            joblist_description ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 5)
+    if revision:
+        conds.append("revision = %s"); params.append(revision)
+    if disiplin:
+        conds.append("disiplin = %s"); params.append(disiplin)
+    if planning_material:
+        conds.append("planning_material_status = %s"); params.append(planning_material)
+    if project_status:
+        conds.append("project_status = %s"); params.append(project_status)
+
+    where = " AND ".join(conds) if conds else "1=1"
+
+    total = known_total
+    if not total:
+        total = int(query(f'SELECT COUNT(*) AS c FROM vw_joblist_detail WHERE {where}', params)[0]["c"])
+
+    rows = query(
+        f'SELECT * FROM vw_joblist_detail WHERE {where} ORDER BY inserted_at DESC LIMIT %s OFFSET %s',
+        params + [limit, offset]
+    )
+    return jsonify({
+        "data": [map_vw_joblist_detail(r) for r in rows],
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+            "hasMore": offset + limit < total,
+        },
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2877,26 +2953,26 @@ def get_tracking_joblist(
 
 # ═══════════════════════════════════════════════════════════════
 # TRACKING JOBLIST 2 — berbasis vw_joblist_wo + vw_joblist_detail
-# Join via equipment_no (many-to-many)
+# Join via equipment_no, readiness via sap_po (sama seperti tab Tracking)
 # ═══════════════════════════════════════════════════════════════
-@app.get("/api/tracking-joblist2")
-def get_tracking_joblist2(
-    request: Request,
-    project: str = None,
-    area: str = None,
-    unit: str = None,
-    disiplin: str = None,
-    status: str = None,
-    q: str = None,
-):
-    check_api_key(request)
-    user = get_current_user(request)
 
-    clauses = ["1=1"]
+def _build_trkjl2_query(user, page=None, limit=None,
+                         q="", project="", area="", unit="",
+                         disiplin="", status="", known_total=0):
+    """Helper: bangun WHERE + params, return (where, params, total_if_needed)."""
+    clauses = []
     params  = []
 
     pc, pp = plant_clause(user, "wo.plant"); clauses.append(pc); params.extend(pp)
 
+    if q:
+        clauses.append("""(
+            wo."order" ILIKE %s OR wo.equipment_no ILIKE %s OR
+            jld.no_joblist ILIKE %s OR jld.joblist_detail_desc ILIKE %s OR
+            jld.project_number ILIKE %s OR jld.area_name ILIKE %s OR
+            jld.unit_name ILIKE %s OR jld.joblist_description ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 8)
     if project:
         clauses.append("jld.project_number = %s"); params.append(project)
     if area:
@@ -2907,131 +2983,86 @@ def get_tracking_joblist2(
         clauses.append("COALESCE(jld.disiplin, wo.disiplin) = %s"); params.append(disiplin)
     if status:
         clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
-    if q:
-        clauses.append("""(
-            wo."order" ILIKE %s OR wo.equipment_no ILIKE %s OR
-            jld.no_joblist ILIKE %s OR jld.joblist_detail_desc ILIKE %s OR
-            jld.project_number ILIKE %s OR jld.area_name ILIKE %s OR
-            jld.unit_name ILIKE %s OR jld.joblist_description ILIKE %s
-        )""")
-        params.extend([f"%{q}%"] * 8)
 
-    where = " AND ".join(clauses)
+    where = " AND ".join(clauses) if clauses else "1=1"
+    return where, params
 
-    rows = query(f"""
-        SELECT
-            -- Work Order (vw_joblist_wo) — anchor utama
-            wo.id                        AS wo_id,
-            wo."order",
-            wo.notification,
-            wo.system_status,
-            wo.user_status,
-            wo.total_plnnd_costs,
-            wo.totalact_costs,
-            wo.planner_group,
-            wo.main_work_ctr,
-            wo.wbs_ord_header,
-            wo.bas_start_date,
-            wo.basic_fin_date,
-            wo.actual_release,
-            wo.cost_center,
-            wo.plant,
-            wo.equipment_no              AS wo_equipment_no,
-            wo.disiplin                  AS wo_disiplin,
-            wo.joblist_description       AS wo_joblist_description,
-            wo.revision                  AS wo_revision,
-            wo.planning_jasa_status      AS wo_planning_jasa,
-            wo.planning_material_status  AS wo_planning_material,
-            wo.code_name                 AS wo_code_name,
-            wo.is_lldii                  AS wo_is_lldii,
 
-            -- Job Detail (vw_joblist_detail) — via equipment_no
-            jld.id                       AS jld_id,
-            jld.joblist_id,
-            jld.joblist_detail_desc,
-            jld.reason_name,
-            jld.doc_type_name,
-            jld.no_document,
-            jld.is_mechanical_integrity,
-            jld.job_discipline_name,
-            jld.nomor_pm,
-            jld.notes,
-            jld.creator_name,
-            jld.joblist_description,
-            jld.no_joblist,
-            jld.project_number,
-            jld.project_type_code,
-            jld.project_status,
-            jld.start_date               AS project_start,
-            jld.finish_date              AS project_finish,
-            jld.revision,
-            jld.description              AS project_desc,
-            jld.equipment_no,
-            jld.area_name,
-            jld.area_alias_name,
-            jld.unit_name,
-            jld.unit_alias_name,
-            jld.functional_location,
-            jld.location,
-            jld.disiplin,
-            jld.criticallity_text,
-            jld.main_work_center,
-            jld.is_jasa,
-            jld.is_lldii,
-            jld.is_material,
-            jld.code_name                AS jld_code_name,
-            jld.planning_jasa_status     AS jld_planning_jasa,
-            jld.planning_material_status AS jld_planning_material
+SELECT_TRK2 = """
+    SELECT
+        wo.id AS wo_id, wo."order", wo.notification,
+        wo.system_status, wo.user_status,
+        wo.total_plnnd_costs, wo.totalact_costs,
+        wo.planner_group, wo.main_work_ctr, wo.wbs_ord_header,
+        wo.bas_start_date, wo.basic_fin_date, wo.actual_release,
+        wo.cost_center, wo.plant,
+        wo.equipment_no AS wo_equipment_no,
+        wo.disiplin     AS wo_disiplin,
+        wo.joblist_description AS wo_joblist_description,
+        wo.revision     AS wo_revision,
+        wo.planning_jasa_status     AS wo_planning_jasa,
+        wo.planning_material_status AS wo_planning_material,
+        wo.code_name    AS wo_code_name,
+        wo.is_lldii     AS wo_is_lldii,
+        jld.id          AS jld_id,
+        jld.joblist_detail_desc, jld.reason_name,
+        jld.doc_type_name, jld.no_document,
+        jld.is_mechanical_integrity, jld.job_discipline_name,
+        jld.nomor_pm, jld.notes, jld.creator_name,
+        jld.joblist_description, jld.no_joblist,
+        jld.project_number, jld.project_type_code, jld.project_status,
+        jld.start_date AS project_start, jld.finish_date AS project_finish,
+        jld.revision, jld.description AS project_desc,
+        jld.equipment_no, jld.area_name, jld.area_alias_name,
+        jld.unit_name, jld.unit_alias_name,
+        jld.functional_location, jld.location,
+        jld.disiplin, jld.criticallity_text, jld.main_work_center,
+        jld.is_jasa, jld.is_lldii, jld.is_material,
+        jld.code_name AS jld_code_name,
+        jld.planning_jasa_status     AS jld_planning_jasa,
+        jld.planning_material_status AS jld_planning_material
+    FROM vw_joblist_wo wo
+    LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+"""
 
-        FROM vw_joblist_wo wo
-        LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
-        WHERE {where}
-        ORDER BY jld.area_name, jld.unit_name, wo.equipment_no,
-                 jld.project_number, jld.no_joblist, jld.joblist_detail_desc, wo."order"
-    """, params)
+ORDER_TRK2 = """
+    ORDER BY jld.area_name, jld.unit_name, wo.equipment_no,
+             jld.project_number, jld.no_joblist, jld.joblist_detail_desc, wo."order"
+"""
 
-    # ── Readiness dari sap_po (sama dengan logika tab Tracking) ──
-    # Ready per baris = po_quantity > 0 AND po_qty_delivered >= po_quantity
-    # Ready per order = semua baris material-nya ready
+
+def _attach_readiness(rows):
+    """Attach order readiness dari sap_po ke tiap baris."""
     orders = list({r["order"] for r in rows if r["order"]})
     order_readiness = {}
-
     if orders:
-        placeholders = ",".join(["%s"] * len(orders))
+        ph = ",".join(["%s"] * len(orders))
         mat_rows = query(f"""
-            SELECT
-                t."order",
-                COUNT(*)                                                        AS total_mat,
-                SUM(CASE
-                    WHEN COALESCE(po.po_quantity, 0) > 0
-                     AND COALESCE(po.po_qty_delivered, 0) >= po.po_quantity
-                    THEN 1 ELSE 0
-                END)                                                            AS ready_mat
+            SELECT t."order",
+                   COUNT(*) AS total_mat,
+                   SUM(CASE
+                       WHEN COALESCE(po.po_quantity,0) > 0
+                        AND COALESCE(po.po_qty_delivered,0) >= po.po_quantity
+                       THEN 1 ELSE 0 END) AS ready_mat
             FROM taex_reservasi t
             LEFT JOIN LATERAL (
                 SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered
                 FROM sap_po po
                 WHERE po.po = t.po AND po.material = t.material
-                ORDER BY po.id
-                LIMIT 1
+                ORDER BY po.id LIMIT 1
             ) po ON TRUE
-            WHERE t."order" IN ({placeholders})
+            WHERE t."order" IN ({ph})
             GROUP BY t."order"
         """, orders)
         for m in mat_rows:
-            total = int(m["total_mat"] or 0)
-            ready = int(m["ready_mat"] or 0)
+            tot = int(m["total_mat"] or 0)
+            rdy = int(m["ready_mat"] or 0)
             order_readiness[m["order"]] = {
-                "order_ready":         total > 0 and ready == total,
-                "order_readiness_pct": round(ready / total * 100, 1) if total > 0 else 0,
-                "order_total_mat":     total,
-                "order_ready_mat":     ready,
+                "order_ready":         tot > 0 and rdy == tot,
+                "order_readiness_pct": round(rdy / tot * 100, 1) if tot > 0 else 0,
+                "order_total_mat":     tot,
+                "order_ready_mat":     rdy,
             }
-    for o in orders:
-        if o not in order_readiness:
-            order_readiness[o] = {"order_ready": False, "order_readiness_pct": 0,
-                                  "order_total_mat": 0, "order_ready_mat": 0}
-
     result = []
     for r in rows:
         d = dict(r)
@@ -3041,8 +3072,60 @@ def get_tracking_joblist2(
         d["order_total_mat"]     = rd.get("order_total_mat", 0)
         d["order_ready_mat"]     = rd.get("order_ready_mat", 0)
         result.append(d)
+    return result
 
-    return jsonify(result)
+
+@app.get("/api/tracking-joblist2")
+def get_tracking_joblist2(
+    request: Request,
+    page: int = 1, limit: int = 100,
+    q: str = "", project: str = "", area: str = "", unit: str = "",
+    disiplin: str = "", status: str = "", known_total: int = 0,
+):
+    check_api_key(request)
+    user   = get_current_user(request)
+    limit  = min(5000, max(1, limit))
+    offset = (page - 1) * limit
+
+    where, params = _build_trkjl2_query(user, q=q, project=project, area=area,
+                                         unit=unit, disiplin=disiplin, status=status)
+    total = known_total
+    if not total:
+        total = int(query(
+            f"SELECT COUNT(*) AS c FROM vw_joblist_wo wo "
+            f"LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no "
+            f"WHERE {where}", params
+        )[0]["c"])
+
+    rows = query(
+        f"{SELECT_TRK2} WHERE {where} {ORDER_TRK2} LIMIT %s OFFSET %s",
+        params + [limit, offset]
+    )
+    data = _attach_readiness(rows)
+
+    return jsonify({
+        "data": data,
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+            "hasMore": offset + limit < total,
+        },
+    })
+
+
+@app.get("/api/tracking-joblist2/all")
+def get_tracking_joblist2_all(
+    request: Request,
+    q: str = "", project: str = "", area: str = "", unit: str = "",
+    disiplin: str = "", status: str = "",
+):
+    """Get all rows (tanpa pagination) — untuk keperluan export Excel."""
+    check_api_key(request)
+    user  = get_current_user(request)
+    where, params = _build_trkjl2_query(user, q=q, project=project, area=area,
+                                         unit=unit, disiplin=disiplin, status=status)
+    rows = query(f"{SELECT_TRK2} WHERE {where} {ORDER_TRK2}", params)
+    return jsonify(_attach_readiness(rows))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -3419,6 +3502,90 @@ def public_tracking_joblist(
     })
 
 
+@app.get("/api/public/tracking-joblist2")
+def public_tracking_joblist2(
+    request: Request,
+    page: int = 1,
+    limit: int = 99999,
+    q: str = "",
+    project: str = "",
+    area: str = "",
+    unit: str = "",
+    disiplin: str = "",
+    status: str = "",
+    plant: str = "",
+):
+    """
+    Public API — Tracking Joblist 2 (vw_joblist_wo + vw_joblist_detail via equipment_no).
+
+    **Auth:** Header `x-api-key` atau query `?api_key=`
+
+    **Filter params:**
+    - `q`        — pencarian bebas (order, equipment, project, no_joblist)
+    - `project`  — filter by project number
+    - `area`     — filter by area name
+    - `unit`     — filter by unit name
+    - `disiplin` — filter by disiplin
+    - `status`   — filter by system status WO
+    - `plant`    — filter by plant code
+    - `page`, `limit` — pagination (default: semua data)
+    """
+    check_public_api_key(request)
+
+    limit  = min(99999, max(1, limit))
+    offset = (page - 1) * limit
+
+    # Pakai helper yang sama dengan endpoint internal
+    # tapi tanpa user session — plant dari query param
+    clauses = []
+    params  = []
+
+    if plant:
+        clauses.append("wo.plant = %s"); params.append(plant)
+    if q:
+        clauses.append("""(
+            wo."order" ILIKE %s OR wo.equipment_no ILIKE %s OR
+            jld.no_joblist ILIKE %s OR jld.joblist_detail_desc ILIKE %s OR
+            jld.project_number ILIKE %s OR jld.area_name ILIKE %s OR
+            jld.unit_name ILIKE %s OR jld.joblist_description ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 8)
+    if project:
+        clauses.append("jld.project_number ILIKE %s"); params.append(f"%{project}%")
+    if area:
+        clauses.append("jld.area_name ILIKE %s"); params.append(f"%{area}%")
+    if unit:
+        clauses.append("jld.unit_name ILIKE %s"); params.append(f"%{unit}%")
+    if disiplin:
+        clauses.append("COALESCE(jld.disiplin, wo.disiplin) ILIKE %s"); params.append(f"%{disiplin}%")
+    if status:
+        clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
+
+    where = " AND ".join(clauses) if clauses else "1=1"
+
+    total = query(
+        f"SELECT COUNT(*) AS c FROM vw_joblist_wo wo "
+        f"LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no "
+        f"WHERE {where}", params
+    )[0]["c"]
+
+    rows = query(
+        f"{SELECT_TRK2} WHERE {where} {ORDER_TRK2} LIMIT %s OFFSET %s",
+        params + [limit, offset]
+    )
+    data = _attach_readiness(rows)
+
+    return jsonify({
+        "@odata.count": int(total),
+        "meta": {
+            "total": int(total), "page": page, "limit": limit,
+            "total_pages": max(1, -(-int(total) // limit)),
+        },
+        "value": data,
+        "data":  data,
+    })
+
+
 @app.get("/api/public/info")
 def public_info(request: Request):
     """Info public API endpoints yang tersedia."""
@@ -3436,7 +3603,13 @@ def public_info(request: Request):
                 "path": "/api/public/tracking-joblist",
                 "description": "Tracking Joblist (WO + JD + JL + Project + Equipment + Area + Unit)",
                 "params": ["page","limit","q","project","area","unit","collective","status","plant","equipment"]
-            }
+            },
+            {
+                "method": "GET",
+                "path": "/api/public/tracking-joblist2",
+                "description": "Tracking Joblist 2 (vw_joblist_wo + vw_joblist_detail via equipment_no + readiness)",
+                "params": ["page","limit","q","project","area","unit","disiplin","status","plant"]
+            },
         ],
         "auth": "Header 'x-api-key: <key>' atau query param '?api_key=<key>'",
         "note": "PUBLIC_API_KEY tersedia di environment variable server"
