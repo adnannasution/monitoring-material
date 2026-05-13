@@ -7482,27 +7482,34 @@ function renderTrkJl2() {
     <table style="width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px">
       <thead>
         <tr>
-          <th colspan="3" style="background:#065f46;text-align:center;border-right:2px solid #fff">🗺 Area / Unit</th>
-          <th colspan="3" style="background:#3b1f6e;text-align:center;border-right:2px solid #fff">⚙️ Equipment</th>
           <th colspan="3" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
-          <th colspan="4" style="background:#14532d;text-align:center;border-right:2px solid #fff">📝 Job Detail</th>
+          <th colspan="3" style="background:#065f46;text-align:center;border-right:2px solid #fff">🗺 Area</th>
+          <th colspan="2" style="background:#1e3a5f;text-align:center;border-right:2px solid #fff">🏭 Unit</th>
+          <th colspan="3" style="background:#3b1f6e;text-align:center;border-right:2px solid #fff">⚙️ Equipment</th>
+          <th colspan="2" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">📋 Joblist</th>
+          <th colspan="3" style="background:#14532d;text-align:center;border-right:2px solid #fff">📝 Job Detail</th>
           <th colspan="6" style="background:#374151;text-align:center">🔧 Work Order</th>
         </tr>
         <tr>
-          <!-- Area/Unit -->
-          <th style="background:#065f46;color:#fff">Area</th>
-          <th style="background:#065f46;color:#fff">Unit</th>
-          <th style="background:#065f46;color:#fff;border-right:2px solid #fff">Alias</th>
-          <!-- Equipment -->
-          <th style="background:#3b1f6e;color:#fff">Eq. No.</th>
-          <th style="background:#3b1f6e;color:#fff">Disiplin</th>
-          <th style="background:#3b1f6e;color:#fff;border-right:2px solid #fff">Criticality</th>
           <!-- Project -->
           <th style="background:#7c2d12;color:#fff">No. Project</th>
           <th style="background:#7c2d12;color:#fff">Status</th>
           <th style="background:#7c2d12;color:#fff;border-right:2px solid #fff">Revision</th>
+          <!-- Area -->
+          <th style="background:#065f46;color:#fff">Area</th>
+          <th style="background:#065f46;color:#fff">Alias Area</th>
+          <th style="background:#065f46;color:#fff;border-right:2px solid #fff">Plant</th>
+          <!-- Unit -->
+          <th style="background:#1e3a5f;color:#fff">Unit</th>
+          <th style="background:#1e3a5f;color:#fff;border-right:2px solid #fff">Alias Unit</th>
+          <!-- Equipment -->
+          <th style="background:#3b1f6e;color:#fff">Eq. No.</th>
+          <th style="background:#3b1f6e;color:#fff">Disiplin</th>
+          <th style="background:#3b1f6e;color:#fff;border-right:2px solid #fff">Criticality</th>
+          <!-- Joblist -->
+          <th style="background:#7c2d12;color:#fff">No. Joblist</th>
+          <th style="background:#7c2d12;color:#fff;border-right:2px solid #fff">Joblist Desc</th>
           <!-- Job Detail -->
-          <th style="background:#14532d;color:#fff">No. Joblist</th>
           <th style="background:#14532d;color:#fff">Job Detail Desc</th>
           <th style="background:#14532d;color:#fff">Mat/Jasa</th>
           <th style="background:#14532d;color:#fff;border-right:2px solid #fff">Planning Material</th>
@@ -7517,20 +7524,25 @@ function renderTrkJl2() {
       </thead>
       <tbody>
         ${slice.map((r, i) => `<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #f0f0f0">
-          <!-- Area/Unit -->
-          <td style="font-size:11px">${D(r.area_name)||'—'}</td>
-          <td style="font-size:11px">${D(r.unit_name)||'—'}</td>
-          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.area_alias_name)||'—'}</td>
-          <!-- Equipment -->
-          <td style="font-weight:600;color:#1a56db">${D(r.equipment_no)||'—'}</td>
-          <td><span class="badge badge-${DIS_COLOR[r.disiplin]||'gray'}" style="font-size:10px">${D(r.disiplin)||'—'}</span></td>
-          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.criticallity_text)||'—'}</td>
           <!-- Project -->
           <td style="font-weight:600">${D(r.project_number)||'—'}</td>
           <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}" style="font-size:10px">${D(r.project_status)||'—'}</span></td>
-          <td style="border-right:2px solid #e5e7eb">${D(r.revision)||'—'}</td>
+          <td style="border-right:2px solid #e5e7eb">${D(r.revision||r.wo_revision)||'—'}</td>
+          <!-- Area -->
+          <td style="font-size:11px">${D(r.area_name)||'—'}</td>
+          <td style="font-size:11px">${D(r.area_alias_name)||'—'}</td>
+          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.plant)||'—'}</td>
+          <!-- Unit -->
+          <td style="font-size:11px">${D(r.unit_name)||'—'}</td>
+          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.unit_alias_name)||'—'}</td>
+          <!-- Equipment -->
+          <td style="font-weight:600;color:#1a56db">${D(r.equipment_no||r.wo_equipment_no)||'—'}</td>
+          <td><span class="badge badge-${DIS_COLOR[r.disiplin||r.wo_disiplin]||'gray'}" style="font-size:10px">${D(r.disiplin||r.wo_disiplin)||'—'}</span></td>
+          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.criticallity_text)||'—'}</td>
+          <!-- Joblist -->
+          <td style="font-size:11px;font-weight:600;color:#7c2d12">${D(r.no_joblist)||'—'}</td>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;border-right:2px solid #e5e7eb" title="${r.joblist_description||r.wo_joblist_description||''}">${D(r.joblist_description||r.wo_joblist_description)||'—'}</td>
           <!-- Job Detail -->
-          <td style="font-size:11px;color:#7c2d12;font-weight:600">${D(r.no_joblist)||'—'}</td>
           <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${r.joblist_detail_desc||''}">${D(r.joblist_detail_desc)||'—'}</td>
           <td style="font-size:10px">${tags2(r)}</td>
           <td style="font-size:10px;border-right:2px solid #e5e7eb">${D(r.jld_planning_material)||'—'}</td>

@@ -2895,7 +2895,7 @@ def get_tracking_joblist2(
     clauses = ["1=1"]
     params  = []
 
-    pc, pp = plant_clause(user, "jld.plant"); clauses.append(pc); params.extend(pp)
+    pc, pp = plant_clause(user, "wo.plant"); clauses.append(pc); params.extend(pp)
 
     if project:
         clauses.append("jld.project_number = %s"); params.append(project)
@@ -2909,7 +2909,7 @@ def get_tracking_joblist2(
         clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
     if q:
         clauses.append("""(
-            wo."order" ILIKE %s OR jld.equipment_no ILIKE %s OR
+            wo."order" ILIKE %s OR wo.equipment_no ILIKE %s OR
             jld.no_joblist ILIKE %s OR jld.joblist_detail_desc ILIKE %s OR
             jld.project_number ILIKE %s OR jld.area_name ILIKE %s OR
             jld.unit_name ILIKE %s OR jld.joblist_description ILIKE %s
@@ -2920,47 +2920,8 @@ def get_tracking_joblist2(
 
     rows = query(f"""
         SELECT
-            -- Job Detail (vw_joblist_detail)
-            jld.id                      AS jld_id,
-            jld.joblist_id,
-            jld.joblist_detail_desc,
-            jld.reason_name,
-            jld.doc_type_name,
-            jld.no_document,
-            jld.is_mechanical_integrity,
-            jld.job_discipline_name,
-            jld.nomor_pm,
-            jld.notes,
-            jld.plant,
-            jld.creator_name,
-            jld.joblist_description,
-            jld.no_joblist,
-            jld.project_number,
-            jld.project_type_code,
-            jld.project_status,
-            jld.start_date              AS project_start,
-            jld.finish_date             AS project_finish,
-            jld.revision,
-            jld.description             AS project_desc,
-            jld.equipment_no,
-            jld.area_name,
-            jld.area_alias_name,
-            jld.unit_name,
-            jld.unit_alias_name,
-            jld.functional_location,
-            jld.location,
-            jld.disiplin,
-            jld.criticallity_text,
-            jld.main_work_center,
-            jld.is_jasa,
-            jld.is_lldii,
-            jld.is_material,
-            jld.code_name               AS jld_code_name,
-            jld.planning_jasa_status    AS jld_planning_jasa,
-            jld.planning_material_status AS jld_planning_material,
-
-            -- Work Order (vw_joblist_wo)
-            wo.id                       AS wo_id,
+            -- Work Order (vw_joblist_wo) — anchor utama
+            wo.id                        AS wo_id,
             wo."order",
             wo.notification,
             wo.system_status,
@@ -2974,41 +2935,102 @@ def get_tracking_joblist2(
             wo.basic_fin_date,
             wo.actual_release,
             wo.cost_center,
-            wo.joblist_description      AS wo_joblist_description,
-            wo.planning_jasa_status     AS wo_planning_jasa,
-            wo.planning_material_status AS wo_planning_material,
-            wo.code_name                AS wo_code_name,
-            wo.is_lldii                 AS wo_is_lldii
+            wo.plant,
+            wo.equipment_no              AS wo_equipment_no,
+            wo.disiplin                  AS wo_disiplin,
+            wo.joblist_description       AS wo_joblist_description,
+            wo.revision                  AS wo_revision,
+            wo.planning_jasa_status      AS wo_planning_jasa,
+            wo.planning_material_status  AS wo_planning_material,
+            wo.code_name                 AS wo_code_name,
+            wo.is_lldii                  AS wo_is_lldii,
 
-        FROM vw_joblist_detail jld
-        LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
+            -- job_detail_work_order — link eksplisit
+            jdwo.id                      AS jdwo_id,
+            jdwo.joblist_detail_id,
+
+            -- Job Detail (vw_joblist_detail) — via job_detail_work_order
+            jld.id                       AS jld_id,
+            jld.joblist_id,
+            jld.joblist_detail_desc,
+            jld.reason_name,
+            jld.doc_type_name,
+            jld.no_document,
+            jld.is_mechanical_integrity,
+            jld.job_discipline_name,
+            jld.nomor_pm,
+            jld.notes,
+            jld.creator_name,
+            jld.joblist_description,
+            jld.no_joblist,
+            jld.project_number,
+            jld.project_type_code,
+            jld.project_status,
+            jld.start_date               AS project_start,
+            jld.finish_date              AS project_finish,
+            jld.revision,
+            jld.description              AS project_desc,
+            jld.equipment_no,
+            jld.area_name,
+            jld.area_alias_name,
+            jld.unit_name,
+            jld.unit_alias_name,
+            jld.functional_location,
+            jld.location,
+            jld.disiplin,
+            jld.criticallity_text,
+            jld.main_work_center,
+            jld.is_jasa,
+            jld.is_lldii,
+            jld.is_material,
+            jld.code_name                AS jld_code_name,
+            jld.planning_jasa_status     AS jld_planning_jasa,
+            jld.planning_material_status AS jld_planning_material
+
+        FROM vw_joblist_wo wo
+        LEFT JOIN job_detail_work_order jdwo ON jdwo."order" = wo."order"
+        LEFT JOIN vw_joblist_detail jld      ON jld.id::text = jdwo.joblist_detail_id::text
         WHERE {where}
-        ORDER BY jld.area_name, jld.unit_name, jld.equipment_no,
+        ORDER BY jld.area_name, jld.unit_name, wo.equipment_no,
                  jld.project_number, jld.no_joblist, jld.joblist_detail_desc, wo."order"
     """, params)
 
-    # ── Readiness dari taex_reservasi ──────────────────────────
+    # ── Readiness dari sap_po (sama dengan logika tab Tracking) ──
+    # Ready per baris = po_quantity > 0 AND po_qty_delivered >= po_quantity
+    # Ready per order = semua baris material-nya ready
     orders = list({r["order"] for r in rows if r["order"]})
     order_readiness = {}
 
     if orders:
         placeholders = ",".join(["%s"] * len(orders))
         mat_rows = query(f"""
-            SELECT "order",
-                   COUNT(*) AS total_mat,
-                   SUM(CASE WHEN COALESCE(qty_deliv,0) >= qty_reqmts AND qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
-            FROM taex_reservasi
-            WHERE "order" IN ({placeholders})
-            GROUP BY "order"
+            SELECT
+                t."order",
+                COUNT(*)                                                        AS total_mat,
+                SUM(CASE
+                    WHEN COALESCE(po.po_quantity, 0) > 0
+                     AND COALESCE(po.po_qty_delivered, 0) >= po.po_quantity
+                    THEN 1 ELSE 0
+                END)                                                            AS ready_mat
+            FROM taex_reservasi t
+            LEFT JOIN LATERAL (
+                SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered
+                FROM sap_po po
+                WHERE po.po = t.po AND po.material = t.material
+                ORDER BY po.id
+                LIMIT 1
+            ) po ON TRUE
+            WHERE t."order" IN ({placeholders})
+            GROUP BY t."order"
         """, orders)
         for m in mat_rows:
             total = int(m["total_mat"] or 0)
             ready = int(m["ready_mat"] or 0)
             order_readiness[m["order"]] = {
-                "order_ready": total > 0 and ready == total,
+                "order_ready":         total > 0 and ready == total,
                 "order_readiness_pct": round(ready / total * 100, 1) if total > 0 else 0,
-                "order_total_mat": total,
-                "order_ready_mat": ready,
+                "order_total_mat":     total,
+                "order_ready_mat":     ready,
             }
     for o in orders:
         if o not in order_readiness:
