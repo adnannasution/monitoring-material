@@ -853,7 +853,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <label>Cari:</label>
     <span class="search-wrap"><input type="text" id="pr-search" placeholder="Material, deskripsi..." oninput="debounceRender('prisma-reservasi')"><span class="search-clear" onclick="clearSearch('pr-search','prisma-reservasi')">✕</span></span>
     <label>Order:</label>
-    <select id="pr-filterOrder"><option value="">Semua</option></select>
+    <span class="search-wrap"><input type="text" id="pr-filterOrder" placeholder="No. Order..." oninput="debounceRender('prisma-reservasi')"><span class="search-clear" onclick="clearSearch('pr-filterOrder','prisma-reservasi')">✕</span></span>
     <button class="btn btn-search" onclick="prismaReservasiApplyFilter()">Cari</button>
     <button class="btn btn-reset" onclick="prismaReservasiResetFilter()">Reset</button>
     <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Get from TA-ex</button>
@@ -3239,23 +3239,18 @@ function renderPage(app) {
 function populateFilters() {
   // Filter PR taex: dari halaman saat ini
   const sel1 = document.getElementById('taex-filterPR');
-  sel1.innerHTML = '<option value="">Semua</option>';
-  [...new Set(taexFiltered.map(r=>r.PR).filter(Boolean))].sort().forEach(p => sel1.innerHTML += `<option value="${p}">${p}</option>`);
-  // Filter Order prisma: fetch dari server agar lengkap meski data ribuan baris
-  apiFetch('/prisma/meta').then(meta => {
-    const sel2 = document.getElementById('pr-filterOrder');
-    sel2.innerHTML = '<option value="">Semua Order</option>';
-    (meta.orders || []).forEach(o => sel2.innerHTML += `<option value="${o}">${o}</option>`);
-  }).catch(() => {
-    // fallback ke state jika gagal
-    const sel2 = document.getElementById('pr-filterOrder');
-    sel2.innerHTML = '<option value="">Semua Order</option>';
-    [...new Set(state.prismaReservasiData.map(r=>r.Order).filter(Boolean))].sort()
-      .forEach(o => sel2.innerHTML += `<option value="${o}">${o}</option>`);
-  });
+  if (sel1) {
+    sel1.innerHTML = '<option value="">Semua</option>';
+    [...new Set(taexFiltered.map(r=>r.PR).filter(Boolean))].sort()
+      .forEach(p => sel1.innerHTML += `<option value="${p}">${p}</option>`);
+  }
+  // Filter Kumpulan Code
   const sel3 = document.getElementById('ks-filterCode');
-  sel3.innerHTML = '<option value="">Semua</option>';
-  [...new Set(state.kumpulanData.map(r=>r.CodeTracking).filter(Boolean))].sort().forEach(c => sel3.innerHTML += `<option value="${c}">${c}</option>`);
+  if (sel3) {
+    sel3.innerHTML = '<option value="">Semua</option>';
+    [...new Set(state.kumpulanData.map(r=>r.CodeTracking).filter(Boolean))].sort()
+      .forEach(c => sel3.innerHTML += `<option value="${c}">${c}</option>`);
+  }
 }
 
 const D = v => (v===null||v===undefined||v==='')?'<span style="color:#d1d5db">—</span>':v;
@@ -3417,7 +3412,7 @@ function prismaReservasiResetFilter() { document.getElementById('pr-search').val
 
 async function fetchAndRenderPrisma() {
   const q   = (document.getElementById('pr-search')?.value||'').trim();
-  const ord = document.getElementById('pr-filterOrder')?.value||'';
+  const ord = (document.getElementById('pr-filterOrder')?.value||'').trim();
   const pg  = getPg('prisma');
   const params = new URLSearchParams({ page:pg.page, limit:pg.size, order_by:prSortKey, order_dir:prSortDir });
   if(q)   params.set('q', q);

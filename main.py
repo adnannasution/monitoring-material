@@ -667,9 +667,15 @@ def get_prisma(request: Request):
 @app.get("/api/prisma/meta")
 def prisma_meta(request: Request):
     check_api_key(request)
-    orders = query('SELECT DISTINCT "order" FROM prisma_reservasi WHERE "order" IS NOT NULL ORDER BY "order"')
-    pgs    = query('SELECT DISTINCT pg FROM prisma_reservasi WHERE pg IS NOT NULL ORDER BY pg')
-    return {"orders": [r["order"] for r in orders], "pgs": [r["pg"] for r in pgs]}
+    total = query('SELECT COUNT(DISTINCT "order") AS c FROM prisma_reservasi')[0]["c"]
+    # Jika terlalu banyak unique order, jangan return semua (akan freeze browser)
+    if int(total) > 500:
+        orders = []  # filter order via text search, bukan dropdown
+    else:
+        orders = query('SELECT DISTINCT "order" FROM prisma_reservasi WHERE "order" IS NOT NULL ORDER BY "order"')
+        orders = [r["order"] for r in orders]
+    pgs = query('SELECT DISTINCT pg FROM prisma_reservasi WHERE pg IS NOT NULL ORDER BY pg')
+    return {"orders": orders, "total_orders": int(total), "pgs": [r["pg"] for r in pgs]}
 
 @app.put("/api/prisma")
 async def put_prisma(request: Request):
@@ -3539,7 +3545,7 @@ def public_tracking_joblist2(
     # tapi tanpa user session — plant dari query param
     clauses = []
     params  = []
- 
+
     if plant:
         clauses.append("wo.plant = %s"); params.append(plant)
     if q:
