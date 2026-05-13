@@ -3539,7 +3539,7 @@ def public_tracking_joblist2(
     # tapi tanpa user session — plant dari query param
     clauses = []
     params  = []
-
+ 
     if plant:
         clauses.append("wo.plant = %s"); params.append(plant)
     if q:
