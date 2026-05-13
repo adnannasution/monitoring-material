@@ -732,6 +732,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-jobarea" onclick="switchApp('jobarea')">🗺 Area<span class="tab-badge" id="badge-jobarea">0</span></div>
   <div class="tab" id="tab-jobunit" onclick="switchApp('jobunit')">🏭 Unit<span class="tab-badge" id="badge-jobunit">0</span></div>
   <div class="tab" id="tab-tracking-joblist" onclick="switchApp('tracking-joblist')">🔗 Tracking Joblist<span class="tab-badge" id="badge-trk-jl">0</span></div>
+  <div class="tab" id="tab-vw-joblist-wo" onclick="switchApp('vw-joblist-wo')">📊 VW Joblist WO<span class="tab-badge" id="badge-vwjlwo">0</span></div>
+  <div class="tab" id="tab-vw-joblist-detail" onclick="switchApp('vw-joblist-detail')">📋 VW Joblist Detail<span class="tab-badge" id="badge-vwjld">0</span></div>
+  <div class="tab" id="tab-tracking-joblist2" onclick="switchApp('tracking-joblist2')">🔗 Tracking Joblist 2<span class="tab-badge" id="badge-trk-jl2">0</span></div>
 </div>
 
 <!-- BODY -->
@@ -1917,6 +1920,181 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: VW JOBLIST WO                                        -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-vw-joblist-wo">
+  <div class="info-bar" id="vwjlwo-info-bar">
+    <span>Total WO: <b id="vwjlwo-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Plan Cost: <b id="vwjlwo-total-plan">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Act. Cost: <b id="vwjlwo-total-act">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openVwJlWoUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+    <button class="btn btn-danger" onclick="deleteVwJlWo()" style="margin-left:4px">🗑 Hapus Semua</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="vwjlwo-search" placeholder="Order, equipment, deskripsi, revision..." oninput="debounceRender('vw-joblist-wo')">
+      <span class="search-clear" onclick="clearSearch('vwjlwo-search','vw-joblist-wo')">✕</span>
+    </span>
+    <label>Revision:</label>
+    <select id="vwjlwo-filter-revision" onchange="renderVwJlWo()"><option value="">Semua</option></select>
+    <label>Disiplin:</label>
+    <select id="vwjlwo-filter-disiplin" onchange="renderVwJlWo()"><option value="">Semua</option></select>
+    <label>Status Jasa:</label>
+    <select id="vwjlwo-filter-jasa" onchange="renderVwJlWo()"><option value="">Semua</option></select>
+    <label>Status Material:</label>
+    <select id="vwjlwo-filter-material" onchange="renderVwJlWo()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderVwJlWo()">Cari</button>
+    <button class="btn btn-reset" onclick="vwJlWoResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportVwJlWoExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="vwjlwo-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="vwjlwo-table">
+        <thead><tr>
+          <th>Plant</th>
+          <th>Equipment No</th>
+          <th>Disiplin</th>
+          <th>Joblist Description</th>
+          <th>Order</th>
+          <th>Notification</th>
+          <th>Revision</th>
+          <th>Description</th>
+          <th>Functional Loc</th>
+          <th>System Status</th>
+          <th>User Status</th>
+          <th>Planner Group</th>
+          <th>Main Work Ctr</th>
+          <th>Total Plan Cost</th>
+          <th>Total Act. Cost</th>
+          <th>Basic Start</th>
+          <th>Basic Finish</th>
+          <th>Actual Release</th>
+          <th>Planning Jasa</th>
+          <th>Planning Material</th>
+          <th>Code Name</th>
+          <th>LLDII</th>
+        </tr></thead>
+        <tbody id="vwjlwo-tbody">
+          <tr class="loading-row"><td colspan="22">Memuat data VW Joblist WO...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="vwjlwo-pagination"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: VW JOBLIST DETAIL                                    -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-vw-joblist-detail">
+  <div class="info-bar" id="vwjld-info-bar">
+    <span>Total Detail: <b id="vwjld-total">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openVwJldUploadModal()" style="margin-left:4px">📥 Upload Excel</button>
+    <button class="btn btn-danger" onclick="deleteVwJld()" style="margin-left:4px">🗑 Hapus Semua</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="vwjld-search" placeholder="Equipment, no joblist, deskripsi, project..." oninput="debounceRender('vw-joblist-detail')">
+      <span class="search-clear" onclick="clearSearch('vwjld-search','vw-joblist-detail')">✕</span>
+    </span>
+    <label>Revision:</label>
+    <select id="vwjld-filter-revision" onchange="renderVwJld()"><option value="">Semua</option></select>
+    <label>Disiplin:</label>
+    <select id="vwjld-filter-disiplin" onchange="renderVwJld()"><option value="">Semua</option></select>
+    <label>Status Material:</label>
+    <select id="vwjld-filter-material" onchange="renderVwJld()"><option value="">Semua</option></select>
+    <label>Project Status:</label>
+    <select id="vwjld-filter-proj-status" onchange="renderVwJld()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderVwJld()">Cari</button>
+    <button class="btn btn-reset" onclick="vwJldResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportVwJldExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="vwjld-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="vwjld-table">
+        <thead><tr>
+          <th>No Joblist</th>
+          <th>Joblist Description</th>
+          <th>Job Detail Desc</th>
+          <th>Equipment No</th>
+          <th>Revision</th>
+          <th>Project Number</th>
+          <th>Project Status</th>
+          <th>Disiplin</th>
+          <th>Area</th>
+          <th>Unit</th>
+          <th>Functional Loc</th>
+          <th>Reason</th>
+          <th>Doc Type</th>
+          <th>No Document</th>
+          <th>Main Work Center</th>
+          <th>Planning Jasa</th>
+          <th>Planning Material</th>
+          <th>Code Name</th>
+          <th>Criticallity</th>
+          <th>Is Jasa</th>
+          <th>Is Material</th>
+          <th>LLDII</th>
+          <th>Creator</th>
+        </tr></thead>
+        <tbody id="vwjld-tbody">
+          <tr class="loading-row"><td colspan="23">Memuat data VW Joblist Detail...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="vwjld-pagination"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- PAGE: TRACKING JOBLIST 2                                   -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-tracking-joblist2">
+  <div class="info-bar" id="trkjl2-info-bar">
+    <span>Total WO: <b id="trkjl2-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Plan Cost: <b id="trkjl2-plan-cost">—</b></span>
+    <div class="info-divider"></div>
+    <span>Total Act. Cost: <b id="trkjl2-act-cost">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="fetchAndRenderTrkJl2()" style="margin-left:4px">🔄 Refresh</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="trkjl2-search" placeholder="Order, equipment, project, no joblist..." oninput="debounceRender('tracking-joblist2')">
+      <span class="search-clear" onclick="clearSearch('trkjl2-search','tracking-joblist2')">✕</span>
+    </span>
+    <label>Project:</label>
+    <select id="trkjl2-filter-project" onchange="renderTrkJl2()"><option value="">Semua</option></select>
+    <label>Area:</label>
+    <select id="trkjl2-filter-area" onchange="renderTrkJl2()"><option value="">Semua</option></select>
+    <label>Disiplin:</label>
+    <select id="trkjl2-filter-disiplin" onchange="renderTrkJl2()"><option value="">Semua</option></select>
+    <label>System Status:</label>
+    <select id="trkjl2-filter-status" onchange="renderTrkJl2()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="renderTrkJl2()">Cari</button>
+    <button class="btn btn-reset" onclick="trkJl2ResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportTrkJl2Excel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="trkjl2-rowCount"></span>
+  </div>
+  <div class="table-container" style="overflow:auto">
+    <div id="trkjl2-tree" style="min-width:900px;padding:4px 0">
+      <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist 2...</div>
+    </div>
+    <div class="pagination" id="trkjl2-pagination"></div>
+  </div>
+</div>
+
 <!-- PAGE: JOB AREA -->
 <div class="page" id="page-jobarea">
   <div class="info-bar">
@@ -2410,6 +2588,81 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     </div>
   </div>
 </div>
+
+<!-- MODAL: VW JOBLIST WO UPLOAD -->
+<div class="modal-overlay" id="modal-vwjlwo-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#0f766e;">
+      <h3>📥 Upload Excel VW Joblist WO</h3>
+      <button class="modal-close" onclick="closeModal('modal-vwjlwo-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f0fdf9;border:1px solid #99f6e4;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0f766e;">
+        <b>Format file:</b> VW_JoblisDetailwithWO — kolom: Plant, EquipmentNo, Disiplin, JoblistDescription, PlanningJasaStatusName, PlanningMaterialStatusName, CodeName, IsLLDII, Order, Notification, CreatedOn, SuperiorOrder, Description, FunctionalLoc, Location, Revision, SystemStatus, UserStatus, WBSordheader, TotalPlnndCosts, Totalactcosts, PlannerGroup, MainWorkCtr, ChangeBy, Basstartdate, Basicfindate, ActualRelease, CostCenter, EnteredBy
+      </div>
+      <div class="upload-zone" id="vwjlwo-upload-zone" onclick="document.getElementById('vwjlwo-file-input').click()" ondragover="handleDrag(event,'vwjlwo-upload-zone')" ondragleave="handleDragLeave(event,'vwjlwo-upload-zone')" ondrop="handleDropNew(event,'vwjlwo')">
+        <input type="file" id="vwjlwo-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'vwjlwo')">
+        <div class="upload-icon">📊</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="vwjlwo-upload-preview" style="display:none">
+        <span id="vwjlwo-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="vwjlwo-preview-table"></div>
+      </div>
+      <div id="vwjlwo-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="vwjlwo-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="vwjlwo-progress-pct" style="font-size:13px;font-weight:700;color:#0f766e;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="vwjlwo-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#0f766e,#34d399);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="vwjlwo-cancel-btn" onclick="closeModal('modal-vwjlwo-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: VW JOBLIST DETAIL UPLOAD -->
+<div class="modal-overlay" id="modal-vwjld-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#7c3aed;">
+      <h3>📥 Upload Excel VW Joblist Detail</h3>
+      <button class="modal-close" onclick="closeModal('modal-vwjld-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#7c3aed;">
+        <b>Format file:</b> VW_Joblist_detail — kolom: Id, JoblistId, JoblistDetailDescription, JoblistDetailReasonName, DocumentJoblistTypeName, NoDocument, IsMechanicalIntegrity, JobDisciplineName, NomorPM, Notes, Plant, Created, CreatorName, CreatorJobTitle, IsDeleted, JoblistDescription, NoJoblist, ProjectNumber, ProjectTypeCode, ProjectTypeName, StartDate, FinishDate, Revision, Description, ProjectStatus, EquipmentNo, AreaName, AreaAliasName, UnitName, UnitAliasName, FunctionalLocation, Location, Disiplin, Criticallity, CriticallityText, MainWorkCenter, IsAllIn, IsJasa, IsLLDII, IsMaterial, CodeName, PlanningJasaStatusName, PlanningMaterialStatusName, LLDI status, isFreezing
+      </div>
+      <div class="upload-zone" id="vwjld-upload-zone" onclick="document.getElementById('vwjld-file-input').click()" ondragover="handleDrag(event,'vwjld-upload-zone')" ondragleave="handleDragLeave(event,'vwjld-upload-zone')" ondrop="handleDropNew(event,'vwjld')">
+        <input type="file" id="vwjld-file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelectNew(event,'vwjld')">
+        <div class="upload-icon">📋</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="vwjld-upload-preview" style="display:none">
+        <span id="vwjld-preview-info" style="font-size:12px;color:#374151;font-weight:600;display:block;margin-top:10px;"></span>
+        <div class="preview-wrap" id="vwjld-preview-table"></div>
+      </div>
+      <div id="vwjld-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="vwjld-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="vwjld-progress-pct" style="font-size:13px;font-weight:700;color:#7c3aed;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="vwjld-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#7c3aed,#c084fc);border-radius:99px;transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="vwjld-cancel-btn" onclick="closeModal('modal-vwjld-upload')">Batal</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-add-taex">
   <div class="modal" style="width:700px;">
     <div class="modal-header">
@@ -2915,6 +3168,9 @@ const SIDEBAR_MENUS = {
   'jobarea':           [{icon:'🗺', label:'Area', active:true}],
   'jobunit':           [{icon:'🏭', label:'Unit', active:true}],
   'tracking-joblist':  [{icon:'🔗', label:'Tracking Joblist', active:true}],
+  'vw-joblist-wo':     [{icon:'📊', label:'VW Joblist WO', active:true}],
+  'vw-joblist-detail': [{icon:'📋', label:'VW Joblist Detail', active:true}],
+  'tracking-joblist2': [{icon:'🔗', label:'Tracking Joblist 2', active:true}],
 };
 const HEADER_TITLES = {
   'taex':             ['TA-ex', 'Material Reservation'],
@@ -2935,6 +3191,9 @@ const HEADER_TITLES = {
   'jobarea':           ['Area', 'Master Data Area'],
   'jobunit':           ['Unit', 'Master Data Unit'],
   'tracking-joblist':  ['Tracking Joblist', 'WO → Job Detail → Job List → Project + Equipment'],
+  'vw-joblist-wo':     ['VW Joblist WO', 'Joblist Detail dengan Work Order SAP'],
+  'vw-joblist-detail': ['VW Joblist Detail', 'Detail Pekerjaan & Status Perencanaan'],
+  'tracking-joblist2': ['Tracking Joblist 2', 'VW Joblist WO + VW Joblist Detail (via Equipment No)'],
 };
 
 function switchApp(app) {
@@ -2972,6 +3231,9 @@ function renderPage(app) {
   else if (app==='jobarea')   { if (!state.jobAreaData.length) fetchAndRenderJobArea(); else renderJobArea(); }
   else if (app==='jobunit')   { if (!state.jobUnitData.length) fetchAndRenderJobUnit(); else renderJobUnit(); }
   else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
+  else if (app==='vw-joblist-wo')   { if (!state.vwJlWoData.length) fetchAndRenderVwJlWo(); else renderVwJlWo(); }
+  else if (app==='vw-joblist-detail') { if (!state.vwJldData.length) fetchAndRenderVwJld(); else renderVwJld(); }
+  else if (app==='tracking-joblist2') { if (!state.trkJl2Data.length) fetchAndRenderTrkJl2(); else renderTrkJl2(); }
 }
 
 function populateFilters() {
@@ -4371,6 +4633,9 @@ function renderPageByKey(key) {
   else if (key==='jobunit')   renderJobUnit();
   else if (key==='trkjl')    renderTrkJl();
   else if (key==='trk')      renderTracking();
+  else if (key==='vwjlwo')   renderVwJlWo();
+  else if (key==='vwjld')    renderVwJld();
+  else if (key==='trkjl2')   renderTrkJl2();
 }
 
 // ============================================================
@@ -4402,6 +4667,8 @@ function appToKey(app) {
     'jobdetailworkorder':'jdwo','equipment':'equipment',
     'jobarea':'jobarea','jobunit':'jobunit',
     'tracking-joblist':'trkjl',
+    'vw-joblist-wo':'vwjlwo','vw-joblist-detail':'vwjld',
+    'tracking-joblist2':'trkjl2',
   };
   return m[app] || app;
 }
@@ -6441,8 +6708,12 @@ state.projectData    = [];
 state.joblistData    = [];
 state.jobdetailData  = [];
 state.jdwoData       = [];
+state.vwJlWoData     = [];
+state.vwJldData      = [];
+state.trkJl2Data     = [];
 
 let projectFiltered  = [], joblistFiltered = [], jobdetailFiltered = [], jdwoFiltered = [];
+let vwJlWoFiltered   = [], vwJldFiltered   = [], trkJl2Filtered   = [];
 
 function fmtCost(v) {
   if (v === null || v === undefined || v === '') return '<span style="color:#d1d5db">—</span>';
@@ -6825,6 +7096,491 @@ function exportJdwoExcel() {
   toast('Export Work Order berhasil!', 'ok');
 }
 
+// ============================================================
+// VW JOBLIST WO
+// ============================================================
+async function fetchAndRenderVwJlWo() {
+  try {
+    const rows = await apiFetch('/vwjoblistwo');
+    state.vwJlWoData = Array.isArray(rows) ? rows : [];
+    populateVwJlWoFilters();
+    resetPg('vwjlwo');
+    renderVwJlWo();
+    document.getElementById('badge-vwjlwo').textContent = state.vwJlWoData.length;
+  } catch(e) {
+    document.getElementById('vwjlwo-tbody').innerHTML = `<tr><td colspan="22" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateVwJlWoFilters() {
+  const makeOpts = (arr) => '<option value="">Semua</option>' + arr.map(v => `<option value="${v}">${v}</option>`).join('');
+  const uniq = (key) => [...new Set(state.vwJlWoData.map(r => r[key]).filter(Boolean))].sort();
+  document.getElementById('vwjlwo-filter-revision').innerHTML   = makeOpts(uniq('Revision'));
+  document.getElementById('vwjlwo-filter-disiplin').innerHTML   = makeOpts(uniq('Disiplin'));
+  document.getElementById('vwjlwo-filter-jasa').innerHTML       = makeOpts(uniq('PlanningJasaStatus'));
+  document.getElementById('vwjlwo-filter-material').innerHTML   = makeOpts(uniq('PlanningMaterialStatus'));
+}
+
+function renderVwJlWo() {
+  const q    = (document.getElementById('vwjlwo-search').value || '').toLowerCase();
+  const fRev = document.getElementById('vwjlwo-filter-revision').value;
+  const fDis = document.getElementById('vwjlwo-filter-disiplin').value;
+  const fJas = document.getElementById('vwjlwo-filter-jasa').value;
+  const fMat = document.getElementById('vwjlwo-filter-material').value;
+
+  vwJlWoFiltered = state.vwJlWoData.filter(r => {
+    if (fRev && r.Revision !== fRev) return false;
+    if (fDis && r.Disiplin !== fDis) return false;
+    if (fJas && r.PlanningJasaStatus !== fJas) return false;
+    if (fMat && r.PlanningMaterialStatus !== fMat) return false;
+    if (q && !`${r.Order} ${r.EquipmentNo} ${r.Description} ${r.JoblistDescription} ${r.Revision} ${r.FunctionalLoc}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const total     = vwJlWoFiltered.length;
+  const totalPlan = vwJlWoFiltered.reduce((s, r) => s + (parseFloat(r.TotalPlnndCosts) || 0), 0);
+  const totalAct  = vwJlWoFiltered.reduce((s, r) => s + (parseFloat(r.Totalactcosts)   || 0), 0);
+  document.getElementById('vwjlwo-total').textContent      = total;
+  document.getElementById('vwjlwo-total-plan').textContent = new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(totalPlan);
+  document.getElementById('vwjlwo-total-act').textContent  = new Intl.NumberFormat('id-ID',{maximumFractionDigits:0}).format(totalAct);
+  document.getElementById('vwjlwo-rowCount').textContent   = `${total} baris`;
+
+  const pg         = getPg('vwjlwo');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = vwJlWoFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
+
+  document.getElementById('vwjlwo-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td>${D(r.Plant)}</td>
+        <td>${D(r.EquipmentNo)}</td>
+        <td>${D(r.Disiplin)}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.JoblistDescription||''}">${D(r.JoblistDescription)}</td>
+        <td><b>${D(r.Order)}</b></td>
+        <td>${D(r.Notification)}</td>
+        <td>${D(r.Revision)}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.Description||''}">${D(r.Description)}</td>
+        <td>${D(r.FunctionalLoc)}</td>
+        <td style="font-size:10px">${D(r.SystemStatus)}</td>
+        <td>${D(r.UserStatus)}</td>
+        <td>${D(r.PlannerGroup)}</td>
+        <td>${D(r.MainWorkCtr)}</td>
+        <td style="text-align:right">${fmtCost(r.TotalPlnndCosts)}</td>
+        <td style="text-align:right">${fmtCost(r.Totalactcosts)}</td>
+        <td>${fmtDate(r.Basstartdate)}</td>
+        <td>${fmtDate(r.Basicfindate)}</td>
+        <td>${fmtDate(r.ActualRelease)}</td>
+        <td style="font-size:10px">${D(r.PlanningJasaStatus)}</td>
+        <td style="font-size:10px">${D(r.PlanningMaterialStatus)}</td>
+        <td style="font-size:10px">${D(r.CodeName)}</td>
+        <td style="text-align:center">${r.IsLLDII == 1 ? '✅' : '—'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="22" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('vwjlwo-pagination', 'vwjlwo', total, pg.page, totalPages, pg.size, renderVwJlWo);
+}
+
+function vwJlWoResetFilter() {
+  document.getElementById('vwjlwo-search').value = '';
+  document.getElementById('vwjlwo-filter-revision').value  = '';
+  document.getElementById('vwjlwo-filter-disiplin').value  = '';
+  document.getElementById('vwjlwo-filter-jasa').value      = '';
+  document.getElementById('vwjlwo-filter-material').value  = '';
+  resetPg('vwjlwo');
+  renderVwJlWo();
+}
+
+function exportVwJlWoExcel() {
+  if (!vwJlWoFiltered.length) return toast('Tidak ada data untuk diekspor', 'err');
+  const rows = vwJlWoFiltered.map(r => ({
+    Plant: r.Plant, EquipmentNo: r.EquipmentNo, Disiplin: r.Disiplin,
+    JoblistDescription: r.JoblistDescription,
+    PlanningJasaStatus: r.PlanningJasaStatus,
+    PlanningMaterialStatus: r.PlanningMaterialStatus,
+    CodeName: r.CodeName, IsLLDII: r.IsLLDII,
+    Order: r.Order, Notification: r.Notification, CreatedOn: r.CreatedOn,
+    SuperiorOrder: r.SuperiorOrder, Description: r.Description,
+    FunctionalLoc: r.FunctionalLoc, Location: r.Location,
+    Revision: r.Revision, SystemStatus: r.SystemStatus, UserStatus: r.UserStatus,
+    WBSordheader: r.WBSordheader,
+    TotalPlnndCosts: r.TotalPlnndCosts, Totalactcosts: r.Totalactcosts,
+    PlannerGroup: r.PlannerGroup, MainWorkCtr: r.MainWorkCtr,
+    ChangeBy: r.ChangeBy, Basstartdate: r.Basstartdate,
+    Basicfindate: r.Basicfindate, ActualRelease: r.ActualRelease,
+    CostCenter: r.CostCenter, EnteredBy: r.EnteredBy,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'VWJoblistWO');
+  XLSX.writeFile(wb, `VW_JoblistWO_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export VW Joblist WO berhasil!', 'ok');
+}
+
+async function deleteVwJlWo() {
+  if (!confirm('Hapus semua data VW Joblist WO? Aksi ini tidak bisa dibatalkan.')) return;
+  try {
+    await apiFetch('/vwjoblistwo', { method: 'DELETE' });
+    state.vwJlWoData = []; vwJlWoFiltered = [];
+    document.getElementById('badge-vwjlwo').textContent = 0;
+    renderVwJlWo();
+    toast('Semua data VW Joblist WO dihapus', 'ok');
+  } catch(e) { toast('Gagal hapus: ' + e.message, 'err'); }
+}
+
+function openVwJlWoUploadModal() {
+  document.getElementById('vwjlwo-file-input').value = '';
+  const prev = document.getElementById('vwjlwo-upload-preview');
+  const pan  = document.getElementById('vwjlwo-progress-panel');
+  if (prev) prev.style.display = 'none';
+  if (pan)  pan.style.display  = 'none';
+  openModal('modal-vwjlwo-upload');
+}
+
+// ============================================================
+// VW JOBLIST DETAIL
+// ============================================================
+async function fetchAndRenderVwJld() {
+  try {
+    const rows = await apiFetch('/vwjoblistdetail');
+    state.vwJldData = Array.isArray(rows) ? rows : [];
+    populateVwJldFilters();
+    resetPg('vwjld');
+    renderVwJld();
+    document.getElementById('badge-vwjld').textContent = state.vwJldData.length;
+  } catch(e) {
+    document.getElementById('vwjld-tbody').innerHTML = `<tr><td colspan="23" style="color:red">Gagal memuat: ${e.message}</td></tr>`;
+  }
+}
+
+function populateVwJldFilters() {
+  const makeOpts = (arr) => '<option value="">Semua</option>' + arr.map(v => `<option value="${v}">${v}</option>`).join('');
+  const uniq = (key) => [...new Set(state.vwJldData.map(r => r[key]).filter(Boolean))].sort();
+  document.getElementById('vwjld-filter-revision').innerHTML     = makeOpts(uniq('Revision'));
+  document.getElementById('vwjld-filter-disiplin').innerHTML     = makeOpts(uniq('Disiplin'));
+  document.getElementById('vwjld-filter-material').innerHTML     = makeOpts(uniq('PlanningMaterialStatus'));
+  document.getElementById('vwjld-filter-proj-status').innerHTML  = makeOpts(uniq('ProjectStatus'));
+}
+
+function renderVwJld() {
+  const q    = (document.getElementById('vwjld-search').value || '').toLowerCase();
+  const fRev = document.getElementById('vwjld-filter-revision').value;
+  const fDis = document.getElementById('vwjld-filter-disiplin').value;
+  const fMat = document.getElementById('vwjld-filter-material').value;
+  const fPS  = document.getElementById('vwjld-filter-proj-status').value;
+
+  vwJldFiltered = state.vwJldData.filter(r => {
+    if (fRev && r.Revision !== fRev) return false;
+    if (fDis && r.Disiplin !== fDis) return false;
+    if (fMat && r.PlanningMaterialStatus !== fMat) return false;
+    if (fPS  && r.ProjectStatus !== fPS) return false;
+    if (q && !`${r.EquipmentNo} ${r.NoJoblist} ${r.JoblistDescription} ${r.JoblistDetailDesc} ${r.ProjectNumber} ${r.AreaName} ${r.UnitName}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const total = vwJldFiltered.length;
+  document.getElementById('vwjld-total').textContent    = total;
+  document.getElementById('vwjld-rowCount').textContent = `${total} baris`;
+
+  const pg         = getPg('vwjld');
+  const totalPages = Math.ceil(total / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice      = vwJldFiltered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
+
+  const flagCell = (v) => v == 1 ? '<span style="color:#16a34a;font-weight:600">✅</span>' : '<span style="color:#d1d5db">—</span>';
+
+  document.getElementById('vwjld-tbody').innerHTML = slice.length
+    ? slice.map(r => `<tr>
+        <td style="font-size:10px">${D(r.NoJoblist)}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.JoblistDescription||''}">${D(r.JoblistDescription)}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.JoblistDetailDesc||''}">${D(r.JoblistDetailDesc)}</td>
+        <td>${D(r.EquipmentNo)}</td>
+        <td>${D(r.Revision)}</td>
+        <td style="font-size:10px">${D(r.ProjectNumber)}</td>
+        <td><span style="font-size:10px;padding:2px 5px;border-radius:4px;background:#f3f4f6">${D(r.ProjectStatus)}</span></td>
+        <td>${D(r.Disiplin)}</td>
+        <td>${D(r.AreaName)}</td>
+        <td>${D(r.UnitName)}</td>
+        <td style="font-size:10px">${D(r.FunctionalLocation)}</td>
+        <td style="font-size:10px">${D(r.ReasonName)}</td>
+        <td style="font-size:10px">${D(r.DocTypeName)}</td>
+        <td style="font-size:10px">${D(r.NoDocument)}</td>
+        <td>${D(r.MainWorkCenter)}</td>
+        <td style="font-size:10px">${D(r.PlanningJasaStatus)}</td>
+        <td style="font-size:10px">${D(r.PlanningMaterialStatus)}</td>
+        <td style="font-size:10px">${D(r.CodeName)}</td>
+        <td style="font-size:10px">${D(r.CriticallityText)}</td>
+        <td style="text-align:center">${flagCell(r.IsJasa)}</td>
+        <td style="text-align:center">${flagCell(r.IsMaterial)}</td>
+        <td style="text-align:center">${flagCell(r.IsLLDII)}</td>
+        <td style="font-size:10px">${D(r.CreatorName)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="23" style="color:#9ca3af;text-align:center">Tidak ada data</td></tr>';
+
+  renderPagination('vwjld-pagination', 'vwjld', total, pg.page, totalPages, pg.size, renderVwJld);
+}
+
+function vwJldResetFilter() {
+  document.getElementById('vwjld-search').value = '';
+  document.getElementById('vwjld-filter-revision').value     = '';
+  document.getElementById('vwjld-filter-disiplin').value     = '';
+  document.getElementById('vwjld-filter-material').value     = '';
+  document.getElementById('vwjld-filter-proj-status').value  = '';
+  resetPg('vwjld');
+  renderVwJld();
+}
+
+function exportVwJldExcel() {
+  if (!vwJldFiltered.length) return toast('Tidak ada data untuk diekspor', 'err');
+  const rows = vwJldFiltered.map(r => ({
+    Id: r.Id, JoblistId: r.JoblistId,
+    JoblistDetailDesc: r.JoblistDetailDesc, ReasonName: r.ReasonName,
+    DocTypeName: r.DocTypeName, NoDocument: r.NoDocument,
+    IsMechanicalIntegrity: r.IsMechanicalIntegrity, JobDisciplineName: r.JobDisciplineName,
+    NomorPM: r.NomorPM, Notes: r.Notes,
+    Plant: r.Plant, Created: r.Created,
+    CreatorName: r.CreatorName, CreatorJobTitle: r.CreatorJobTitle,
+    JoblistDescription: r.JoblistDescription, NoJoblist: r.NoJoblist,
+    ProjectNumber: r.ProjectNumber, ProjectTypeCode: r.ProjectTypeCode,
+    ProjectTypeName: r.ProjectTypeName,
+    StartDate: r.StartDate, FinishDate: r.FinishDate,
+    Revision: r.Revision, Description: r.Description, ProjectStatus: r.ProjectStatus,
+    EquipmentNo: r.EquipmentNo,
+    AreaName: r.AreaName, AreaAliasName: r.AreaAliasName,
+    UnitName: r.UnitName, UnitAliasName: r.UnitAliasName,
+    FunctionalLocation: r.FunctionalLocation, Location: r.Location,
+    Disiplin: r.Disiplin, Criticallity: r.Criticallity, CriticallityText: r.CriticallityText,
+    MainWorkCenter: r.MainWorkCenter,
+    IsAllIn: r.IsAllIn, IsJasa: r.IsJasa, IsLLDII: r.IsLLDII, IsMaterial: r.IsMaterial,
+    CodeName: r.CodeName,
+    PlanningJasaStatus: r.PlanningJasaStatus,
+    PlanningMaterialStatus: r.PlanningMaterialStatus,
+    LLDIStatus: r.LLDIStatus, IsFreezing: r.IsFreezing,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'VWJoblistDetail');
+  XLSX.writeFile(wb, `VW_JoblistDetail_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export VW Joblist Detail berhasil!', 'ok');
+}
+
+async function deleteVwJld() {
+  if (!confirm('Hapus semua data VW Joblist Detail? Aksi ini tidak bisa dibatalkan.')) return;
+  try {
+    await apiFetch('/vwjoblistdetail', { method: 'DELETE' });
+    state.vwJldData = []; vwJldFiltered = [];
+    document.getElementById('badge-vwjld').textContent = 0;
+    renderVwJld();
+    toast('Semua data VW Joblist Detail dihapus', 'ok');
+  } catch(e) { toast('Gagal hapus: ' + e.message, 'err'); }
+}
+
+function openVwJldUploadModal() {
+  document.getElementById('vwjld-file-input').value = '';
+  const prev = document.getElementById('vwjld-upload-preview');
+  const pan  = document.getElementById('vwjld-progress-panel');
+  if (prev) prev.style.display = 'none';
+  if (pan)  pan.style.display  = 'none';
+  openModal('modal-vwjld-upload');
+}
+
+// ============================================================
+// TRACKING JOBLIST 2 — vw_joblist_wo + vw_joblist_detail via equipment_no
+// ============================================================
+async function fetchAndRenderTrkJl2() {
+  document.getElementById('trkjl2-tree').innerHTML =
+    '<div style="color:#6b7280;padding:20px;text-align:center">⏳ Memuat data...</div>';
+  try {
+    const rows = await apiFetch('/tracking-joblist2');
+    state.trkJl2Data = Array.isArray(rows) ? rows : [];
+    populateTrkJl2Filters();
+    renderTrkJl2();
+    document.getElementById('badge-trk-jl2').textContent =
+      new Set(state.trkJl2Data.map(r => r.order).filter(Boolean)).size;
+  } catch(e) {
+    document.getElementById('trkjl2-tree').innerHTML =
+      `<div style="color:red;padding:20px">Gagal memuat: ${e.message}</div>`;
+  }
+}
+
+function populateTrkJl2Filters() {
+  const makeOpts = arr => '<option value="">Semua</option>' + arr.map(v => `<option value="${v}">${v}</option>`).join('');
+  const uniq = key => [...new Set(state.trkJl2Data.map(r => r[key]).filter(Boolean))].sort();
+  document.getElementById('trkjl2-filter-project').innerHTML  = makeOpts(uniq('project_number'));
+  document.getElementById('trkjl2-filter-area').innerHTML     = makeOpts(uniq('area_name'));
+  document.getElementById('trkjl2-filter-disiplin').innerHTML = makeOpts(uniq('disiplin'));
+  document.getElementById('trkjl2-filter-status').innerHTML   = makeOpts(uniq('system_status'));
+}
+
+function renderTrkJl2() {
+  const q     = (document.getElementById('trkjl2-search').value || '').toLowerCase();
+  const fProj = document.getElementById('trkjl2-filter-project').value;
+  const fArea = document.getElementById('trkjl2-filter-area').value;
+  const fDis  = document.getElementById('trkjl2-filter-disiplin').value;
+  const fStat = document.getElementById('trkjl2-filter-status').value;
+
+  trkJl2Filtered = state.trkJl2Data.filter(r => {
+    if (fProj && r.project_number !== fProj) return false;
+    if (fArea && r.area_name      !== fArea) return false;
+    if (fDis  && r.disiplin       !== fDis)  return false;
+    if (fStat && r.system_status  !== fStat) return false;
+    if (q) {
+      const hay = [r.order, r.equipment_no, r.no_joblist, r.joblist_detail_desc,
+        r.project_number, r.project_desc, r.area_name, r.unit_name,
+        r.joblist_description, r.wo_joblist_description].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const fmt = v => new Intl.NumberFormat('id-ID', {maximumFractionDigits:0}).format(v);
+  const totalPlan = trkJl2Filtered.reduce((s, r) => s + (parseFloat(r.total_plnnd_costs) || 0), 0);
+  const totalAct  = trkJl2Filtered.reduce((s, r) => s + (parseFloat(r.totalact_costs)    || 0), 0);
+  const uniqWO    = new Set(trkJl2Filtered.map(r => r.order).filter(Boolean)).size;
+
+  document.getElementById('trkjl2-total').textContent     = uniqWO;
+  document.getElementById('trkjl2-plan-cost').textContent = fmt(totalPlan);
+  document.getElementById('trkjl2-act-cost').textContent  = fmt(totalAct);
+  document.getElementById('trkjl2-rowCount').textContent  = `${trkJl2Filtered.length} baris`;
+
+  const pg         = getPg('trkjl2');
+  const totalPages = Math.ceil(trkJl2Filtered.length / pg.size) || 1;
+  if (pg.page > totalPages) pg.page = 1;
+  const slice = trkJl2Filtered.slice((pg.page - 1) * pg.size, pg.page * pg.size);
+
+  const ST_COLOR   = { REL:'green', TECO:'blue', CLSD:'gray', CRTD:'teal' };
+  const PROJ_COLOR = { 'In Progress':'green', 'Completed':'blue', 'Planning':'gray' };
+  const DIS_COLOR  = { STATIONARY:'blue', ROTARY:'green', ELECTRICAL:'purple', INSTRUMENT:'teal' };
+
+  const tags2 = r => [
+    r.is_mechanical_integrity == 1 ? '<span class="badge badge-teal"  style="font-size:10px">MI</span>'    : '',
+    r.is_material             == 1 ? '<span class="badge badge-blue"  style="font-size:10px">MAT</span>'   : '',
+    r.is_jasa                 == 1 ? '<span class="badge badge-green" style="font-size:10px">JASA</span>'  : '',
+    r.is_lldii                == 1 ? '<span class="badge badge-purple" style="font-size:10px">LLDII</span>': '',
+  ].join('') || '—';
+
+  const readBar = (pct, ready) => {
+    const p = Math.round(pct || 0);
+    const color = p === 100 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626';
+    return `<div style="display:flex;align-items:center;gap:4px;min-width:80px">
+      <div style="flex:1;background:rgba(0,0,0,0.1);border-radius:99px;height:5px;overflow:hidden">
+        <div style="width:${p}%;height:100%;background:${color};border-radius:99px"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${color}">${ready ? '✅' : p + '%'}</span>
+    </div>`;
+  };
+
+  const container = document.getElementById('trkjl2-tree');
+  container.style.minWidth = '';
+
+  if (!slice.length) {
+    container.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Tidak ada data</div>';
+    renderPagination('trkjl2-pagination', 'trkjl2', trkJl2Filtered.length, pg.page, totalPages, pg.size, renderTrkJl2);
+    return;
+  }
+
+  container.innerHTML = `<div class="table-wrap" style="border:none">
+    <table style="width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px">
+      <thead>
+        <tr>
+          <th colspan="3" style="background:#065f46;text-align:center;border-right:2px solid #fff">🗺 Area / Unit</th>
+          <th colspan="3" style="background:#3b1f6e;text-align:center;border-right:2px solid #fff">⚙️ Equipment</th>
+          <th colspan="3" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
+          <th colspan="4" style="background:#14532d;text-align:center;border-right:2px solid #fff">📝 Job Detail</th>
+          <th colspan="6" style="background:#374151;text-align:center">🔧 Work Order</th>
+        </tr>
+        <tr>
+          <!-- Area/Unit -->
+          <th style="background:#065f46;color:#fff">Area</th>
+          <th style="background:#065f46;color:#fff">Unit</th>
+          <th style="background:#065f46;color:#fff;border-right:2px solid #fff">Alias</th>
+          <!-- Equipment -->
+          <th style="background:#3b1f6e;color:#fff">Eq. No.</th>
+          <th style="background:#3b1f6e;color:#fff">Disiplin</th>
+          <th style="background:#3b1f6e;color:#fff;border-right:2px solid #fff">Criticality</th>
+          <!-- Project -->
+          <th style="background:#7c2d12;color:#fff">No. Project</th>
+          <th style="background:#7c2d12;color:#fff">Status</th>
+          <th style="background:#7c2d12;color:#fff;border-right:2px solid #fff">Revision</th>
+          <!-- Job Detail -->
+          <th style="background:#14532d;color:#fff">No. Joblist</th>
+          <th style="background:#14532d;color:#fff">Job Detail Desc</th>
+          <th style="background:#14532d;color:#fff">Mat/Jasa</th>
+          <th style="background:#14532d;color:#fff;border-right:2px solid #fff">Planning Material</th>
+          <!-- Work Order -->
+          <th style="background:#374151;color:#fff">Order</th>
+          <th style="background:#374151;color:#fff">System Status</th>
+          <th style="background:#374151;color:#fff">Plan Cost</th>
+          <th style="background:#374151;color:#fff">Act. Cost</th>
+          <th style="background:#374151;color:#fff">Readiness</th>
+          <th style="background:#374151;color:#fff">Planning Material WO</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${slice.map((r, i) => `<tr style="background:${i%2===0?'#fff':'#f9fafb'};border-bottom:1px solid #f0f0f0">
+          <!-- Area/Unit -->
+          <td style="font-size:11px">${D(r.area_name)||'—'}</td>
+          <td style="font-size:11px">${D(r.unit_name)||'—'}</td>
+          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.area_alias_name)||'—'}</td>
+          <!-- Equipment -->
+          <td style="font-weight:600;color:#1a56db">${D(r.equipment_no)||'—'}</td>
+          <td><span class="badge badge-${DIS_COLOR[r.disiplin]||'gray'}" style="font-size:10px">${D(r.disiplin)||'—'}</span></td>
+          <td style="font-size:11px;border-right:2px solid #e5e7eb">${D(r.criticallity_text)||'—'}</td>
+          <!-- Project -->
+          <td style="font-weight:600">${D(r.project_number)||'—'}</td>
+          <td><span class="badge badge-${PROJ_COLOR[r.project_status]||'gray'}" style="font-size:10px">${D(r.project_status)||'—'}</span></td>
+          <td style="border-right:2px solid #e5e7eb">${D(r.revision)||'—'}</td>
+          <!-- Job Detail -->
+          <td style="font-size:11px;color:#7c2d12;font-weight:600">${D(r.no_joblist)||'—'}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${r.joblist_detail_desc||''}">${D(r.joblist_detail_desc)||'—'}</td>
+          <td style="font-size:10px">${tags2(r)}</td>
+          <td style="font-size:10px;border-right:2px solid #e5e7eb">${D(r.jld_planning_material)||'—'}</td>
+          <!-- Work Order -->
+          <td>${r.order ? `<b style="color:#1a56db">${r.order}</b>` : '<span style="color:#d1d5db">—</span>'}</td>
+          <td>${r.system_status ? `<span class="badge badge-${ST_COLOR[r.system_status?.split(' ')[0]]||'gray'}" style="font-size:10px">${r.system_status}</span>` : '<span style="color:#d1d5db">—</span>'}</td>
+          <td style="text-align:right;font-family:monospace">${fmtCost(r.total_plnnd_costs)}</td>
+          <td style="text-align:right;font-family:monospace">${fmtCost(r.totalact_costs)}</td>
+          <td>${r.order ? readBar(r.order_readiness_pct, r.order_ready) : '<span style="color:#d1d5db">—</span>'}</td>
+          <td style="font-size:10px">${D(r.wo_planning_material)||'—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+
+  renderPagination('trkjl2-pagination', 'trkjl2', trkJl2Filtered.length, pg.page, totalPages, pg.size, renderTrkJl2);
+}
+
+function trkJl2ResetFilter() {
+  document.getElementById('trkjl2-search').value = '';
+  ['trkjl2-filter-project','trkjl2-filter-area','trkjl2-filter-disiplin','trkjl2-filter-status']
+    .forEach(id => document.getElementById(id).value = '');
+  resetPg('trkjl2');
+  renderTrkJl2();
+}
+
+function exportTrkJl2Excel() {
+  if (!trkJl2Filtered.length) return toast('Tidak ada data untuk diekspor', 'err');
+  const rows = trkJl2Filtered.map(r => ({
+    AreaName: r.area_name, UnitName: r.unit_name, AreaAlias: r.area_alias_name,
+    EquipmentNo: r.equipment_no, Disiplin: r.disiplin, Criticallity: r.criticallity_text,
+    ProjectNumber: r.project_number, ProjectStatus: r.project_status, Revision: r.revision,
+    NoJoblist: r.no_joblist, JoblistDetailDesc: r.joblist_detail_desc,
+    IsMaterial: r.is_material, IsJasa: r.is_jasa, IsLLDII: r.is_lldii,
+    PlanningMaterialJLD: r.jld_planning_material,
+    Order: r.order, SystemStatus: r.system_status,
+    TotalPlnndCosts: r.total_plnnd_costs, Totalactcosts: r.totalact_costs,
+    ReadinessPct: r.order_readiness_pct, OrderReady: r.order_ready,
+    TotalMat: r.order_total_mat, ReadyMat: r.order_ready_mat,
+    PlanningMaterialWO: r.wo_planning_material,
+    PlannerGroup: r.planner_group, MainWorkCtr: r.main_work_ctr,
+    BasicStart: r.bas_start_date, BasicFinish: r.basic_fin_date, ActualRelease: r.actual_release,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'TrackingJoblist2');
+  XLSX.writeFile(wb, `TrackingJoblist2_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export Tracking Joblist 2 berhasil!', 'ok');
+}
+
 // Mapping: UI key → backend upload_type & reload fn
 const NEW_UPLOAD_META = {
   project:  { backendType: 'project',           reloadFn: fetchAndRenderProject,   modalId: 'modal-project-upload'   },
@@ -6834,6 +7590,8 @@ const NEW_UPLOAD_META = {
   equipment:{ backendType: 'equipment',          reloadFn: fetchAndRenderEquipment, modalId: 'modal-equipment-upload' },
   jobarea:  { backendType: 'jobarea',            reloadFn: fetchAndRenderJobArea,   modalId: 'modal-jobarea-upload'   },
   jobunit:  { backendType: 'jobunit',            reloadFn: fetchAndRenderJobUnit,   modalId: 'modal-jobunit-upload'   },
+  vwjlwo:   { backendType: 'vwjoblistwo',        reloadFn: fetchAndRenderVwJlWo,    modalId: 'modal-vwjlwo-upload'    },
+  vwjld:    { backendType: 'vwjoblistdetail',    reloadFn: fetchAndRenderVwJld,     modalId: 'modal-vwjld-upload'     },
 };
 
 function handleDropNew(e, type) {

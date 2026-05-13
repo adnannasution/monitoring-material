@@ -685,3 +685,112 @@ def bulk_replace_job_unit(df) -> int:
         conn.rollback(); raise e
     finally:
         release_conn(conn)
+
+# ─── VW JOBLIST WO ───────────────────────────────────────────
+def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM vw_joblist_wo")
+            sql = """
+                INSERT INTO vw_joblist_wo
+                (plant, equipment_no, disiplin, joblist_description,
+                 planning_jasa_status, planning_material_status, code_name, is_lldii,
+                 "order", notification, created_on, superior_order, description,
+                 functional_loc, location, revision, system_status, user_status,
+                 wbs_ord_header, total_plnnd_costs, totalact_costs,
+                 planner_group, main_work_ctr, change_by,
+                 bas_start_date, basic_fin_date, actual_release,
+                 cost_center, entered_by)
+                VALUES %s
+            """
+            def _i(v):
+                try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
+                except: return None
+
+            rows = []
+            for _, r in df.iterrows():
+                rows.append((
+                    _s(r.get("Plant")), _s(r.get("EquipmentNo")),
+                    _s(r.get("Disiplin")), _s(r.get("JoblistDescription")),
+                    _s(r.get("PlanningJasaStatusName")), _s(r.get("PlanningMaterialStatusName")),
+                    _s(r.get("CodeName")), _i(r.get("IsLLDII")),
+                    _s(r.get("Order")), _s(r.get("Notification")), _s(r.get("CreatedOn")),
+                    _s(r.get("SuperiorOrder")), _s(r.get("Description")),
+                    _s(r.get("FunctionalLoc")), _s(r.get("Location")),
+                    _s(r.get("Revision")), _s(r.get("SystemStatus")), _s(r.get("UserStatus")),
+                    _s(r.get("WBSordheader")),
+                    _n(r.get("TotalPlnndCosts")), _n(r.get("Totalactcosts")),
+                    _s(r.get("PlannerGroup")), _s(r.get("MainWorkCtr")), _s(r.get("ChangeBy")),
+                    _s(r.get("Basstartdate")), _s(r.get("Basicfindate")), _s(r.get("ActualRelease")),
+                    _s(r.get("CostCenter")), _s(r.get("EnteredBy")),
+                ))
+            execute_values(cur, sql, rows)
+        conn.commit()
+        return len(rows)
+    except Exception as e:
+        conn.rollback(); raise e
+    finally:
+        release_conn(conn)
+
+
+# ─── VW JOBLIST DETAIL ───────────────────────────────────────
+def bulk_replace_vw_joblist_detail(df: pd.DataFrame) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM vw_joblist_detail")
+            sql = """
+                INSERT INTO vw_joblist_detail
+                (id, joblist_id, joblist_detail_desc, reason_name, doc_type_name,
+                 no_document, is_mechanical_integrity, job_discipline_name,
+                 nomor_pm, notes, plant, created, creator_name, creator_job_title,
+                 is_deleted, joblist_description, no_joblist,
+                 project_number, project_type_code, project_type_name,
+                 start_date, finish_date, revision, description, project_status,
+                 equipment_no, area_name, area_alias_name, unit_name, unit_alias_name,
+                 functional_location, location, disiplin,
+                 criticallity, criticallity_text, main_work_center,
+                 is_all_in, is_jasa, is_lldii, is_material,
+                 code_name, planning_jasa_status, planning_material_status,
+                 lldi_status, is_freezing)
+                VALUES %s
+            """
+            def _i(v):
+                try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
+                except: return None
+
+            rows = []
+            for _, r in df.iterrows():
+                rows.append((
+                    _s(r.get("Id")), _s(r.get("JoblistId")),
+                    _s(r.get("JoblistDetailDescription")), _s(r.get("JoblistDetailReasonName")),
+                    _s(r.get("DocumentJoblistTypeName")), _s(r.get("NoDocument")),
+                    _i(r.get("IsMechanicalIntegrity")), _s(r.get("JobDisciplineName")),
+                    _s(r.get("NomorPM")), _s(r.get("Notes")),
+                    _s(r.get("Plant")), _s(r.get("Created")),
+                    _s(r.get("CreatorName")), _s(r.get("CreatorJobTitle")),
+                    _i(r.get("IsDeleted")) or 0,
+                    _s(r.get("JoblistDescription")), _s(r.get("NoJoblist")),
+                    _s(r.get("ProjectNumber")), _s(r.get("ProjectTypeCode")), _s(r.get("ProjectTypeName")),
+                    _s(r.get("StartDate")), _s(r.get("FinishDate")),
+                    _s(r.get("Revision")), _s(r.get("Description")), _s(r.get("ProjectStatus")),
+                    _s(r.get("EquipmentNo")),
+                    _s(r.get("AreaName")), _s(r.get("AreaAliasName")),
+                    _s(r.get("UnitName")), _s(r.get("UnitAliasName")),
+                    _s(r.get("FunctionalLocation")), _s(r.get("Location")),
+                    _s(r.get("Disiplin")), _s(r.get("Criticallity")), _s(r.get("CriticallityText")),
+                    _s(r.get("MainWorkCenter")),
+                    _i(r.get("IsAllIn")), _i(r.get("IsJasa")),
+                    _i(r.get("IsLLDII")), _i(r.get("IsMaterial")),
+                    _s(r.get("CodeName")),
+                    _s(r.get("PlanningJasaStatusName")), _s(r.get("PlanningMaterialStatusName")),
+                    _s(r.get("LLDI status")), _i(r.get("isFreezing")),
+                ))
+            execute_values(cur, sql, rows)
+        conn.commit()
+        return len(rows)
+    except Exception as e:
+        conn.rollback(); raise e
+    finally:
+        release_conn(conn)

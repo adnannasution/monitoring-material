@@ -31,6 +31,7 @@ from bulk_ops import (
     bulk_replace_job_detail, bulk_replace_job_detail_work_order,
     bulk_replace_equipment_taex,
     bulk_replace_job_area, bulk_replace_job_unit,
+    bulk_replace_vw_joblist_wo, bulk_replace_vw_joblist_detail,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
 
@@ -283,6 +284,60 @@ def map_order(r):
     }
 
 
+def map_vw_joblist_wo(r):
+    return {
+        "ID": r["id"], "Plant": r["plant"], "EquipmentNo": r["equipment_no"],
+        "Disiplin": r["disiplin"], "JoblistDescription": r["joblist_description"],
+        "PlanningJasaStatus": r["planning_jasa_status"],
+        "PlanningMaterialStatus": r["planning_material_status"],
+        "CodeName": r["code_name"], "IsLLDII": r["is_lldii"],
+        "Order": r["order"], "Notification": r["notification"],
+        "CreatedOn": r["created_on"], "SuperiorOrder": r["superior_order"],
+        "Description": r["description"], "FunctionalLoc": r["functional_loc"],
+        "Location": r["location"], "Revision": r["revision"],
+        "SystemStatus": r["system_status"], "UserStatus": r["user_status"],
+        "WBSordheader": r["wbs_ord_header"],
+        "TotalPlnndCosts": _n(r["total_plnnd_costs"]),
+        "Totalactcosts": _n(r["totalact_costs"]),
+        "PlannerGroup": r["planner_group"], "MainWorkCtr": r["main_work_ctr"],
+        "ChangeBy": r["change_by"], "Basstartdate": r["bas_start_date"],
+        "Basicfindate": r["basic_fin_date"], "ActualRelease": r["actual_release"],
+        "CostCenter": r["cost_center"], "EnteredBy": r["entered_by"],
+    }
+
+
+def map_vw_joblist_detail(r):
+    return {
+        "Id": r["id"], "JoblistId": r["joblist_id"],
+        "JoblistDetailDesc": r["joblist_detail_desc"],
+        "ReasonName": r["reason_name"], "DocTypeName": r["doc_type_name"],
+        "NoDocument": r["no_document"],
+        "IsMechanicalIntegrity": r["is_mechanical_integrity"],
+        "JobDisciplineName": r["job_discipline_name"],
+        "NomorPM": r["nomor_pm"], "Notes": r["notes"],
+        "Plant": r["plant"], "Created": r["created"],
+        "CreatorName": r["creator_name"], "CreatorJobTitle": r["creator_job_title"],
+        "IsDeleted": r["is_deleted"],
+        "JoblistDescription": r["joblist_description"], "NoJoblist": r["no_joblist"],
+        "ProjectNumber": r["project_number"],
+        "ProjectTypeCode": r["project_type_code"], "ProjectTypeName": r["project_type_name"],
+        "StartDate": r["start_date"], "FinishDate": r["finish_date"],
+        "Revision": r["revision"], "Description": r["description"],
+        "ProjectStatus": r["project_status"], "EquipmentNo": r["equipment_no"],
+        "AreaName": r["area_name"], "AreaAliasName": r["area_alias_name"],
+        "UnitName": r["unit_name"], "UnitAliasName": r["unit_alias_name"],
+        "FunctionalLocation": r["functional_location"], "Location": r["location"],
+        "Disiplin": r["disiplin"], "Criticallity": r["criticallity"],
+        "CriticallityText": r["criticallity_text"], "MainWorkCenter": r["main_work_center"],
+        "IsAllIn": r["is_all_in"], "IsJasa": r["is_jasa"],
+        "IsLLDII": r["is_lldii"], "IsMaterial": r["is_material"],
+        "CodeName": r["code_name"],
+        "PlanningJasaStatus": r["planning_jasa_status"],
+        "PlanningMaterialStatus": r["planning_material_status"],
+        "LLDIStatus": r["lldi_status"], "IsFreezing": r["is_freezing"],
+    }
+
+
 # ═══════════════════════════════════════════════════════════════
 # STATIC FILES
 # ═══════════════════════════════════════════════════════════════
@@ -451,7 +506,8 @@ async def upload_excel(upload_type: str, request: Request,
                        mode: Optional[str] = Form(None)):
     check_api_key(request)
     if upload_type not in ("taex","prisma","pr","po","project","joblist","jobdetail",
-                           "jobdetailworkorder","equipment","jobarea","jobunit"):
+                           "jobdetailworkorder","equipment","jobarea","jobunit",
+                           "vwjoblistwo","vwjoblistdetail"):
         raise HTTPException(400, "Type tidak valid")
 
     content = await file.read()
@@ -498,6 +554,10 @@ async def upload_excel(upload_type: str, request: Request,
                 cnt = bulk_replace_job_area(df)
             elif upload_type == "jobunit":
                 cnt = bulk_replace_job_unit(df)
+            elif upload_type == "vwjoblistwo":
+                cnt = bulk_replace_vw_joblist_wo(df)
+            elif upload_type == "vwjoblistdetail":
+                cnt = bulk_replace_vw_joblist_detail(df)
             else:
                 cnt = 0
 
@@ -994,6 +1054,46 @@ async def put_order(request: Request):
 def delete_order(row_id: int, request: Request):
     check_api_key(request)
     execute("DELETE FROM work_order WHERE id=%s", (row_id,))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# VW JOBLIST WO
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/vwjoblistwo")
+def get_vw_joblist_wo(request: Request):
+    check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f'SELECT * FROM vw_joblist_wo WHERE {where} ORDER BY id', params)
+    return jsonify([map_vw_joblist_wo(r) for r in rows])
+
+@app.delete("/api/vwjoblistwo")
+def delete_vw_joblist_wo(request: Request):
+    check_api_key(request)
+    execute("DELETE FROM vw_joblist_wo")
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════
+# VW JOBLIST DETAIL
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/vwjoblistdetail")
+def get_vw_joblist_detail(request: Request):
+    check_api_key(request)
+    user = get_current_user(request)
+    clauses, params = ["1=1"], []
+    pc, pp = plant_clause(user, "plant"); clauses.append(pc); params.extend(pp)
+    where = " AND ".join(clauses)
+    rows = query(f'SELECT * FROM vw_joblist_detail WHERE {where} ORDER BY inserted_at DESC', params)
+    return jsonify([map_vw_joblist_detail(r) for r in rows])
+
+@app.delete("/api/vwjoblistdetail")
+def delete_vw_joblist_detail(request: Request):
+    check_api_key(request)
+    execute("DELETE FROM vw_joblist_detail")
     return {"ok": True}
 
 
@@ -2773,6 +2873,160 @@ def get_tracking_joblist(
         result.append(d)
 
     return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRACKING JOBLIST 2 — berbasis vw_joblist_wo + vw_joblist_detail
+# Join via equipment_no (many-to-many)
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/tracking-joblist2")
+def get_tracking_joblist2(
+    request: Request,
+    project: str = None,
+    area: str = None,
+    unit: str = None,
+    disiplin: str = None,
+    status: str = None,
+    q: str = None,
+):
+    check_api_key(request)
+    user = get_current_user(request)
+
+    clauses = ["1=1"]
+    params  = []
+
+    pc, pp = plant_clause(user, "jld.plant"); clauses.append(pc); params.extend(pp)
+
+    if project:
+        clauses.append("jld.project_number = %s"); params.append(project)
+    if area:
+        clauses.append("jld.area_name = %s"); params.append(area)
+    if unit:
+        clauses.append("jld.unit_name = %s"); params.append(unit)
+    if disiplin:
+        clauses.append("jld.disiplin = %s"); params.append(disiplin)
+    if status:
+        clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
+    if q:
+        clauses.append("""(
+            wo."order" ILIKE %s OR jld.equipment_no ILIKE %s OR
+            jld.no_joblist ILIKE %s OR jld.joblist_detail_desc ILIKE %s OR
+            jld.project_number ILIKE %s OR jld.area_name ILIKE %s OR
+            jld.unit_name ILIKE %s OR jld.joblist_description ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 8)
+
+    where = " AND ".join(clauses)
+
+    rows = query(f"""
+        SELECT
+            -- Job Detail (vw_joblist_detail)
+            jld.id                      AS jld_id,
+            jld.joblist_id,
+            jld.joblist_detail_desc,
+            jld.reason_name,
+            jld.doc_type_name,
+            jld.no_document,
+            jld.is_mechanical_integrity,
+            jld.job_discipline_name,
+            jld.nomor_pm,
+            jld.notes,
+            jld.plant,
+            jld.creator_name,
+            jld.joblist_description,
+            jld.no_joblist,
+            jld.project_number,
+            jld.project_type_code,
+            jld.project_status,
+            jld.start_date              AS project_start,
+            jld.finish_date             AS project_finish,
+            jld.revision,
+            jld.description             AS project_desc,
+            jld.equipment_no,
+            jld.area_name,
+            jld.area_alias_name,
+            jld.unit_name,
+            jld.unit_alias_name,
+            jld.functional_location,
+            jld.location,
+            jld.disiplin,
+            jld.criticallity_text,
+            jld.main_work_center,
+            jld.is_jasa,
+            jld.is_lldii,
+            jld.is_material,
+            jld.code_name               AS jld_code_name,
+            jld.planning_jasa_status    AS jld_planning_jasa,
+            jld.planning_material_status AS jld_planning_material,
+
+            -- Work Order (vw_joblist_wo)
+            wo.id                       AS wo_id,
+            wo."order",
+            wo.notification,
+            wo.system_status,
+            wo.user_status,
+            wo.total_plnnd_costs,
+            wo.totalact_costs,
+            wo.planner_group,
+            wo.main_work_ctr,
+            wo.wbs_ord_header,
+            wo.bas_start_date,
+            wo.basic_fin_date,
+            wo.actual_release,
+            wo.cost_center,
+            wo.joblist_description      AS wo_joblist_description,
+            wo.planning_jasa_status     AS wo_planning_jasa,
+            wo.planning_material_status AS wo_planning_material,
+            wo.code_name                AS wo_code_name,
+            wo.is_lldii                 AS wo_is_lldii
+
+        FROM vw_joblist_detail jld
+        LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
+        WHERE {where}
+        ORDER BY jld.area_name, jld.unit_name, jld.equipment_no,
+                 jld.project_number, jld.no_joblist, jld.joblist_detail_desc, wo."order"
+    """, params)
+
+    # ── Readiness dari taex_reservasi ──────────────────────────
+    orders = list({r["order"] for r in rows if r["order"]})
+    order_readiness = {}
+
+    if orders:
+        placeholders = ",".join(["%s"] * len(orders))
+        mat_rows = query(f"""
+            SELECT "order",
+                   COUNT(*) AS total_mat,
+                   SUM(CASE WHEN COALESCE(qty_deliv,0) >= qty_reqmts AND qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
+            FROM taex_reservasi
+            WHERE "order" IN ({placeholders})
+            GROUP BY "order"
+        """, orders)
+        for m in mat_rows:
+            total = int(m["total_mat"] or 0)
+            ready = int(m["ready_mat"] or 0)
+            order_readiness[m["order"]] = {
+                "order_ready": total > 0 and ready == total,
+                "order_readiness_pct": round(ready / total * 100, 1) if total > 0 else 0,
+                "order_total_mat": total,
+                "order_ready_mat": ready,
+            }
+    for o in orders:
+        if o not in order_readiness:
+            order_readiness[o] = {"order_ready": False, "order_readiness_pct": 0,
+                                  "order_total_mat": 0, "order_ready_mat": 0}
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        rd = order_readiness.get(r["order"], {}) if r["order"] else {}
+        d["order_ready"]         = rd.get("order_ready", False)
+        d["order_readiness_pct"] = rd.get("order_readiness_pct", 0)
+        d["order_total_mat"]     = rd.get("order_total_mat", 0)
+        d["order_ready_mat"]     = rd.get("order_ready_mat", 0)
+        result.append(d)
+
+    return jsonify(result)
+
 
 # ═══════════════════════════════════════════════════════════════
 # AUTH ENDPOINTS

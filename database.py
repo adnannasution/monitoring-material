@@ -564,6 +564,93 @@ def migrate():
         )
         print("✅ Default admin created: admin / Admin@123")
 
+    execute("""
+        CREATE TABLE IF NOT EXISTS vw_joblist_wo (
+            id                       SERIAL PRIMARY KEY,
+            plant                    TEXT,
+            equipment_no             TEXT,
+            disiplin                 TEXT,
+            joblist_description      TEXT,
+            planning_jasa_status     TEXT,
+            planning_material_status TEXT,
+            code_name                TEXT,
+            is_lldii                 INTEGER,
+            "order"                  TEXT,
+            notification             TEXT,
+            created_on               TEXT,
+            superior_order           TEXT,
+            description              TEXT,
+            functional_loc           TEXT,
+            location                 TEXT,
+            revision                 TEXT,
+            system_status            TEXT,
+            user_status              TEXT,
+            wbs_ord_header           TEXT,
+            total_plnnd_costs        NUMERIC,
+            totalact_costs           NUMERIC,
+            planner_group            TEXT,
+            main_work_ctr            TEXT,
+            change_by                TEXT,
+            bas_start_date           TEXT,
+            basic_fin_date           TEXT,
+            actual_release           TEXT,
+            cost_center              TEXT,
+            entered_by               TEXT,
+            inserted_at              TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    execute("""
+        CREATE TABLE IF NOT EXISTS vw_joblist_detail (
+            id                       TEXT,
+            joblist_id               TEXT,
+            joblist_detail_desc      TEXT,
+            reason_name              TEXT,
+            doc_type_name            TEXT,
+            no_document              TEXT,
+            is_mechanical_integrity  INTEGER,
+            job_discipline_name      TEXT,
+            nomor_pm                 TEXT,
+            notes                    TEXT,
+            plant                    TEXT,
+            created                  TEXT,
+            creator_name             TEXT,
+            creator_job_title        TEXT,
+            is_deleted               INTEGER DEFAULT 0,
+            joblist_description      TEXT,
+            no_joblist               TEXT,
+            project_number           TEXT,
+            project_type_code        TEXT,
+            project_type_name        TEXT,
+            start_date               TEXT,
+            finish_date              TEXT,
+            revision                 TEXT,
+            description              TEXT,
+            project_status           TEXT,
+            equipment_no             TEXT,
+            area_name                TEXT,
+            area_alias_name          TEXT,
+            unit_name                TEXT,
+            unit_alias_name          TEXT,
+            functional_location      TEXT,
+            location                 TEXT,
+            disiplin                 TEXT,
+            criticallity             TEXT,
+            criticallity_text        TEXT,
+            main_work_center         TEXT,
+            is_all_in                INTEGER,
+            is_jasa                  INTEGER,
+            is_lldii                 INTEGER,
+            is_material              INTEGER,
+            code_name                TEXT,
+            planning_jasa_status     TEXT,
+            planning_material_status TEXT,
+            lldi_status              TEXT,
+            is_freezing              INTEGER,
+            inserted_at              TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
     # Indexes
     for sql in [
         'CREATE INDEX IF NOT EXISTS idx_taex_material ON taex_reservasi(material)',
@@ -596,6 +683,12 @@ def migrate():
         'CREATE INDEX IF NOT EXISTS idx_jobdetail_plant        ON job_detail(plant)',
         'CREATE INDEX IF NOT EXISTS idx_jdwo_joblist_detail    ON job_detail_work_order(joblist_detail_id)',
         'CREATE INDEX IF NOT EXISTS idx_jdwo_order             ON job_detail_work_order("order")',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jl_wo_order        ON vw_joblist_wo("order")',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jl_wo_plant        ON vw_joblist_wo(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jl_wo_revision     ON vw_joblist_wo(revision)',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jld_plant          ON vw_joblist_detail(plant)',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jld_revision       ON vw_joblist_detail(revision)',
+        'CREATE INDEX IF NOT EXISTS idx_vw_jld_project        ON vw_joblist_detail(project_number)',
     ]:
         try:
             execute(sql)
