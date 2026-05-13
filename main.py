@@ -2904,7 +2904,7 @@ def get_tracking_joblist2(
     if unit:
         clauses.append("jld.unit_name = %s"); params.append(unit)
     if disiplin:
-        clauses.append("jld.disiplin = %s"); params.append(disiplin)
+        clauses.append("COALESCE(jld.disiplin, wo.disiplin) = %s"); params.append(disiplin)
     if status:
         clauses.append("wo.system_status ILIKE %s"); params.append(f"%{status}%")
     if q:
@@ -2945,11 +2945,7 @@ def get_tracking_joblist2(
             wo.code_name                 AS wo_code_name,
             wo.is_lldii                  AS wo_is_lldii,
 
-            -- job_detail_work_order — link eksplisit
-            jdwo.id                      AS jdwo_id,
-            jdwo.joblist_detail_id,
-
-            -- Job Detail (vw_joblist_detail) — via job_detail_work_order
+            -- Job Detail (vw_joblist_detail) — via equipment_no
             jld.id                       AS jld_id,
             jld.joblist_id,
             jld.joblist_detail_desc,
@@ -2988,8 +2984,7 @@ def get_tracking_joblist2(
             jld.planning_material_status AS jld_planning_material
 
         FROM vw_joblist_wo wo
-        LEFT JOIN job_detail_work_order jdwo ON jdwo."order" = wo."order"
-        LEFT JOIN vw_joblist_detail jld      ON jld.id::text = jdwo.joblist_detail_id::text
+        LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
         WHERE {where}
         ORDER BY jld.area_name, jld.unit_name, wo.equipment_no,
                  jld.project_number, jld.no_joblist, jld.joblist_detail_desc, wo."order"

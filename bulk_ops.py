@@ -20,10 +20,12 @@ def _n(v):
 
 
 def _s(v):
-    """Konversi ke string atau None."""
+    """Konversi ke string atau None. String 'NULL'/'null'/'None' dianggap None."""
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return None
     s = str(v).strip()
+    if s.upper() in ('NULL', 'NONE', 'NAN', 'N/A', 'NA', '#N/A'):
+        return None
     return s if s else None
 
 
