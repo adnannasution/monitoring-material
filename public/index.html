@@ -4025,134 +4025,28 @@ async function submitAddTaex() {
 // SINKRON KE PRISMA RESERVASI
 // ============================================================
 async function syncWithTaex() {
-  // Ambil SEMUA data TA-ex dari server (semua halaman, tanpa filter)
-  showLoading('Mengambil semua data TA-ex...', true);
-  let allTaex = [];
+  if (!confirm('Sinkronisasi data dari TA-ex ke PRISMA?\n\nFilter: ICt=L, Del≠X, FIs≠X, Qty>0\nHanya baris baru yang belum ada di PRISMA yang akan ditambahkan.')) return;
+
+  showLoading('Sinkronisasi server-side...', true);
+  setSyncStatus('loading', '⏳ Sinkronisasi dari TA-ex ke PRISMA...');
+
   try {
-    const SYNC_LIMIT = 5000; // server max per request
-    const first = await apiFetch(`/data/taex?page=1&limit=${SYNC_LIMIT}`);
-    allTaex = first.data || [];
-    const total = first.pagination?.total || allTaex.length;
-    const totalPages = Math.ceil(total / SYNC_LIMIT);
-    for (let p = 2; p <= totalPages; p++) {
-      const r = await apiFetch(`/data/taex?page=${p}&limit=${SYNC_LIMIT}`);
-      allTaex = allTaex.concat(r.data || []);
-    }
-  } catch(e) {
+    const res = await apiFetch('/prisma/sync-from-taex', { method: 'POST' });
     hideLoading();
-    setSyncStatus('err', '❌ Gagal mengambil data TA-ex: ' + e.message);
-    toast('Gagal mengambil data TA-ex dari server!', 'err');
-    return;
-  }
 
-  if (!allTaex.length) { hideLoading(); toast('Data TA-ex kosong!', 'err'); return; }
+    const msg = `✅ ${res.added?.toLocaleString('id-ID') || 0} baris baru · ${res.skipped?.toLocaleString('id-ID') || 0} sudah ada · Total PRISMA: ${res.total?.toLocaleString('id-ID') || 0} · ${new Date().toLocaleTimeString('id-ID')}`;
+    setSyncStatus('ok', msg);
+    toast(`Selesai! ${res.added || 0} baris baru ditambahkan.`, 'ok');
 
-  // Pastikan semua data PRISMA dimuat untuk cek duplikat
-  showLoading(`Memuat data PRISMA... (${allTaex.length} baris TA-ex ditemukan)`, true);
-  try { await ensurePrismaLoaded(); } catch(e) { hideLoading(); return; }
-  hideLoading();
-
-  // ── FILTER: blokir baris yang mengandung 'x'/'X' di Del atau FIs ──
-  // ── FILTER: Ict WAJIB 'L' (case-insensitive tidak berlaku — harus huruf L besar) ──
-  const hasX = v => v && String(v).trim().toUpperCase() === 'X';
-  const isIctL = v => v && String(v).trim() === 'L';
-
-  const eligible = allTaex.filter(r => {
-    if (hasX(r.Del) || hasX(r.FIs)) return false;      // rule 1: Del atau FIs ada X → skip
-    if (!isIctL(r.Ict)) return false;                  // rule 2: Ict bukan 'L' → skip
-    if (!r.Qty_Reqmts || Number(r.Qty_Reqmts) <= 0) return false; // rule 3: Qty_Reqmts = 0 → skip
-    return true;
-  });
-
-  const skippedX    = allTaex.filter(r => hasX(r.Del) || hasX(r.FIs)).length;
-  const skippedIct  = allTaex.filter(r => !hasX(r.Del) && !hasX(r.FIs) && !isIctL(r.Ict)).length;
-  const skippedQty  = allTaex.filter(r => !hasX(r.Del) && !hasX(r.FIs) && isIctL(r.Ict) && (!r.Qty_Reqmts || Number(r.Qty_Reqmts) <= 0)).length;
-
-  if (!eligible.length) {
-    toast(`Tidak ada data yang memenuhi syarat (Del/FIs bukan X dan Ict=L)`, 'err');
-    return;
-  }
-
-  // Buat lookup TA-ex untuk update Del/FIs (pakai SEMUA baris, bukan hanya eligible)
-  const taexMap = {};
-  allTaex.forEach(t => { taexMap[`${t.Order}-${t.Material}-${t.Itm}`] = t; });
-
-  // Update Del/FIs pada baris PRISMA yang sudah ada jika TA-ex punya nilai tapi PRISMA kosong
-  let delFisUpdated = 0;
-  state.prismaReservasiData = state.prismaReservasiData.map(pr => {
-    const t = taexMap[`${pr.Order}-${pr.Material}-${pr.Itm}`];
-    if (!t) return pr;
-    const needDel = t.Del && !pr.Del;
-    const needFIs = t.FIs && !pr.FIs;
-    if (!needDel && !needFIs) return pr;
-    delFisUpdated++;
-    return { ...pr, Del: needDel ? t.Del : pr.Del, FIs: needFIs ? t.FIs : pr.FIs, _delFisUpdated: true };
-  });
-
-  const existingMap = {};
-  state.prismaReservasiData.forEach(r => { existingMap[`${r.Order}-${r.Material}-${r.Itm}`] = r; });
-
-  // Hanya ambil data TAEX yang BELUM ada di Prisma
-  const newOnly = eligible.filter(r => !existingMap[`${r.Order}-${r.Material}-${r.Itm}`]);
-  const skippedExisting = eligible.length - newOnly.length;
-
-  if (!newOnly.length && !delFisUpdated) {
-    await fetchAndRenderPrisma();
-    populateFilters();
-    toast(`Data sudah sinkron · ${skippedExisting} baris sudah ada di PRISMA.`, 'ok');
-    return;
-  }
-
-  const newRows = newOnly.map(r => ({
-    Plant: r.Plant||null, Equipment: r.Equipment, Revision: r.Revision,
-    Order: r.Order, Reservno: r.Reservno||null, Itm: r.Itm,
-    Material: r.Material, Material_Description: r.Material_Description,
-    Del: r.Del||null, FIs: r.FIs||null, Ict: r.Ict||null, PG: r.PG||null,
-    Recipient: r.Recipient||null, Unloading_point: r.Unloading_point||null,
-    Reqmts_Date: r.Reqmts_Date||null,
-    Qty_Reqmts: r.Qty_Reqmts, UoM: r.UoM||null,
-    PR_Prisma: null, Item_Prisma: null, Qty_PR_Prisma: null,
-    Qty_StockOnhand: null, CodeKertasKerja: null,
-  }));
-
-  // Hanya kirim ke server: baris baru + baris yang Del/FIs-nya diupdate
-  // JANGAN kirim syncedData (seluruh state) karena PUT /api/prisma sekarang UPSERT per ID
-  // — kirim semua tidak akan menghapus data lain, tapi lebih hemat bandwidth kirim yang berubah saja
-  const toSend = [
-    ...state.prismaReservasiData.filter(r => r._delFisUpdated), // baris existing yang berubah
-    ...newRows,                                                  // baris baru (belum punya ID)
-  ];
-  // Tandai _delFisUpdated sementara — bersihkan sebelum kirim
-  const payload = toSend.map(r => { const c = {...r}; delete c._delFisUpdated; return c; });
-
-  // Update state lokal dengan gabungan lengkap
-  state.prismaReservasiData = [...state.prismaReservasiData.map(r => { const c={...r}; delete c._delFisUpdated; return c; }), ...newRows];
-
-  showLoading('Sinkronisasi data...', true);
-  setSyncStatus('loading', '⏳ Sinkronisasi ke server...');
-  try {
-    await apiPut('/prisma', payload);
-    hideLoading();
-    // Invalidate cache lalu fetch ulang dari server supaya ID ter-assign
+    // Refresh tampilan PRISMA
     invalidatePrismaCache();
     await fetchAndRenderPrisma();
     populateFilters();
-    let msg = `✅ Sinkronisasi selesai · ${newRows.length} baris baru ditambahkan`;
-    if (delFisUpdated > 0)   msg += ` · ${delFisUpdated} Del/FIs diupdate`;
-    if (skippedX > 0)        msg += ` · ${skippedX} diskip (Del/FIs=X)`;
-    if (skippedIct > 0)      msg += ` · ${skippedIct} diskip (Ict≠L)`;
-    if (skippedQty > 0)      msg += ` · ${skippedQty} diskip (Qty=0)`;
-    if (skippedExisting > 0) msg += ` · ${skippedExisting} diskip (sudah ada)`;
-    setSyncStatus('ok', msg + ` · ${new Date().toLocaleTimeString('id-ID')}`);
-    let toastMsg = `Sinkronisasi selesai! ${newRows.length} baris baru ditambahkan`;
-    if (delFisUpdated > 0)   toastMsg += `, ${delFisUpdated} Del/FIs diupdate`;
-    if (skippedExisting > 0) toastMsg += `, ${skippedExisting} sudah ada dilewati`;
-    if (skippedX + skippedIct + skippedQty > 0) toastMsg += `, ${skippedX+skippedIct+skippedQty} diskip aturan`;
-    toast(toastMsg + '.', 'ok');
+
   } catch(e) {
     hideLoading();
     setSyncStatus('err', '❌ Gagal sinkronisasi: ' + e.message);
-    toast('Gagal sinkronisasi!', 'err');
+    toast('Gagal sinkronisasi: ' + e.message, 'err');
   }
 }
 
