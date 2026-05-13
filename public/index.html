@@ -4057,95 +4057,70 @@ function generateKKCode() {
   return prefix + num;
 }
 async function openKertasKerjaModal() {
-  showLoading('Memuat data PRISMA...', true);
-  try { await ensurePrismaLoaded(); } catch(e) { hideLoading(); return; }
-  hideLoading();
-  // Generate kode 10 digit alphanumeric, pastikan unik dari kumpulanData
+  // Generate kode unik — cukup check dari kumpulan + summary di state (ringan)
   const existingCodes = new Set([
     ...state.kumpulanData.map(r => r.CodeTracking),
     ...state.summaryData.map(r => r.CodeTracking),
   ].filter(Boolean));
   let code = generateKKCode();
   while (existingCodes.has(code)) code = generateKKCode();
-  document.getElementById('kk-input-code').value = code;
-  document.getElementById('kk-pg-type').value = '';
-  const pgSel = document.getElementById('kk-pg-type');
-  const isInventory = _currentUser && _currentUser.pg_role === 'Inventory';
-  const isAdminOrInventory = (_currentUser && _currentUser.is_admin) || isInventory;
 
+  document.getElementById('kk-input-code').value = code;
+  const pgSel = document.getElementById('kk-pg-type');
+  const isAdminOrInventory = (_currentUser && _currentUser.is_admin) ||
+                             (_currentUser && _currentUser.pg_role === 'Inventory');
   if (!isAdminOrInventory) {
-    // TA / OH / Rutin: hanya bisa pilih PG sesuai role, auto-select
     pgSel.innerHTML = `<option value="${_currentUser.pg_role}">${_currentUser.pg_role}</option>`;
-    pgSel.value = _currentUser.pg_role;
-    pgSel.disabled = true;
+    pgSel.value     = _currentUser.pg_role;
+    pgSel.disabled  = true;
   } else {
-    // Admin & Inventory: bisa pilih semua PG termasuk All
     pgSel.innerHTML = `<option value="">-- Pilih Planner Group --</option>
       <option value="TA">TA</option>
       <option value="OH">OH</option>
       <option value="Rutin">Rutin</option>
       <option value="All">All &nbsp;(Semua PG)</option>`;
     pgSel.disabled = false;
-    pgSel.value = '';
+    pgSel.value    = '';
   }
   document.getElementById('kk-wo-section').style.display = 'none';
-  document.getElementById('kk-wo-list').innerHTML = '';
+  document.getElementById('kk-wo-list').innerHTML        = '';
   openModal('modal-kk');
+
+  // Auto-load WO jika PG sudah ditentukan (non-admin)
+  if (!isAdminOrInventory && _currentUser?.pg_role) {
+    await kkOnPGTypeChange();
+  }
 }
 
-function kkGetPGFilter(pgType) {
-  if (pgType === 'TA')    return r => r.PG && r.PG.trim().toUpperCase().endsWith('T');
-  if (pgType === 'OH')    return r => r.PG && r.PG.trim().toUpperCase().endsWith('O');
-  if (pgType === 'Rutin') return r => r.PG && r.PG.trim().toUpperCase().endsWith('R');
-  return () => true; // All
-}
-
-function kkOnPGTypeChange() {
-  const pgType = document.getElementById('kk-pg-type').value;
+async function kkOnPGTypeChange() {
+  const pgType  = document.getElementById('kk-pg-type').value;
   const section = document.getElementById('kk-wo-section');
   if (!pgType) { section.style.display = 'none'; return; }
 
-  const pgFilter = kkGetPGFilter(pgType);
-
-  // WO sudah dipakai = ada CodeKertasKerja di prisma ATAU sedang di kkData aktif
-  const usedOrders = new Set([
-    ...state.prismaReservasiData.filter(r => r.CodeKertasKerja).map(r => r.Order),
-    ...(state.kkData || []).map(r => r.Order),
-  ].filter(Boolean));
-
-  // Ambil WO unik yang tersedia untuk PG terpilih
-  const available = [...new Set(
-    state.prismaReservasiData
-      .filter(pgFilter)
-      .filter(r => r.Order && !usedOrders.has(r.Order))
-      .map(r => r.Order)
-  )].sort();
-
   const list = document.getElementById('kk-wo-list');
-  document.getElementById('kk-wo-count').textContent = `(${available.length} tersedia)`;
-
-  if (!available.length) {
-    list.innerHTML = '<p style="font-size:12px;color:#9ca3af;padding:6px 8px;margin:0">Tidak ada WO tersedia untuk Planner Group ini</p>';
-    section.style.display = 'block';
-    return;
-  }
-
-  list.innerHTML = available.map(wo => `
-    <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:4px;font-size:12px;transition:background .1s"
-           onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''">
-      <input type="checkbox" class="kk-wo-check" value="${wo}" style="cursor:pointer;accent-color:#7c3aed">
-      <span>${wo}</span>
-    </label>
-  `).join('');
+  list.innerHTML = '<p style="font-size:12px;color:#6b7280;padding:8px;margin:0">⏳ Memuat daftar WO...</p>';
   section.style.display = 'block';
-}
+  document.getElementById('kk-wo-count').textContent = '';
 
-function kkSelectAllWO() {
-  document.querySelectorAll('.kk-wo-check').forEach(cb => cb.checked = true);
-}
-
-function kkDeselectAllWO() {
-  document.querySelectorAll('.kk-wo-check').forEach(cb => cb.checked = false);
+  try {
+    const wos = await apiFetch(`/prisma/workorders?pg=${pgType}`);
+    if (!wos.length) {
+      list.innerHTML = '<p style="font-size:12px;color:#9ca3af;padding:6px 8px;margin:0">Tidak ada WO tersedia untuk Planner Group ini</p>';
+      document.getElementById('kk-wo-count').textContent = '(0 tersedia)';
+      return;
+    }
+    document.getElementById('kk-wo-count').textContent = `(${wos.length} tersedia)`;
+    list.innerHTML = wos.map(w => `
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:4px;font-size:12px;transition:background .1s"
+             onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="kk-wo-check" value="${w.order}" style="cursor:pointer;accent-color:#7c3aed">
+        <span style="font-weight:600;color:#1a56db">${w.order}</span>
+        <span style="color:#6b7280;font-size:11px">${w.total_mat} mat · Qty: ${w.total_qty}</span>
+      </label>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = `<p style="font-size:12px;color:red;padding:8px;margin:0">❌ Gagal memuat: ${e.message}</p>`;
+  }
 }
 
 async function createKertasKerja() {
@@ -4156,30 +4131,33 @@ async function createKertasKerja() {
   const selectedWOs = [...document.querySelectorAll('.kk-wo-check:checked')].map(cb => cb.value);
   if (!selectedWOs.length) { toast('Pilih minimal satu Work Order!', 'err'); return; }
 
-  const selectedSet = new Set(selectedWOs);
-  const isX = v => v && String(v).trim().toUpperCase() === 'X';
-  let sourceData = state.prismaReservasiData.filter(r =>
-    selectedSet.has(r.Order) && !isX(r.Del) && !isX(r.FIs)
-  );
-  if (!sourceData.length) { toast('Tidak ada data reservasi untuk WO yang dipilih (atau semua baris diskip karena Del/FIs=X)', 'err'); return; }
-  state.kkData = sourceData.map(r => ({...r, CodeKertasKerja: code, Qty_StockOnhand: r.Qty_StockOnhand ?? null}));
-  state.kkCode = code;
   showLoading('Membuat Kertas Kerja...');
-  setSyncStatus('loading', '⏳ Menyimpan Kertas Kerja...');
+  setSyncStatus('loading', '⏳ Membuat Kertas Kerja...');
   try {
-    await apiFetch('/state/kk_current', { method:'POST', body:{ value:{ code, data: state.kkData } } });
+    const res = await apiFetch('/kertas-kerja/create', {
+      method: 'POST',
+      body: { code, wos: selectedWOs },
+    });
+    // Sync state dari server response
+    state.kkData = res.data || [];
+    state.kkCode = code;
+    // Reload kk_current dari server ke state
+    const kkState = await apiFetch('/state/kk_current');
+    if (kkState?.value) {
+      state.kkData = kkState.value.data || [];
+      state.kkCode = kkState.value.code || code;
+    }
     hideLoading();
     closeModal('modal-kk');
-    setSyncStatus('ok', `✅ Kertas Kerja ${code} dibuat · ${new Date().toLocaleTimeString('id-ID')}`);
-    toast(`Kertas Kerja ${code} berhasil dibuat!`, 'ok');
+    setSyncStatus('ok', `✅ Kertas Kerja ${code} dibuat · ${res.rows} baris · ${new Date().toLocaleTimeString('id-ID')}`);
+    toast(`Kertas Kerja ${code} berhasil dibuat! (${res.rows} baris dari ${selectedWOs.length} WO)`, 'ok');
     switchApp('kertas-kerja');
   } catch(e) {
     hideLoading();
-    setSyncStatus('err', '❌ Gagal simpan: ' + e.message);
-    toast('Gagal simpan ke server!', 'err');
+    setSyncStatus('err', '❌ Gagal: ' + e.message);
+    toast('Gagal membuat Kertas Kerja: ' + e.message, 'err');
   }
 }
-
 async function submitKertasKerja() {
   if (!state.kkData.length) { toast('Tidak ada data Kertas Kerja', 'err'); return; }
   const summaryMap = {};

@@ -677,6 +677,121 @@ def prisma_meta(request: Request):
     pgs = query('SELECT DISTINCT pg FROM prisma_reservasi WHERE pg IS NOT NULL ORDER BY pg')
     return {"orders": orders, "total_orders": int(total), "pgs": [r["pg"] for r in pgs]}
 
+
+# ─── GET WO list untuk modal Kertas Kerja ────────────────────
+PG_SUFFIX_MAP = {"TA": "T", "OH": "O", "Rutin": "R"}
+
+@app.get("/api/prisma/workorders")
+def prisma_workorders(request: Request, pg: str = "All"):
+    """
+    Return distinct WO yang tersedia untuk Kertas Kerja:
+    - Del≠X, FIs≠X, qty_reqmts>0
+    - Belum punya CodeKertasKerja (belum dipakai di KK manapun)
+    - Filter by planner group (pg=TA/OH/Rutin/All)
+    """
+    check_api_key(request)
+    user = get_current_user(request)
+
+    conds = [
+        "UPPER(COALESCE(del,'')) != 'X'",
+        "UPPER(COALESCE(fis,'')) != 'X'",
+        "COALESCE(qty_reqmts,0) > 0",
+        "(code_kertas_kerja IS NULL OR code_kertas_kerja = '')",
+    ]
+    params = []
+
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+
+    suffix = PG_SUFFIX_MAP.get(pg)
+    if suffix:
+        conds.append("pg LIKE %s"); params.append(f"%{suffix}")
+
+    where = " AND ".join(conds)
+
+    rows = query(f"""
+        SELECT "order",
+               COUNT(*)                AS total_mat,
+               COUNT(DISTINCT material) AS uniq_mat,
+               SUM(qty_reqmts)         AS total_qty
+        FROM prisma_reservasi
+        WHERE {where}
+        GROUP BY "order"
+        ORDER BY "order"
+    """, params)
+
+    return jsonify([{
+        "order":     r["order"],
+        "total_mat": int(r["total_mat"]),
+        "uniq_mat":  int(r["uniq_mat"]),
+        "total_qty": float(r["total_qty"] or 0),
+    } for r in rows])
+
+
+# ─── CREATE Kertas Kerja server-side ─────────────────────────
+@app.post("/api/kertas-kerja/create")
+async def create_kertas_kerja(request: Request):
+    """
+    Buat Kertas Kerja dari WO terpilih:
+    - Ambil baris PRISMA untuk WO tersebut (Del≠X, FIs≠X)
+    - Simpan ke app_state kk_current
+    """
+    check_api_key(request)
+    user = get_current_user(request)
+    body = await request.json()
+
+    code = body.get("code", "").strip()
+    wos  = body.get("wos", [])
+
+    if not code:
+        raise HTTPException(400, "Kode Kertas Kerja wajib diisi")
+    if not wos:
+        raise HTTPException(400, "Pilih minimal satu Work Order")
+
+    ph     = ",".join(["%s"] * len(wos))
+    conds  = [
+        f'"order" IN ({ph})',
+        "UPPER(COALESCE(del,'')) != 'X'",
+        "UPPER(COALESCE(fis,'')) != 'X'",
+    ]
+    params = list(wos)
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+    where  = " AND ".join(conds)
+
+    rows = query(f"SELECT * FROM prisma_reservasi WHERE {where} ORDER BY id", params)
+
+    if not rows:
+        raise HTTPException(404, "Tidak ada data PRISMA untuk WO yang dipilih")
+
+    kk_data = []
+    for r in rows:
+        d = dict(r)
+        d["CodeKertasKerja"]  = code
+        d["Qty_StockOnhand"]  = d.get("qty_stock_onhand")
+        # Rename keys ke format frontend
+        kk_data.append({
+            "ID": d["id"], "Plant": d["plant"], "Equipment": d["equipment"],
+            "Revision": d["revision"], "Order": d["order"], "Reservno": d["reservno"],
+            "Itm": d["itm"], "Material": d["material"],
+            "Material_Description": d["material_description"],
+            "Del": d["del"], "FIs": d["fis"], "Ict": d["ict"], "PG": d["pg"],
+            "Recipient": d["recipient"], "Unloading_point": d["unloading_point"],
+            "Reqmts_Date": d["reqmts_date"], "Qty_Reqmts": _n(d["qty_reqmts"]),
+            "UoM": d["uom"], "PR_Prisma": d["pr_prisma"],
+            "Item_Prisma": d["item_prisma"],
+            "Qty_PR_Prisma": _n(d["qty_pr_prisma"]),
+            "Qty_StockOnhand": _n(d["qty_stock_onhand"]),
+            "CodeKertasKerja": code,
+        })
+
+    set_state("kk_current", {"code": code, "data": kk_data})
+
+    return jsonify({
+        "ok": True, "code": code,
+        "rows": len(kk_data),
+        "orders": len(wos),
+        "msg": f"✅ Kertas Kerja {code} dibuat dengan {len(kk_data)} baris dari {len(wos)} WO"
+    })
+
 @app.put("/api/prisma")
 async def put_prisma(request: Request):
     check_api_key(request)
