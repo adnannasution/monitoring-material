@@ -148,10 +148,14 @@ def pg_clause(user: dict, col: str = "pg") -> tuple:
     """Return (sql_clause, params) untuk filter PG."""
     if user["is_admin"]:
         return ("1=1", [])
+    # Plant 6701: tidak ada filter PG, semua tampil
+    if user.get("plant_code") == "6701":
+        return ("1=1", [])
     suffix = PG_SUFFIX.get(user["pg_role"])
     if not suffix:
         return ("1=1", [])
-    return (f"{col} LIKE %s", [f"%{suffix}"])
+    # Pakai LIKE '%T%' agar menangkap planner group seperti '2TS' (T di tengah)
+    return (f"{col} LIKE %s", [f"%{suffix}%"])
 
 def apply_filters(user: dict, base_clauses: list, base_params: list,
                   plant_col: str = "plant", pg_col: str = None) -> tuple:
@@ -1373,9 +1377,16 @@ def get_tracking(
     if po:
         conds.append("t.po ILIKE %s"); params.append(f"%{po}%")
 
-    # Filter plant
-    if plant:
-        conds.append("t.plant = %s"); params.append(plant)
+    # Filter plant — dari query param atau dari user session
+    try:
+        user = get_current_user(request)
+        if not user["is_admin"] and user.get("plant_code"):
+            conds.append("t.plant = %s"); params.append(user["plant_code"])
+        elif plant:
+            conds.append("t.plant = %s"); params.append(plant)
+    except:
+        if plant:
+            conds.append("t.plant = %s"); params.append(plant)
 
     # Filter status PR/PO/Delivery
     if status in ("with_pr",):
