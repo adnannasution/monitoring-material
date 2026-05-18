@@ -3145,6 +3145,9 @@ async function _backgroundLoad() {
     // Badge jobdetail & equipment — lazy, fetch count saja
     _fetchBadgeCounts();
 
+    // Pre-load tab yang sering dibuka agar tidak reload saat diklik
+    _backgroundLoadTabs();
+
   } catch(e) {
     console.warn('Background load gagal:', e.message);
   }
@@ -3154,6 +3157,15 @@ async function _backgroundLoad() {
       if (state.prismaReservasiData.length > 0) await fetchAndRenderPrisma();
     } catch(e) { console.warn('Background PRISMA load gagal:', e.message); }
   }
+}
+
+async function _backgroundLoadTabs() {
+  // Load semua tab secara paralel di background, sehingga saat diklik langsung tampil
+  try { await renderTracking(); } catch(e) { console.warn('bg tracking:', e.message); }
+  try { await fetchAndRenderAudit(); } catch(e) { console.warn('bg audit:', e.message); }
+  try { await fetchAndRenderVwJlWo(); } catch(e) { console.warn('bg vwjlwo:', e.message); }
+  try { await fetchAndRenderVwJld(); } catch(e) { console.warn('bg vwjld:', e.message); }
+  try { await fetchAndRenderTrkJl2(); } catch(e) { console.warn('bg trkjl2:', e.message); }
 }
 
 async function _fetchBadgeCounts() {
@@ -3674,11 +3686,11 @@ function renderSAP() {
     <td class="mono">${D(r.TrackingNo)}</td>
     <td class="num"><span class="badge badge-green">${N(r.Qty_PR)}</span></td>
     <td class="center">${D(r.Un)}</td>
-    <td class="mono">${D(r.Req_Date)}</td>
+    <td class="mono">${fmtDate(r.Req_Date)}</td>
     <td class="num">${N(r.Valn_price)}</td>
     <td class="mono">${D(r.PR_Curr)}</td>
     <td class="num">${N(r.PR_Per)}</td>
-    <td class="mono">${D(r.Release_Date)}</td>
+    <td class="mono">${fmtDate(r.Release_Date)}</td>
     <td class="td-actions">
       <button class="btn-act btn-act-edit" onclick="openEditModal('sap',${i})">✏ Edit</button>
       <button class="btn-act btn-act-del" onclick="deleteRow('sap',${i})">🗑</button>
@@ -4970,10 +4982,10 @@ function renderPo() {
     <td class="mono">${D(r.D)}</td>
     <td class="mono">${D(r.DCI)}</td>
     <td class="mono">${D(r.PGr)}</td>
-    <td class="mono">${D(r.Doc_Date)}</td>
+    <td class="mono">${fmtDate(r.Doc_Date)}</td>
     <td class="num">${N(r.PO_Quantity)}</td>
     <td class="num">${N(r.Qty_Delivered)}</td>
-    <td class="mono">${D(r.Deliv_Date)}</td>
+    <td class="mono">${fmtDate(r.Deliv_Date)}</td>
     <td class="mono">${D(r.OUn)}</td>
     <td class="num">${N(r.Net_Price)}</td>
     <td class="mono">${D(r.Crcy)}</td>
@@ -5602,18 +5614,23 @@ function applyColVisibility(tab) {
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
 
-  // Simpan state
+  // Simpan state — key = data-col value (bisa mulai dari 0 atau 1)
   colVisibility[tab] = {};
   checks.forEach(cb => {
     colVisibility[tab][parseInt(cb.dataset.col)] = cb.checked;
   });
+
+  // Cari offset: data-col terkecil = index kolom pertama di tabel
+  const colNums = Array.from(checks).map(cb => parseInt(cb.dataset.col));
+  const minCol  = Math.min(...colNums);
 
   // Apply ke thead
   const table = tbody.closest('table');
   if (!table) return;
   const ths = table.querySelectorAll('thead th');
   ths.forEach((th, i) => {
-    th.style.display = (colVisibility[tab][i] === false) ? 'none' : '';
+    const colKey = i + minCol;
+    th.style.display = (colVisibility[tab][colKey] === false) ? 'none' : '';
   });
 
   // Apply ke semua td di tbody (tiap row)
@@ -5621,7 +5638,8 @@ function applyColVisibility(tab) {
   trs.forEach(tr => {
     const tds = tr.querySelectorAll('td');
     tds.forEach((td, i) => {
-      td.style.display = (colVisibility[tab][i] === false) ? 'none' : '';
+      const colKey = i + minCol;
+      td.style.display = (colVisibility[tab][colKey] === false) ? 'none' : '';
     });
   });
 
@@ -5645,11 +5663,15 @@ function reapplyColAfterRender(tab) {
   if (!tbody) return;
   const table = tbody.closest('table');
   if (!table) return;
+
+  // Cari offset: key terkecil di state = index kolom pertama di tabel
+  const minCol = Math.min(...Object.keys(state).map(Number));
+
   const ths = table.querySelectorAll('thead th');
-  ths.forEach((th, i) => { th.style.display = (state[i] === false) ? 'none' : ''; });
+  ths.forEach((th, i) => { th.style.display = (state[i + minCol] === false) ? 'none' : ''; });
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.querySelectorAll('td').forEach((td, i) => {
-      td.style.display = (state[i] === false) ? 'none' : '';
+      td.style.display = (state[i + minCol] === false) ? 'none' : '';
     });
   });
 
@@ -7797,6 +7819,7 @@ function renderTrkJl() {
   </div>`;
 
   renderPagination('trkjl-pagination','trkjl',trkJlFiltered.length,pg.page,totalPages,pg.size,renderTrkJl);
+  requestAnimationFrame(fixTrkJlStickyHeader);
 }
 
 function trkJlResetFilter() {
@@ -7851,14 +7874,22 @@ function exportTrkJlExcel() {
 }
 
 function fixTrkJlStickyHeader() {
-  const table = document.getElementById('trkjl-table');
+  const tree = document.getElementById('trkjl-tree');
+  if (!tree) return;
+  const table = tree.querySelector('table');
   if (!table) return;
   const rows = table.querySelectorAll('thead tr');
   if (rows.length < 2) return;
-  // Paksa row 1 render dulu baru ukur
   const row1H = rows[0].offsetHeight;
+  rows[0].querySelectorAll('th').forEach(th => {
+    th.style.position = 'sticky';
+    th.style.top = '0';
+    th.style.zIndex = '21';
+  });
   rows[1].querySelectorAll('th').forEach(th => {
+    th.style.position = 'sticky';
     th.style.top = row1H + 'px';
+    th.style.zIndex = '20';
   });
 }
 
@@ -7952,6 +7983,13 @@ function updateUserUI() {
   PROJECT_TABS.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = showProjectTabs ? '' : 'none';
+  });
+
+  // Tab khusus admin saja
+  const ADMIN_ONLY_TABS = ['tab-audit','tab-vw-joblist-wo','tab-vw-joblist-detail','tab-tracking-joblist2'];
+  ADMIN_ONLY_TABS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = u.is_admin ? '' : 'none';
   });
 }
 
