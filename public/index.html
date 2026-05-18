@@ -3265,7 +3265,7 @@ function renderPage(app) {
   else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
   else if (app==='vw-joblist-wo')   { if (!vwJlWoFiltered.length) fetchAndRenderVwJlWo(); else renderVwJlWo(); }
   else if (app==='vw-joblist-detail') { if (!vwJldFiltered.length) fetchAndRenderVwJld(); else renderVwJld(); }
-  else if (app==='tracking-joblist2') { if (!state.trkJl2Data.length) fetchAndRenderTrkJl2(); else renderTrkJl2(); }
+  else if (app==='tracking-joblist2') { if (!trkJl2Filtered.length) fetchAndRenderTrkJl2(); else renderTrkJl2(); }
 }
 
 function populateFilters() {
@@ -5365,8 +5365,17 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
-async function fetchAndRenderTracking() { return renderTracking(); }
-async function renderTracking() {
+function renderTracking() {
+  const tbody = document.getElementById('trk-tbody');
+  if (!trkFiltered.length) { tbody.innerHTML='<tr class="loading-row"><td colspan="58">Belum ada data tracking</td></tr>'; return; }
+  // re-render tabel dari cache trkFiltered yang sudah ada
+  const pgS = getPg('trk');
+  renderPagination('trk-pagination','trk',trkServerMeta.total,trkServerMeta.page,trkServerMeta.totalPages,trkServerMeta.limit,fetchAndRenderTracking);
+  reapplyColAfterRender('trk');
+  updateTrkCards();
+}
+
+async function fetchAndRenderTracking() {
   const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value;
   const fPlant = document.getElementById('trk-filterPlant').value;
@@ -7078,6 +7087,14 @@ async function renderVwJlWo() {
   renderPagination('vwjlwo-pagination','vwjlwo',vwJlWoServerMeta.total,vwJlWoServerMeta.page,vwJlWoServerMeta.totalPages,vwJlWoServerMeta.limit,renderVwJlWo);
 }
 
+function renderVwJlWo() {
+  const tbody = document.getElementById('vwjlwo-tbody');
+  if (!vwJlWoFiltered.length) { tbody.innerHTML='<tr class="loading-row"><td colspan="22">Belum ada data</td></tr>'; return; }
+  const pgS = getPg('vwjlwo');
+  renderPagination('vwjlwo-pagination','vwjlwo',vwJlWoServerMeta.total,vwJlWoServerMeta.page,vwJlWoServerMeta.totalPages,vwJlWoServerMeta.limit,fetchAndRenderVwJlWo);
+  reapplyColAfterRender('vwjlwo');
+}
+
 async function fetchAndRenderVwJlWo() {
   vwJlWoServerMeta.total = 0;
   resetPg('vwjlwo');
@@ -7224,6 +7241,14 @@ async function renderVwJld() {
   renderPagination('vwjld-pagination','vwjld',vwJldServerMeta.total,vwJldServerMeta.page,vwJldServerMeta.totalPages,vwJldServerMeta.limit,renderVwJld);
 }
 
+function renderVwJld() {
+  const tbody = document.getElementById('vwjld-tbody');
+  if (!vwJldFiltered.length) { tbody.innerHTML='<tr class="loading-row"><td colspan="20">Belum ada data</td></tr>'; return; }
+  const pgS = getPg('vwjld');
+  renderPagination('vwjld-pagination','vwjld',vwJldServerMeta.total,vwJldServerMeta.page,vwJldServerMeta.totalPages,vwJldServerMeta.limit,fetchAndRenderVwJld);
+  reapplyColAfterRender('vwjld');
+}
+
 async function fetchAndRenderVwJld() {
   vwJldServerMeta.total = 0;
   resetPg('vwjld');
@@ -7306,6 +7331,13 @@ function openVwJldUploadModal() {
 // TRACKING JOBLIST 2 — vw_joblist_wo + vw_joblist_detail via equipment_no
 // ============================================================
 let trkJl2ServerMeta = { total: 0, totalPages: 1, page: 1, limit: 100 };
+
+function renderTrkJl2() {
+  const container = document.getElementById('trkjl2-tree');
+  if (!trkJl2Filtered.length) { container.innerHTML='<div style="color:#9ca3af;padding:20px;text-align:center">Belum ada data</div>'; return; }
+  const pgS = getPg('trkjl2');
+  renderPagination('trkjl2-pagination','trkjl2',trkJl2ServerMeta.total,trkJl2ServerMeta.page,trkJl2ServerMeta.totalPages,trkJl2ServerMeta.limit,fetchAndRenderTrkJl2);
+}
 
 async function fetchAndRenderTrkJl2() {
   trkJl2ServerMeta.total = 0;
