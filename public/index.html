@@ -1933,10 +1933,13 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <button class="btn btn-export" onclick="exportTrkJlExcel()" style="margin-left:8px">📤 Export</button>
     <span class="filter-right" id="trkjl-rowCount"></span>
   </div>
-  <div class="table-container" style="overflow:auto">
-    <div id="trkjl-tree" style="min-width:900px;padding:4px 0">
-      <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist...</div>
+  <div style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <div class="table-container" style="overflow:auto;flex:1">
+      <div id="trkjl-tree" style="min-width:1200px;padding:4px 0">
+        <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist...</div>
+      </div>
     </div>
+    <div class="pagination" id="trkjl-pagination" style="flex-shrink:0;border-top:1px solid #e5e7eb;background:white"></div>
   </div>
 </div>
 

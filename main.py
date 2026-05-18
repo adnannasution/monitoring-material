@@ -1366,10 +1366,9 @@ def get_tracking(
             t.po                ILIKE %s OR
             t.reservno          ILIKE %s OR
             COALESCE(sp.tracking,'')    ILIKE %s OR
-            COALESCE(sp.tracking_no,'') ILIKE %s OR
-            COALESCE(k.code_tracking,'') ILIKE %s
+            COALESCE(sp.tracking_no,'') ILIKE %s
         )""")
-        params.extend([f"%{q}%"] * 10)
+        params.extend([f"%{q}%"] * 9)
 
     if order_val:
         conds.append('t."order" ILIKE %s'); params.append(f"%{order_val}%")
@@ -2896,7 +2895,7 @@ def get_tracking_joblist(
             a.area_name ILIKE %s OR u.unit_name ILIKE %s OR
             eq.equipment_no ILIKE %s OR eq.description_of_technical_object ILIKE %s
         )""")
-        params.extend([f"%{q}%"] * 10)
+        params.extend([f"%{q}%"] * 9)
 
     where = " AND ".join(clauses)
 
