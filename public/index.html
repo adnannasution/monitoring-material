@@ -1935,7 +1935,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
   <div class="table-container">
     <div class="table-wrap">
-      <div id="trkjl-tree" style="min-width:1200px;padding:4px 0">
+      <div id="trkjl-tree" style="padding:4px 0">
         <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist...</div>
       </div>
     </div>
@@ -7745,15 +7745,13 @@ function renderTrkJl() {
 
   // Render as table wrapped in table-wrap div
   const container = document.getElementById('trkjl-tree');
-  container.style.minWidth = '';
-
   if (!slice.length) {
     container.innerHTML = '<div style="color:#9ca3af;padding:20px;text-align:center">Tidak ada data</div>';
     renderPagination('trkjl-pagination','trkjl',trkJlFiltered.length,pg.page,totalPages,pg.size,renderTrkJl);
     return;
   }
 
-  container.innerHTML = `<table style="width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px">
+  container.innerHTML = `<table style="width:100%;min-width:1400px;border-collapse:collapse;white-space:nowrap;font-size:12px">
       <thead style="position:sticky;top:0;z-index:20">
         <tr>
           <th colspan="3" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
