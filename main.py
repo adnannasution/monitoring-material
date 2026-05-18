@@ -443,6 +443,10 @@ def get_data_table(tabel: str, request: Request,
                    page: int = 1, limit: int = 100,
                    q: str = "", order_by: str = "id", order_dir: str = "ASC"):
     check_api_key(request)
+    try:
+        user = get_current_user(request)
+    except:
+        user = {"is_admin": True, "plant_code": None, "pg_role": None}
     cfg = TABLE_CONFIG.get(tabel)
     if not cfg:
         raise HTTPException(404, "Tabel tidak ditemukan")
@@ -455,6 +459,18 @@ def get_data_table(tabel: str, request: Request,
     if q:
         conds.append(f"({' OR '.join(f'{c}::text ILIKE %s' for c in cfg['search_cols'])})")
         params.extend([f"%{q}%"] * len(cfg["search_cols"]))
+
+    PLANT_COL = {
+        "taex":   "plant",
+        "prisma": "plant",
+        "pr":     "plant",
+        "po":     "plnt",
+    }
+    pcol = PLANT_COL.get(tabel)
+    if pcol:
+        pc, pp = plant_clause(user, pcol)
+        conds.append(pc)
+        params.extend(pp)
 
     for key, build in cfg["filters"].items():
         val = request.query_params.get(key)
