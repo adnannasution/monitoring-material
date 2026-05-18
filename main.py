@@ -3406,6 +3406,17 @@ def admin_delete_user(user_id: int, request: Request):
 # Akses dengan header: x-api-key: <PUBLIC_API_KEY>
 # atau query param:    ?api_key=<PUBLIC_API_KEY>
 # ═══════════════════════════════════════════════════════════════
+def _calc_status(r):
+    has_pr  = bool(r.get("pr"))
+    has_po  = bool(r.get("po"))
+    qty_del = float(r.get("qty_deliv") or 0)
+    qty_req = float(r.get("qty_reqmts") or 0)
+    if not has_pr:           return "no-pr"
+    if not has_po:           return "pr-created"
+    if qty_del <= 0:         return "po-created"
+    if qty_del < qty_req:    return "partial"
+    return "complete"
+
 
 @app.get("/api/public/tracking")
 def public_tracking(
@@ -3422,26 +3433,8 @@ def public_tracking(
     order_by: str = "t.id",
     order_dir: str = "ASC",
 ):
-    """
-    Public API — Tracking material (TA-ex Reservasi + PR/PO).
-
-    **Auth:** Header `x-api-key` atau query `?api_key=`
-
-    **Filter params:**
-    - `q` — pencarian bebas (order, material, equipment)
-    - `order_val` — filter by order number
-    - `material` — filter by material number
-    - `pr` — filter by PR number
-    - `po` — filter by PO number
-    - `status` — `with_pr`, `without_pr`, `with_po`, `without_po`
-    - `plant` — filter by plant code
-    - `page`, `limit` — pagination (max limit 500)
-    - `order_by`, `order_dir` — sorting
-    """
     check_public_api_key(request)
 
-    # Delegate ke fungsi tracking internal
-    from fastapi import Request as FRequest
     clauses = ["1=1"]
     params  = []
 
@@ -3467,6 +3460,16 @@ def public_tracking(
         clauses.append("t.po IS NOT NULL AND t.po != ''")
     elif status == "without_po":
         clauses.append("(t.po IS NULL OR t.po = '')")
+    elif status == "no-pr":
+        clauses.append("(t.pr IS NULL OR t.pr = '')")
+    elif status == "pr-created":
+        clauses.append("t.pr IS NOT NULL AND t.pr != '' AND (t.po IS NULL OR t.po = '')")
+    elif status == "po-created":
+        clauses.append("t.po IS NOT NULL AND t.po != '' AND COALESCE(t.qty_deliv, 0) = 0")
+    elif status == "partial":
+        clauses.append("COALESCE(t.qty_deliv, 0) > 0 AND COALESCE(t.qty_deliv, 0) < COALESCE(t.qty_reqmts, 0)")
+    elif status == "complete":
+        clauses.append("COALESCE(t.qty_deliv, 0) >= COALESCE(t.qty_reqmts, 0) AND COALESCE(t.qty_reqmts, 0) > 0")
 
     safe_cols = {"t.id","t.plant","t.equipment","t.order","t.material",
                  "t.qty_reqmts","t.qty_stock","t.pr","t.po","t.qty_deliv"}
@@ -3484,10 +3487,8 @@ def public_tracking(
             t.pr, t.item, t.qty_pr, t.cost_ctrs,
             t.po, t.po_date, t.qty_deliv, t.delivery_date,
             t.reqmts_date, t.uom, t.sloc, t.reservno,
-            -- PR data from sap_pr
             sp.release_date AS pr_release_date, sp.req_date AS pr_req_date,
             sp.tracking AS pr_tracking, sp.pgr AS pr_pgr,
-            -- PO data from sap_po
             spo.doc_date AS po_doc_date, spo.deliv_date AS po_deliv_date,
             spo.net_price AS po_net_price, spo.crcy AS po_currency
         FROM taex_reservasi t
@@ -3498,7 +3499,7 @@ def public_tracking(
         LIMIT %s OFFSET %s
     """, params + [limit, offset])
 
-    data = [dict(r) for r in rows]
+    data = [{**dict(r), "status": _calc_status(r)} for r in rows]
     return jsonify({
         "@odata.count": int(total),
         "meta": {
@@ -3508,7 +3509,6 @@ def public_tracking(
         "value": data,
         "data":  data,
     })
-
 
 @app.get("/api/public/tracking-joblist")
 def public_tracking_joblist(
