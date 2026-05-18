@@ -2108,7 +2108,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <span class="filter-right" id="trkjl2-rowCount"></span>
   </div>
   <div class="table-container" style="overflow:auto">
-    <div id="trkjl2-tree" style="min-width:900px;padding:4px 0">
+    <div id="trkjl2-tree" style="min-width:1400px;padding:4px 0">
       <div style="color:#9ca3af;padding:20px;text-align:center">Memuat data tracking joblist 2...</div>
     </div>
     <div class="pagination" id="trkjl2-pagination"></div>
@@ -3241,8 +3241,8 @@ function renderPage(app) {
   else if (app==='pr') { if (!sapFiltered.length) fetchAndRenderSAP(); }
   else if (app==='order') renderOrder();
   else if (app==='po') { if (!poFiltered.length) fetchAndRenderPo(); }
-  else if (app==='tracking') renderTracking();
-  else if (app==='audit') fetchAndRenderAudit();
+  else if (app==='tracking') { if (!trkFiltered.length) fetchAndRenderTracking(); else renderTracking(); }
+  else if (app==='audit') { if (!auditData.length) fetchAndRenderAudit(); else renderAudit(); }
   else if (app==='project') { if (!state.projectData.length) fetchAndRenderProject(); else renderProject(); }
   else if (app==='joblist') { if (!state.joblistData.length) fetchAndRenderJoblist(); else renderJoblist(); }
   else if (app==='jobdetail') { if (!state.jobdetailData.length) fetchAndRenderJobdetail(); else renderJobdetail(); }
@@ -3251,8 +3251,8 @@ function renderPage(app) {
   else if (app==='jobarea')   { if (!state.jobAreaData.length) fetchAndRenderJobArea(); else renderJobArea(); }
   else if (app==='jobunit')   { if (!state.jobUnitData.length) fetchAndRenderJobUnit(); else renderJobUnit(); }
   else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
-  else if (app==='vw-joblist-wo')   { if (!state.vwJlWoData.length) fetchAndRenderVwJlWo(); else renderVwJlWo(); }
-  else if (app==='vw-joblist-detail') { if (!state.vwJldData.length) fetchAndRenderVwJld(); else renderVwJld(); }
+  else if (app==='vw-joblist-wo')   { if (!vwJlWoFiltered.length) fetchAndRenderVwJlWo(); else renderVwJlWo(); }
+  else if (app==='vw-joblist-detail') { if (!vwJldFiltered.length) fetchAndRenderVwJld(); else renderVwJld(); }
   else if (app==='tracking-joblist2') { if (!state.trkJl2Data.length) fetchAndRenderTrkJl2(); else renderTrkJl2(); }
 }
 
@@ -5353,6 +5353,7 @@ function groupByOrder(rows) {
 }
 
 // ── RENDER ──
+async function fetchAndRenderTracking() { return renderTracking(); }
 async function renderTracking() {
   const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value;
@@ -7360,9 +7361,9 @@ async function renderTrkJl2() {
     </div>`;
   };
 
-  container.innerHTML = `<div class="table-wrap" style="border:none">
+  container.innerHTML = `<div class="table-wrap" style="border:none;overflow:auto">
     <table style="width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px">
-      <thead>
+      <thead style="position:sticky;top:0;z-index:20">
         <tr>
           <th colspan="3" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
           <th colspan="3" style="background:#065f46;text-align:center;border-right:2px solid #fff">🗺 Area</th>
@@ -7715,9 +7716,9 @@ function renderTrkJl() {
     return;
   }
 
-  container.innerHTML = `<div class="table-wrap" style="border:none">
+  container.innerHTML = `<div class="table-wrap" style="border:none;overflow:auto">
     <table style="width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px">
-      <thead>
+      <thead style="position:sticky;top:0;z-index:20">
         <tr>
           <th colspan="3" style="background:#7c2d12;text-align:center;border-right:2px solid #fff">🏗 Project</th>
           <th colspan="2" style="background:#065f46;text-align:center;border-right:2px solid #fff">🗺 Area</th>
