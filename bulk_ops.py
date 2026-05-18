@@ -198,27 +198,29 @@ def bulk_replace_po(df: pd.DataFrame) -> int:
                 VALUES %s
             """
             rows = []
+            def _nk(k):
+                return str(k).strip().lower().replace(".", "").replace(" ", "_")
             for _, raw in df.iterrows():
-                r = raw.to_dict()
+                r = {_nk(k): v for k, v in raw.to_dict().items()}
                 rows.append((
-                    _s(r.get("Plnt") or r.get("plnt")),
-                    _s(r.get("Purchreq") or r.get("PurchReq")),
-                    _s(r.get("Item") or r.get("item")),
-                    _s(r.get("Material") or r.get("material")),
-                    _s(r.get("Short_Text") or r.get("Short Text") or r.get("short_text")),
-                    _s(r.get("PO") or r.get("po")),
-                    _s(r.get("PO_Item") or r.get("Item1") or r.get("PO Item")),
-                    _s(r.get("D") or r.get("d")),
-                    _s(r.get("DCI") or r.get("dci")),
-                    _s(r.get("PGr") or r.get("pgr")),
-                    _s(r.get("Doc_Date") or r.get("PO Date") or r.get("Doc. Date")),
-                    _n(r.get("PO_Quantity") or r.get("Ordered") or r.get("PO Quantity")),
-                    _n(r.get("Qty_Delivered") or r.get("Qty Delivered")),
-                    _s(r.get("Deliv_Date") or r.get("DelivDate") or r.get("Deliv. Date")),
-                    _s(r.get("OUn") or r.get("Un")),
-                    _n(r.get("Net_Price") or r.get("Net Price")),
-                    _s(r.get("Crcy") or r.get("crcy")),
-                    _n(r.get("Per") or r.get("per")),
+                    _s(r.get("plnt")),
+                    _s(r.get("purchreq") or r.get("purch_req")),
+                    _s(r.get("item")),
+                    _s(r.get("material")),
+                    _s(r.get("short_text")),
+                    _s(r.get("po") or r.get("purchdoc") or r.get("purch_doc")),
+                    _s(r.get("po_item") or r.get("item1")),
+                    _s(r.get("d")),
+                    _s(r.get("dci")),
+                    _s(r.get("pgr")),
+                    _s(r.get("doc_date")),
+                    _n(r.get("po_quantity") or r.get("ordered")),
+                    _n(r.get("qty_delivered")),
+                    _s(r.get("deliv_date")),
+                    _s(r.get("oun") or r.get("un")),
+                    _n(r.get("net_price")),
+                    _s(r.get("crcy")),
+                    _n(r.get("per")),
                 ))
 
             execute_values(cur, sql, rows)
