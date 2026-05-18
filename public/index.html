@@ -95,6 +95,8 @@ thead th {
   text-align: left; font-weight: 600; font-size: 11px;
   border-right: 1px solid rgba(255,255,255,0.2);
   cursor: pointer; user-select: none;
+  position: sticky; top: 0; z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 /* trkjl: warna per group di header */
 /* ── TREE ACCORDION ── */
@@ -247,7 +249,7 @@ td.center { text-align: center; }
 }
 .progress-label { font-size: 11px; color: #6b7280; display: none; }
 /* COLUMN RESIZE */
-thead th { position: relative; }
+thead th { position: sticky; top: 0; z-index: 10; }
 .col-resizer {
   position: absolute; right: 0; top: 0; bottom: 0; width: 5px;
   cursor: col-resize; z-index: 10; user-select: none;
@@ -315,7 +317,7 @@ td.col-frozen-last {
 }
 
 /* double-click hint on th */
-thead th { position: relative; }
+thead th { position: sticky; top: 0; z-index: 10; }
 th.col-frozen-last::before {
   content: '❄';
   position: absolute; top: 2px; right: 6px;
@@ -434,26 +436,21 @@ tbody tr.row-locked:hover td.col-frozen { background: #f3e8ff !important; }
 
 /* ── TRACKING ── */
 .trk-card {
-  border-radius: 10px; padding: 12px 18px; min-width: 118px;
-  display: flex; flex-direction: column; gap: 4px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.13), 0 1.5px 4px rgba(0,0,0,0.08);
+  border-radius: 8px; padding: 8px 14px; min-width: 110px;
+  display: flex; flex-direction: column; gap: 1px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.13);
   position: relative; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s;
 }
 .trk-card::before {
-  content: ''; position: absolute; top: -18px; right: -18px;
-  width: 64px; height: 64px; border-radius: 50%;
+  content: ''; position: absolute; top: -14px; right: -14px;
+  width: 48px; height: 48px; border-radius: 50%;
   background: rgba(255,255,255,0.10);
 }
-.trk-card::after {
-  content: ''; position: absolute; bottom: -10px; right: 10px;
-  width: 38px; height: 38px; border-radius: 50%;
-  background: rgba(255,255,255,0.07);
-}
-.trk-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.10); }
-.trk-card-icon { font-size: 15px; opacity: 0.75; margin-bottom: 2px; }
-.trk-card-val { font-size: 24px; font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }
-.trk-card-lbl { font-size: 9.5px; opacity: 0.80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 1px; }
-.trk-card-divider { height: 2px; background: rgba(255,255,255,0.18); border-radius: 2px; margin: 4px 0 3px; }
+.trk-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.18); }
+.trk-card-icon { font-size: 12px; opacity: 0.75; }
+.trk-card-val { font-size: 22px; font-weight: 800; line-height: 1.15; letter-spacing: -0.5px; }
+.trk-card-lbl { font-size: 9.5px; opacity: 0.80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; }
+.trk-card-divider { height: 1px; background: rgba(255,255,255,0.18); border-radius: 2px; margin: 2px 0; }
 
 /* expand/collapse rows */
 .trk-expand-btn {
@@ -1329,49 +1326,49 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <!-- SUMMARY CARDS -->
   <div id="tracking-cards" style="display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap;">
     <div class="trk-card" style="background:linear-gradient(135deg,#1a56db,#1e40af);color:white;">
-     
+      <div class="trk-card-icon">📦</div>
       <div class="trk-card-val" id="trk-total-order">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Total Order</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#6d28d9,#5b21b6);color:white;">
- 
+      <div class="trk-card-icon">🗂️</div>
       <div class="trk-card-val" id="trk-total-material">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Total Material</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#0891b2,#0e7490);color:white;">
-     
+      <div class="trk-card-icon">🧾</div>
       <div class="trk-card-val" id="trk-total-pr">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Sudah PR</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#059669,#047857);color:white;">
-      
+      <div class="trk-card-icon">🛒</div>
       <div class="trk-card-val" id="trk-total-po">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Sudah PO</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#d97706,#b45309);color:white;">
-   
+      <div class="trk-card-icon">🚚</div>
       <div class="trk-card-val" id="trk-total-partial">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Partial Delivery</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#16a34a,#15803d);color:white;">
-    
+      <div class="trk-card-icon">✅</div>
       <div class="trk-card-val" id="trk-total-complete">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Complete</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;">
-   
+      <div class="trk-card-icon">⚠️</div>
       <div class="trk-card-val" id="trk-total-noPR">0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Belum PR</div>
     </div>
     <div class="trk-card" style="background:linear-gradient(135deg,#374151,#1f2937);color:white;min-width:160px;">
-     
+      <div class="trk-card-icon">💰</div>
       <div class="trk-card-val" id="trk-total-nilai" style="font-size:14px;">Rp 0</div>
       <div class="trk-card-divider"></div>
       <div class="trk-card-lbl">Total Nilai PO</div>

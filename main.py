@@ -154,8 +154,11 @@ def pg_clause(user: dict, col: str = "pg") -> tuple:
     suffix = PG_SUFFIX.get(user["pg_role"])
     if not suffix:
         return ("1=1", [])
-    # Pakai LIKE '%T%' agar menangkap planner group seperti '2TS' (T di tengah)
-    return (f"{col} LIKE %s", [f"%{suffix}%"])
+    # Plant 6202: TA dan OH sama-sama bisa lihat 2TS (T di tengah)
+    if user.get("plant_code") == "6202" and user.get("pg_role") in ("TA", "OH"):
+        return (f"({col} LIKE %s OR {col} = %s)", [f"%{suffix}", "2TS"])
+    # Normal: suffix di akhir
+    return (f"{col} LIKE %s", [f"%{suffix}"])
 
 def apply_filters(user: dict, base_clauses: list, base_params: list,
                   plant_col: str = "plant", pg_col: str = None) -> tuple:
