@@ -631,7 +631,24 @@ function renderMonthlyChart(monthly) {
       ]
     },
     options: {
-      plugins: { legend: { display: false } },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        afterBody: (items) => {
+          const idx = items[0]?.dataIndex;
+          if (idx === undefined) return [];
+          const m = monthly[idx];
+          if (!m || !m.top_projects || !m.top_projects.length) return [];
+          const lines = ['', 'Top Project:'];
+          m.top_projects.forEach(p => {
+            lines.push('  ' + p.project + '  —  ' + p.jumlah.toLocaleString('id-ID') + ' mat');
+          });
+          return lines;
+        }
+      }
+    }
+  },
       scales: {
         y:  { position:'left',  grid: { color:'#f1f5f9' } },
         y2: { position:'right', grid: { display: false } }
