@@ -35,6 +35,7 @@ from bulk_ops import (
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
 from dashboard import router as dashboard_router
+from update_pr import router as update_pr_router
 
 load_dotenv()
 
@@ -53,6 +54,7 @@ app.add_middleware(
 )
 
 app.include_router(dashboard_router)
+app.include_router(update_pr_router)
 
 # ─── DB MIGRATE ON STARTUP ──────────────────────────────────────
 @app.on_event("startup")
@@ -360,6 +362,10 @@ def serve_index():
 @app.get("/dashboard")
 def serve_dashboard():
     return FileResponse("public/dashboard.html")
+
+@app.get("/update-pr")
+def serve_update_pr():
+    return FileResponse("public/update_pr.html")
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Update PR Taex Reservasi</title>
+<style>
+:root{--blue:#1a56db;--green:#16a34a;--red:#dc2626;--orange:#d97706;--border:#e2e8f0;--bg:#f1f5f9;--text:#1e293b;--text-sm:#64748b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+.topbar{background:linear-gradient(135deg,#1e3a8a,#1a56db);color:#fff;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+.topbar-title{font-size:16px;font-weight:800}
+.topbar-sub{font-size:11px;opacity:0.7}
+.btn-back{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;text-decoration:none}
+
+.content{max-width:960px;margin:0 auto;padding:24px}
+
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid var(--border);margin-bottom:20px}
+.card-title{font-size:13px;font-weight:700;color:var(--text-sm);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px}
+
+/* Info banner */
+.info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin-bottom:20px;font-size:13px}
+.info-box strong{color:var(--blue)}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:40px;text-align:center;cursor:pointer;transition:all 0.15s;background:#fafafa}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--blue);background:#eff6ff}
+.upload-zone input{display:none}
+.upload-icon{font-size:40px;margin-bottom:12px}
+.upload-text{font-size:14px;font-weight:600;color:var(--text)}
+.upload-sub{font-size:12px;color:var(--text-sm);margin-top:4px}
+
+/* Buttons */
+.btn{padding:8px 20px;border-radius:7px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#1e40af}
+.btn-primary:disabled{background:#93c5fd;cursor:not-allowed}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#15803d}
+.btn-success:disabled{background:#86efac;cursor:not-allowed}
+.btn-secondary{background:#f1f5f9;color:var(--text);border:1px solid var(--border)}
+
+/* Progress */
+.progress-wrap{display:none;margin-top:16px}
+.progress-bar-bg{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden}
+.progress-bar{height:100%;background:var(--blue);border-radius:99px;transition:width 0.3s;width:0%}
+.progress-msg{font-size:12px;color:var(--text-sm);margin-top:6px}
+
+/* Preview table */
+.preview-wrap{overflow-x:auto;max-height:400px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#1a56db;color:#fff;padding:8px 10px;text-align:left;font-weight:600;position:sticky;top:0;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #f1f5f9}
+tr:hover td{background:#f8fafc}
+.highlight{background:#fef9c3;font-weight:700}
+
+/* Result */
+.result-box{display:none;border-radius:8px;padding:16px;font-size:13px;margin-top:16px}
+.result-box.success{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}
+.result-box.error{background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+
+/* Steps */
+.steps{display:flex;gap:0;margin-bottom:24px}
+.step{flex:1;padding:10px 16px;font-size:12px;font-weight:600;color:var(--text-sm);border-bottom:3px solid var(--border);text-align:center}
+.step.active{color:var(--blue);border-bottom-color:var(--blue)}
+.step.done{color:var(--green);border-bottom-color:var(--green)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">📋 Update PR — Taex Reservasi</div>
+    <div class="topbar-sub">Update kolom PR, Item, QPR berdasarkan Order + Itm</div>
+  </div>
+  <a href="/" class="btn-back">← Kembali ke Sistem</a>
+</div>
+
+<div class="content">
+
+  <!-- Info -->
+  <div class="info-box">
+    📌 Halaman ini <strong>hanya mengupdate kolom PR, Item, QPR</strong> di tabel Taex Reservasi.<br>
+    Match berdasarkan <strong>Order + Itm</strong>. Data lain tidak akan berubah.
+  </div>
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="step-1">1. Pilih File Excel</div>
+    <div class="step" id="step-2">2. Preview Data</div>
+    <div class="step" id="step-3">3. Proses Update</div>
+  </div>
+
+  <!-- Step 1: Upload -->
+  <div class="card" id="card-upload">
+    <div class="card-title">Pilih File Excel</div>
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+      <div class="upload-icon">📂</div>
+      <div class="upload-text" id="upload-text">Klik atau drag & drop file Excel di sini</div>
+      <div class="upload-sub">Format: .xlsx, .xls | Kolom wajib: Order, Itm, PR</div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px">
+      <button class="btn btn-primary" id="btn-preview" onclick="doPreview()" disabled>👁 Preview Data</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Preview -->
+  <div class="card" id="card-preview" style="display:none">
+    <div class="card-title" id="preview-title">Preview Data</div>
+    <div class="preview-wrap" id="preview-wrap"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+      <button class="btn btn-success" id="btn-upload" onclick="doUpload()">⚡ Jalankan Update</button>
+      <button class="btn btn-secondary" onclick="resetAll()">↩ Pilih File Lain</button>
+      <span id="total-info" style="font-size:12px;color:var(--text-sm)"></span>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="progress-msg" id="progress-msg">Memproses...</div>
+    </div>
+
+    <!-- Result -->
+    <div class="result-box" id="result-box"></div>
+  </div>
+
+</div>
+
+<script>
+const API_KEY = '';
+let token = localStorage.getItem('auth_token') || '';
+let selectedFile = null;
+let pollTimer = null;
+
+function headers(isForm) {
+  const t = localStorage.getItem('auth_token') || token;
+  const h = { 'x-api-key': API_KEY, 'x-auth-token': t };
+  if (!isForm) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+async function checkLogin() {
+  try {
+    const res = await fetch('/api/auth/me', { headers: headers() });
+    if (!res.ok) { window.location.href = '/'; return; }
+    const u = await res.json();
+    if (!u.is_admin) { alert('Akses admin diperlukan'); window.location.href = '/'; }
+  } catch(e) { window.location.href = '/'; }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  document.getElementById('upload-text').textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  document.getElementById('btn-preview').disabled = false;
+  setStep(1);
+}
+
+async function doPreview() {
+  if (!selectedFile) return;
+  document.getElementById('btn-preview').disabled = true;
+  document.getElementById('btn-preview').textContent = '⏳ Membaca...';
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  try {
+    const res = await fetch('/api/update-pr/preview', {
+      method: 'POST',
+      headers: { 'x-api-key': API_KEY, 'x-auth-token': localStorage.getItem('auth_token') || token },
+      body: fd
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'Gagal preview');
+
+    renderPreview(d);
+    setStep(2);
+    document.getElementById('card-preview').style.display = 'block';
+    document.getElementById('card-preview').scrollIntoView({ behavior: 'smooth' });
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    document.getElementById('btn-preview').disabled = false;
+    document.getElementById('btn-preview').textContent = '👁 Preview Data';
+  }
+}
+
+function renderPreview(d) {
+  document.getElementById('total-info').textContent =
+    `Total ${d.total_rows.toLocaleString('id-ID')} baris akan diproses (preview 20 baris pertama)`;
+  document.getElementById('preview-title').textContent =
+    `Preview Data — ${d.total_rows.toLocaleString('id-ID')} baris`;
+
+  const highlight = ['PR', 'Item', 'QPR'];
+  const cols = d.columns;
+
+  let html = `<table><thead><tr>${cols.map(c =>
+    `<th class="${highlight.includes(c) ? 'highlight' : ''}">${c}${highlight.includes(c) ? ' ⭐' : ''}</th>`
+  ).join('')}</tr></thead><tbody>`;
+
+  d.preview.forEach(row => {
+    html += '<tr>' + cols.map(c =>
+      `<td class="${highlight.includes(c) ? 'highlight' : ''}">${row[c] || ''}</td>`
+    ).join('') + '</tr>';
+  });
+
+  html += '</tbody></table>';
+  if (d.total_rows > 20) {
+    html += `<div style="padding:10px;text-align:center;color:var(--text-sm);font-size:12px">... dan ${(d.total_rows-20).toLocaleString('id-ID')} baris lainnya</div>`;
+  }
+  document.getElementById('preview-wrap').innerHTML = html;
+}
+
+async function doUpload() {
+  if (!selectedFile) return;
+  if (!confirm(`Yakin akan mengupdate kolom PR, Item, QPR di Taex Reservasi?\nProses ini tidak bisa dibatalkan.`)) return;
+
+  document.getElementById('btn-upload').disabled = true;
+  document.getElementById('btn-upload').textContent = '⏳ Memproses...';
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('result-box').style.display = 'none';
+  setStep(3);
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  try {
+    const res = await fetch('/api/update-pr/upload', {
+      method: 'POST',
+      headers: { 'x-api-key': API_KEY, 'x-auth-token': localStorage.getItem('auth_token') || token },
+      body: fd
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'Gagal upload');
+    pollProgress(d.jobId);
+  } catch(e) {
+    showResult(false, 'Error: ' + e.message);
+    document.getElementById('btn-upload').disabled = false;
+    document.getElementById('btn-upload').textContent = '⚡ Jalankan Update';
+  }
+}
+
+function pollProgress(jobId) {
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/update-pr/progress/${jobId}`, { headers: headers() });
+      const d = await res.json();
+      document.getElementById('progress-bar').style.width = d.pct + '%';
+      document.getElementById('progress-msg').textContent = d.msg;
+      if (d.done) {
+        clearInterval(pollTimer);
+        showResult(!d.error, d.msg);
+        document.getElementById('btn-upload').disabled = false;
+        document.getElementById('btn-upload').textContent = '⚡ Jalankan Update';
+      }
+    } catch(e) { clearInterval(pollTimer); }
+  }, 600);
+}
+
+function showResult(success, msg) {
+  const el = document.getElementById('result-box');
+  el.className = 'result-box ' + (success ? 'success' : 'error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById(`step-${i}`);
+    el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+}
+
+function resetAll() {
+  selectedFile = null;
+  document.getElementById('upload-text').textContent = 'Klik atau drag & drop file Excel di sini';
+  document.getElementById('file-input').value = '';
+  document.getElementById('btn-preview').disabled = true;
+  document.getElementById('card-preview').style.display = 'none';
+  document.getElementById('result-box').style.display = 'none';
+  document.getElementById('progress-wrap').style.display = 'none';
+  document.getElementById('progress-bar').style.width = '0%';
+  setStep(1);
+  if (pollTimer) clearInterval(pollTimer);
+}
+
+checkLogin();
+</script>
+</body>
+</html>
