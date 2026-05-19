@@ -304,3 +304,318 @@ def dashboard_plants(request: Request):
     _require_admin(request)
     rows = query("SELECT plant_code, plant_name FROM plants ORDER BY plant_code")
     return J([{"code": r["plant_code"], "name": r["plant_name"]} for r in rows])
+
+
+# ═══════════════════════════════════════════════════════════════
+# DRILL-DOWN READINESS
+# Hierarki: project → area → unit → equipment → joblist → jobdetail → wo
+# Readiness selalu dihitung dari WO (qty_deliv >= qty_reqmts)
+# ═══════════════════════════════════════════════════════════════
+
+DRILLDOWN_BASE = """
+    WITH wo_ready AS (
+        SELECT
+            wo."order",
+            jd.id                         AS jd_id,
+            jl.id                         AS jl_id,
+            jl.no_joblist,
+            jl.joblist_description        AS jl_desc,
+            eq.id                         AS eq_id,
+            eq.equipment_no,
+            eq.description_of_technical_object AS eq_desc,
+            u.id                          AS unit_id,
+            u.unit_name,
+            u.unit_alias_name,
+            a.id                          AS area_id,
+            a.area_name,
+            p.id                          AS project_id,
+            p.project_number,
+            p.description                 AS project_desc,
+            jl.plant,
+            jd.no_joblist_detail,
+            jd.joblist_detail_description AS jd_desc,
+            -- WO ready: semua material sudah delivered
+            CASE
+                WHEN COUNT(t.id) = 0 THEN FALSE
+                WHEN SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
+                               AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
+                              THEN 1 ELSE 0 END) = COUNT(t.id)
+                THEN TRUE ELSE FALSE
+            END AS wo_ready,
+            COUNT(t.id)          AS total_mat,
+            SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
+                      AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
+                     THEN 1 ELSE 0 END) AS ready_mat
+        FROM job_detail_work_order wo
+        JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        JOIN job_list       jl  ON jd.joblist_id        = jl.id
+        JOIN project        p   ON jl.project_id        = p.id
+        LEFT JOIN equipment_taex eq ON jl.equipment_id  = eq.id
+        LEFT JOIN job_unit       u  ON eq.unit_id       = u.id
+        LEFT JOIN job_area       a  ON u.area_id        = a.id
+        LEFT JOIN taex_reservasi t  ON t."order"        = wo."order"
+        WHERE wo.is_deleted = 0
+        {extra_where}
+        GROUP BY
+            wo."order", jd.id, jl.id, jl.no_joblist, jl.joblist_description,
+            eq.id, eq.equipment_no, eq.description_of_technical_object,
+            u.id, u.unit_name, u.unit_alias_name,
+            a.id, a.area_name,
+            p.id, p.project_number, p.description,
+            jl.plant, jd.no_joblist_detail, jd.joblist_detail_description
+    )
+"""
+
+def _drilldown_query(level, plant="", project_id="", area_id="", unit_id="",
+                     eq_id="", jl_id="", jd_id=""):
+    """Return rows for the given drill-down level."""
+    extra_conds = []
+    params = []
+
+    if plant:
+        extra_conds.append("jl.plant = %s"); params.append(plant)
+    if project_id:
+        extra_conds.append("p.id = %s"); params.append(project_id)
+    if area_id:
+        extra_conds.append("a.id = %s"); params.append(area_id)
+    if unit_id:
+        extra_conds.append("u.id = %s"); params.append(unit_id)
+    if eq_id:
+        extra_conds.append("eq.id = %s"); params.append(eq_id)
+    if jl_id:
+        extra_conds.append("jl.id = %s"); params.append(jl_id)
+    if jd_id:
+        extra_conds.append("jd.id = %s"); params.append(jd_id)
+
+    extra_where = ("AND " + " AND ".join(extra_conds)) if extra_conds else ""
+    base = DRILLDOWN_BASE.format(extra_where=extra_where)
+
+    GROUP_COLS = {
+        "project":   ("project_id", "project_number", "project_desc"),
+        "area":      ("area_id",    "area_name",       "area_name"),
+        "unit":      ("unit_id",    "unit_name",       "unit_alias_name"),
+        "equipment": ("eq_id",      "equipment_no",    "eq_desc"),
+        "joblist":   ("jl_id",      "no_joblist",      "jl_desc"),
+        "jobdetail": ("jd_id",      "no_joblist_detail","jd_desc"),
+        "wo":        ('"order"',    '"order"',         '"order"'),
+    }
+
+    id_col, name_col, desc_col = GROUP_COLS[level]
+
+    sql = f"""
+        {base}
+        SELECT
+            {id_col}          AS id,
+            {name_col}        AS name,
+            {desc_col}        AS description,
+            COUNT(*)          AS total_wo,
+            SUM(CASE WHEN wo_ready THEN 1 ELSE 0 END) AS ready_wo,
+            SUM(CASE WHEN NOT wo_ready THEN 1 ELSE 0 END) AS not_ready_wo,
+            ROUND(
+                SUM(CASE WHEN wo_ready THEN 1 ELSE 0 END) * 100.0
+                / NULLIF(COUNT(*), 0), 1
+            ) AS pct_ready,
+            SUM(total_mat)    AS total_mat,
+            SUM(ready_mat)    AS ready_mat
+        FROM wo_ready
+        GROUP BY {id_col}, {name_col}, {desc_col}
+        ORDER BY pct_ready DESC, name
+    """
+    rows = query(sql, params)
+    return [{
+        "id":          str(r["id"] or ""),
+        "name":        str(r["name"] or "—"),
+        "description": str(r["description"] or ""),
+        "total_wo":    int(r["total_wo"]    or 0),
+        "ready_wo":    int(r["ready_wo"]    or 0),
+        "not_ready_wo":int(r["not_ready_wo"]or 0),
+        "pct_ready":   float(r["pct_ready"] or 0),
+        "total_mat":   int(r["total_mat"]   or 0),
+        "ready_mat":   int(r["ready_mat"]   or 0),
+    } for r in rows]
+
+
+@router.get("/drilldown")
+def drilldown(
+    request: Request,
+    level:      str = "project",
+    plant:      str = "",
+    project_id: str = "",
+    area_id:    str = "",
+    unit_id:    str = "",
+    eq_id:      str = "",
+    jl_id:      str = "",
+    jd_id:      str = "",
+):
+    _require_admin(request)
+    VALID = ["project","area","unit","equipment","joblist","jobdetail","wo"]
+    if level not in VALID:
+        raise HTTPException(400, f"level harus salah satu dari: {VALID}")
+    rows = _drilldown_query(
+        level, plant=plant, project_id=project_id,
+        area_id=area_id, unit_id=unit_id,
+        eq_id=eq_id, jl_id=jl_id, jd_id=jd_id
+    )
+    return J({"level": level, "data": rows})
+
+
+# ═══════════════════════════════════════════════════════════════
+# DETAIL PANEL — detail readiness per item (untuk modal/side panel)
+# Bisa dipanggil dari level manapun
+# ═══════════════════════════════════════════════════════════════
+@router.get("/drilldown/detail")
+def drilldown_detail(
+    request: Request,
+    level:      str = "equipment",
+    item_id:    str = "",
+    plant:      str = "",
+):
+    """
+    Return detail job per item — untuk ditampilkan di modal.
+    Setiap baris = 1 job detail, dengan status jasa & material.
+    """
+    _require_admin(request)
+
+    if not item_id:
+        raise HTTPException(400, "item_id wajib")
+
+    FILTER_MAP = {
+        "project":   "p.id = %s",
+        "area":      "a.id = %s",
+        "unit":      "u.id = %s",
+        "equipment": "eq.id = %s",
+        "joblist":   "jl.id = %s",
+        "jobdetail": "jd.id = %s",
+        "wo":        'wo."order" = %s',
+    }
+    if level not in FILTER_MAP:
+        raise HTTPException(400, "level tidak valid")
+
+    conds = [FILTER_MAP[level], "wo.is_deleted = 0"]
+    params = [item_id]
+    if plant:
+        conds.append("jl.plant = %s"); params.append(plant)
+
+    where = " AND ".join(conds)
+
+    rows = query(f"""
+        SELECT
+            p.project_number,
+            a.area_name,
+            u.unit_name,
+            eq.equipment_no,
+            eq.description_of_technical_object AS eq_desc,
+            jl.no_joblist,
+            jl.joblist_description             AS jl_desc,
+            jd.no_joblist_detail,
+            jd.joblist_detail_description      AS jd_desc,
+            jd.is_jasa,
+            jd.is_material,
+            jd.planning_jasa_status_id,
+            jd.planning_material_status_id,
+            wo."order",
+            wo.system_status,
+            wo.planner_group,
+            -- Readiness material dari taex
+            COUNT(t.id)           AS total_mat,
+            SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
+                      AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
+                     THEN 1 ELSE 0 END) AS ready_mat,
+            SUM(COALESCE(t.qty_reqmts,0)) AS sum_reqmts,
+            SUM(COALESCE(t.qty_deliv,0))  AS sum_deliv
+        FROM job_detail_work_order wo
+        JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        JOIN job_list       jl  ON jd.joblist_id        = jl.id
+        JOIN project        p   ON jl.project_id        = p.id
+        LEFT JOIN equipment_taex eq ON jl.equipment_id  = eq.id
+        LEFT JOIN job_unit       u  ON eq.unit_id       = u.id
+        LEFT JOIN job_area       a  ON u.area_id        = a.id
+        LEFT JOIN taex_reservasi t  ON t."order"        = wo."order"
+        WHERE {where}
+        GROUP BY
+            p.project_number, a.area_name, u.unit_name,
+            eq.equipment_no, eq.description_of_technical_object,
+            jl.no_joblist, jl.joblist_description,
+            jd.no_joblist_detail, jd.joblist_detail_description,
+            jd.is_jasa, jd.is_material,
+            jd.planning_jasa_status_id, jd.planning_material_status_id,
+            wo."order", wo.system_status, wo.planner_group
+        ORDER BY eq.equipment_no, jl.no_joblist, jd.no_joblist_detail, wo."order"
+    """, params)
+
+    def _mat_status(total, ready, reqmts, deliv):
+        if total == 0: return "N/R"
+        if ready == total: return "READY"
+        return "NOT READY"
+
+    def _jasa_status(planning_jasa_status_id):
+        # planning_jasa_status_id: 3 = Sudah SP/SP3MK = READY
+        if str(planning_jasa_status_id or "") in ("3",): return "READY"
+        if planning_jasa_status_id: return "ON PROCESS"
+        return "N/R"
+
+    result = []
+    for r in rows:
+        total = int(r["total_mat"] or 0)
+        ready = int(r["ready_mat"] or 0)
+        mat_status  = _mat_status(total, ready, r["sum_reqmts"], r["sum_deliv"])
+        jasa_status = _jasa_status(r["planning_jasa_status_id"])
+        wo_ready = mat_status == "READY" and (not r["is_jasa"] or jasa_status == "READY")
+
+        result.append({
+            "project_number": r["project_number"],
+            "area_name":      r["area_name"],
+            "unit_name":      r["unit_name"],
+            "equipment_no":   r["equipment_no"],
+            "eq_desc":        r["eq_desc"],
+            "no_joblist":     r["no_joblist"],
+            "jl_desc":        r["jl_desc"],
+            "no_joblist_detail": r["no_joblist_detail"],
+            "jd_desc":        r["jd_desc"],
+            "order":          r["order"],
+            "system_status":  r["system_status"],
+            "planner_group":  r["planner_group"],
+            "is_jasa":        bool(r["is_jasa"]),
+            "is_material":    bool(r["is_material"]),
+            "total_mat":      total,
+            "ready_mat":      ready,
+            "sum_reqmts":     float(r["sum_reqmts"] or 0),
+            "sum_deliv":      float(r["sum_deliv"]  or 0),
+            "mat_status":     mat_status,
+            "jasa_status":    jasa_status,
+            "wo_ready":       wo_ready,
+        })
+
+    # Header info
+    header = {}
+    if result:
+        r0 = result[0]
+        if level == "equipment":
+            header = {"title": r0["equipment_no"], "subtitle": r0["eq_desc"] or ""}
+        elif level == "joblist":
+            header = {"title": r0["no_joblist"], "subtitle": r0["jl_desc"] or ""}
+        elif level == "area":
+            header = {"title": r0["area_name"], "subtitle": ""}
+        elif level == "unit":
+            header = {"title": r0["unit_name"], "subtitle": ""}
+        elif level == "project":
+            header = {"title": r0["project_number"], "subtitle": ""}
+        else:
+            header = {"title": item_id, "subtitle": ""}
+
+    total_wo    = len(set(r["order"] for r in result))
+    ready_wo    = len({r["order"] for r in result if r["wo_ready"]})
+    pct_ready   = round(ready_wo / total_wo * 100, 1) if total_wo else 0
+
+    return J({
+        "header":     header,
+        "level":      level,
+        "item_id":    item_id,
+        "summary": {
+            "total_wo":  total_wo,
+            "ready_wo":  ready_wo,
+            "not_ready": total_wo - ready_wo,
+            "pct_ready": pct_ready,
+        },
+        "rows": result,
+    })

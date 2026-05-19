@@ -143,6 +143,34 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .page-content{display:none}
 .page-content.active{display:block}
 
+/* ── DETAIL MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal-box{background:#fff;border-radius:12px;width:100%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-header-info{flex:1}
+.modal-header-title{font-size:15px;font-weight:800;color:var(--text)}
+.modal-header-sub{font-size:12px;color:var(--text-sm);margin-top:2px}
+.modal-close{width:30px;height:30px;border-radius:50%;border:none;background:#f1f5f9;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:#e2e8f0}
+.modal-summary{display:flex;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.modal-stat{text-align:center;padding:8px 16px;border-radius:8px;min-width:90px}
+.modal-stat-val{font-size:20px;font-weight:800}
+.modal-stat-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;opacity:0.8}
+.modal-body{overflow-y:auto;flex:1}
+.detail-table{width:100%;border-collapse:collapse;font-size:12px}
+.detail-table th{background:#1a56db;color:#fff;padding:8px 10px;text-align:left;font-weight:700;font-size:11px;position:sticky;top:0;z-index:2;white-space:nowrap}
+.detail-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.detail-table tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;white-space:nowrap}
+.badge.ready{background:#dcfce7;color:#16a34a}
+.badge.not-ready{background:#fee2e2;color:#dc2626}
+.badge.on-process{background:#fef3c7;color:#d97706}
+.badge.nr{background:#f1f5f9;color:#64748b}
+.badge.wo-ready{background:#dcfce7;color:#16a34a}
+.badge.wo-notready{background:#fee2e2;color:#dc2626}
+.modal-loading{display:flex;align-items:center;justify-content:center;height:200px;gap:8px;color:var(--text-sm)}
+
 /* ── RESPONSIVE ── */
 @media(max-width:900px){
   .grid-2,.grid-3{grid-template-columns:1fr}
@@ -167,9 +195,27 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 
 <!-- PAGE TABS -->
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detail-modal" onclick="closeDetailModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-header-info">
+        <div class="modal-header-title" id="modal-title">Detail</div>
+        <div class="modal-header-sub" id="modal-sub"></div>
+      </div>
+      <button class="modal-close" onclick="closeDetailModalBtn()">✕</button>
+    </div>
+    <div class="modal-summary" id="modal-summary"></div>
+    <div class="modal-body" id="modal-body">
+      <div class="modal-loading"><div class="spin"></div> Memuat detail...</div>
+    </div>
+  </div>
+</div>
+
 <div class="page-tabs">
   <div class="page-tab active" onclick="switchPage('p1')">📦 Readiness Equipment</div>
   <div class="page-tab" onclick="switchPage('p2')">🧾 Readiness Material</div>
+  <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
 </div>
 
 <!-- FILTER BAR -->
@@ -308,6 +354,35 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 </div>
 
+<!-- ══ PAGE 3: DRILL-DOWN READINESS ══ -->
+<div class="page-content" id="page-p3">
+<div class="content">
+
+  <!-- Breadcrumb -->
+  <div style="background:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div id="breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="ddReset()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:#f8fafc;font-size:12px;cursor:pointer;font-weight:600">🔄 Reset</button>
+    </div>
+  </div>
+
+  <!-- Summary mini cards -->
+  <div id="dd-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
+
+  <!-- Bar chart horizontal -->
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="card-title" id="dd-chart-title" style="margin-bottom:0">Project</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik → drill-down &nbsp;|&nbsp; Klik 2x → lihat detail 👁</div>
+    </div>
+    <div id="dd-chart-wrap" style="overflow-y:auto;max-height:520px">
+      <canvas id="dd-chart"></canvas>
+    </div>
+  </div>
+
+</div>
+</div>
+
 <script>
 // ── State ─────────────────────────────────────────────────────
 const API   = '';
@@ -384,11 +459,12 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2','p3'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   if (id === 'p1') loadP1();
-  else loadP2();
+  else if (id === 'p2') loadP2();
+  else loadP3();
 }
 
 // ── CHART HELPERS ─────────────────────────────────────────────
@@ -602,6 +678,299 @@ function renderDonutMat(key, data, colors, canvasId, totalId, legendId, tbodyId,
 
 // ── Start ─────────────────────────────────────────────────────
 init();
+
+// ══════════════════════════════════════════════════════════════
+// PAGE 3 — DRILL-DOWN READINESS
+// ══════════════════════════════════════════════════════════════
+const DD_LEVELS = ['project','area','unit','equipment','joblist','jobdetail','wo'];
+const DD_LABELS = {
+  project:   '📁 Project',
+  area:      '🗺 Area',
+  unit:      '🏭 Unit',
+  equipment: '⚙️ Equipment',
+  joblist:   '📋 Joblist',
+  jobdetail: '📄 Job Detail',
+  wo:        '🔧 Work Order',
+};
+
+// Stack: [{level, id, name}, ...]
+let ddStack = [];
+let ddCurLevel = 'project';
+
+async function loadP3() {
+  const params = buildDdParams();
+  const qs = new URLSearchParams(params);
+  if (curPlant) qs.set('plant', curPlant);
+  qs.set('level', ddCurLevel);
+
+  try {
+    const d = await apiFetch('/api/dashboard/drilldown?' + qs);
+    if (!d) return;
+    renderDdSummary(d.data);
+    renderDdChart(d.data);
+    renderBreadcrumb();
+  } catch(e) {
+    document.getElementById('dd-chart-wrap').innerHTML =
+      '<div style="color:red;padding:20px">Gagal: ' + e.message + '</div>';
+  }
+}
+
+function buildDdParams() {
+  const p = {};
+  ddStack.forEach(s => {
+    if (s.level === 'project')   p.project_id = s.id;
+    if (s.level === 'area')      p.area_id    = s.id;
+    if (s.level === 'unit')      p.unit_id    = s.id;
+    if (s.level === 'equipment') p.eq_id      = s.id;
+    if (s.level === 'joblist')   p.jl_id      = s.id;
+    if (s.level === 'jobdetail') p.jd_id      = s.id;
+  });
+  return p;
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  let html = `<span style="color:var(--blue);font-weight:700;cursor:pointer" onclick="ddJumpTo(-1)">🏠 All</span>`;
+  ddStack.forEach((s, i) => {
+    html += `<span style="color:var(--text-sm)"> › </span>
+             <span style="color:${i===ddStack.length-1?'var(--text)':'var(--blue)'};font-weight:600;cursor:pointer"
+                   onclick="ddJumpTo(${i})">${s.name}</span>`;
+  });
+  html += `<span style="color:var(--text-sm)"> › </span>
+           <span style="color:var(--text);font-weight:700">${DD_LABELS[ddCurLevel]}</span>`;
+  bc.innerHTML = html;
+  document.getElementById('dd-chart-title').textContent = DD_LABELS[ddCurLevel];
+}
+
+function renderDdSummary(data) {
+  const total    = data.length;
+  const ready    = data.filter(r => r.pct_ready === 100).length;
+  const notReady = total - ready;
+  const avgPct   = total ? (data.reduce((s,r) => s + r.pct_ready, 0) / total).toFixed(1) : 0;
+  const totalWo  = data.reduce((s,r) => s + r.total_wo, 0);
+  const readyWo  = data.reduce((s,r) => s + r.ready_wo, 0);
+
+  document.getElementById('dd-summary').innerHTML = `
+    <div class="stat-card blue"><div class="stat-card-val">${total}</div><div class="stat-card-lbl">Total ${DD_LABELS[ddCurLevel]}</div></div>
+    <div class="stat-card green"><div class="stat-card-val">${ready}</div><div class="stat-card-lbl">100% Ready</div></div>
+    <div class="stat-card red"><div class="stat-card-val">${notReady}</div><div class="stat-card-lbl">Not Ready</div></div>
+    <div class="stat-card orange"><div class="stat-card-val">${avgPct}%</div><div class="stat-card-lbl">Avg Readiness</div></div>
+    <div class="stat-card blue"><div class="stat-card-val">${fmt(readyWo)}</div><div class="stat-card-lbl">WO Ready</div><div class="stat-card-pct">${totalWo ? (readyWo/totalWo*100).toFixed(1) : 0}% dari ${fmt(totalWo)}</div></div>
+  `;
+}
+
+// ── Detail Modal ──────────────────────────────────────────────
+async function openDetailModal(item, level) {
+  const modal = document.getElementById('detail-modal');
+  document.getElementById('modal-title').textContent = item.name;
+  document.getElementById('modal-sub').textContent = item.description || '';
+  document.getElementById('modal-summary').innerHTML = '';
+  document.getElementById('modal-body').innerHTML = '<div class="modal-loading"><div class="spin"></div> Memuat detail...</div>';
+  modal.classList.add('show');
+
+  try {
+    const qs = new URLSearchParams({ level, item_id: item.id });
+    if (curPlant) qs.set('plant', curPlant);
+    const d = await apiFetch('/api/dashboard/drilldown/detail?' + qs);
+    if (!d) return;
+
+    // Summary
+    const s = d.summary;
+    const pctColor = s.pct_ready === 100 ? '#16a34a' : s.pct_ready >= 70 ? '#3b82f6' : s.pct_ready >= 40 ? '#d97706' : '#dc2626';
+    document.getElementById('modal-summary').innerHTML = `
+      <div class="modal-stat" style="background:#eff6ff;color:#1d4ed8">
+        <div class="modal-stat-val">${s.total_wo}</div>
+        <div class="modal-stat-lbl">Total WO</div>
+      </div>
+      <div class="modal-stat" style="background:#f0fdf4;color:#16a34a">
+        <div class="modal-stat-val">${s.ready_wo}</div>
+        <div class="modal-stat-lbl">WO Ready</div>
+      </div>
+      <div class="modal-stat" style="background:#fef2f2;color:#dc2626">
+        <div class="modal-stat-val">${s.not_ready}</div>
+        <div class="modal-stat-lbl">Not Ready</div>
+      </div>
+      <div class="modal-stat" style="background:#f8fafc;color:${pctColor}">
+        <div class="modal-stat-val">${s.pct_ready}%</div>
+        <div class="modal-stat-lbl">Readiness</div>
+      </div>
+    `;
+
+    // Table
+    const rows = d.rows;
+    if (!rows.length) {
+      document.getElementById('modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+      return;
+    }
+
+    let html = `<table class="detail-table">
+      <thead><tr>
+        <th>Job Detail</th>
+        <th>Work Order</th>
+        <th>System Status</th>
+        <th style="text-align:center">Jasa</th>
+        <th style="text-align:center">Material</th>
+        <th style="text-align:center">Mat. Ready</th>
+        <th style="text-align:center">Status WO</th>
+      </tr></thead><tbody>`;
+
+    rows.forEach(r => {
+      const jasaBadge = r.is_jasa
+        ? (r.jasa_status === 'READY' ? '<span class="badge ready">READY</span>'
+           : r.jasa_status === 'ON PROCESS' ? '<span class="badge on-process">ON PROCESS</span>'
+           : '<span class="badge nr">N/R</span>')
+        : '<span class="badge nr">—</span>';
+
+      const matBadge = r.is_material
+        ? (r.mat_status === 'READY' ? '<span class="badge ready">READY</span>'
+           : r.mat_status === 'NOT READY' ? '<span class="badge not-ready">NOT READY</span>'
+           : '<span class="badge nr">N/R</span>')
+        : '<span class="badge nr">—</span>';
+
+      const woBadge = r.wo_ready
+        ? '<span class="badge wo-ready">✅ READY</span>'
+        : '<span class="badge wo-notready">❌ NOT READY</span>';
+
+      const matInfo = r.total_mat > 0 ? `${r.ready_mat}/${r.total_mat}` : '—';
+
+      html += `<tr>
+        <td>
+          <div style="font-weight:600;font-size:11px">${r.no_joblist_detail || '—'}</div>
+          <div style="color:var(--text-sm);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.jd_desc || ''}">${r.jd_desc || '—'}</div>
+        </td>
+        <td style="font-family:monospace;font-size:11px;font-weight:600">${r.order || '—'}</td>
+        <td style="font-size:11px">${r.system_status || '—'}</td>
+        <td style="text-align:center">${jasaBadge}</td>
+        <td style="text-align:center">${matBadge}</td>
+        <td style="text-align:center;font-size:11px;font-weight:600">${matInfo}</td>
+        <td style="text-align:center">${woBadge}</td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('modal-body').innerHTML = html;
+  } catch(e) {
+    document.getElementById('modal-body').innerHTML = `<div style="padding:20px;color:red">Gagal: ${e.message}</div>`;
+  }
+}
+
+function closeDetailModal(e) {
+  if (e.target === document.getElementById('detail-modal'))
+    document.getElementById('detail-modal').classList.remove('show');
+}
+function closeDetailModalBtn() {
+  document.getElementById('detail-modal').classList.remove('show');
+}
+
+function renderDdChart(data) {
+  destroyChart('dd-chart');
+  const wrap = document.getElementById('dd-chart-wrap');
+
+  // Tentukan tinggi canvas berdasarkan jumlah data
+  const barH = 36;
+  const minH = 300;
+  const h = Math.max(minH, data.length * barH + 60);
+  wrap.innerHTML = '<canvas id="dd-chart"></canvas>';
+  const canvas = document.getElementById('dd-chart');
+  canvas.height = h;
+
+  const isLastLevel = ddCurLevel === 'wo';
+  const labels = data.map(r => r.name + (r.description && r.description !== r.name ? ' — ' + r.description.substring(0,30) : ''));
+  const pcts   = data.map(r => r.pct_ready);
+  const colors = pcts.map(p => p === 100 ? '#16a34a' : p >= 70 ? '#3b82f6' : p >= 40 ? '#f59e0b' : '#ef4444');
+
+  const ctx = canvas.getContext('2d');
+  charts['dd-chart'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '% Ready',
+        data: pcts,
+        backgroundColor: colors,
+        borderRadius: 4,
+        barThickness: 22,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const idx = els[0].index;
+        // Double-click detection via timestamp
+        const now = Date.now();
+        if (window._lastClick && now - window._lastClick < 400 && window._lastIdx === idx) {
+          // Double-click → open detail modal
+          openDetailModal(data[idx], ddCurLevel);
+          window._lastClick = 0;
+        } else {
+          window._lastClick = now;
+          window._lastIdx   = idx;
+          if (!isLastLevel) ddDrillDown(data[idx]);
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => ` ${c.raw.toFixed(1)}% Ready`,
+          afterLabel: (c) => {
+            const r = data[c.dataIndex];
+            return [
+              `WO Ready: ${r.ready_wo} / ${r.total_wo}`,
+              `Material Ready: ${fmt(r.ready_mat)} / ${fmt(r.total_mat)}`,
+              isLastLevel ? '' : '← Klik untuk drill-down',
+            ].filter(Boolean);
+          }
+        }}
+      },
+      scales: {
+        x: {
+          min: 0, max: 100,
+          ticks: { callback: v => v + '%', font: { size: 11 } },
+          grid: { color: '#f1f5f9' }
+        },
+        y: {
+          ticks: {
+            font: { size: 11 },
+            callback: (v, i) => {
+              const s = labels[i];
+              return s.length > 40 ? s.substring(0, 40) + '…' : s;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function ddDrillDown(item) {
+  ddStack.push({ level: ddCurLevel, id: item.id, name: item.name });
+  const nextIdx = DD_LEVELS.indexOf(ddCurLevel) + 1;
+  if (nextIdx < DD_LEVELS.length) {
+    ddCurLevel = DD_LEVELS[nextIdx];
+    loadP3();
+  }
+}
+
+function ddJumpTo(stackIdx) {
+  if (stackIdx === -1) {
+    ddStack = [];
+    ddCurLevel = 'project';
+  } else {
+    ddStack = ddStack.slice(0, stackIdx + 1);
+    const nextIdx = DD_LEVELS.indexOf(ddStack[stackIdx].level) + 1;
+    ddCurLevel = DD_LEVELS[nextIdx] || DD_LEVELS[DD_LEVELS.length - 1];
+  }
+  loadP3();
+}
+
+function ddReset() {
+  ddStack = [];
+  ddCurLevel = 'project';
+  loadP3();
+}
 </script>
 </body>
 </html>
