@@ -463,11 +463,11 @@ DISTINCT_CONFIG = {
 
 # Query khusus untuk trkjl karena merupakan join beberapa tabel
 TRKJL_DISTINCT = {
-    "project":    "SELECT DISTINCT p.project_number AS v FROM project p JOIN job_list jl ON jl.project_id=p.id WHERE p.project_number IS NOT NULL ORDER BY v",
-    "collective": "SELECT DISTINCT jd.collective AS v FROM job_detail jd WHERE jd.collective IS NOT NULL AND jd.collective <> '' ORDER BY v",
-    "status":     "SELECT DISTINCT wo.system_status AS v FROM job_detail_work_order wo WHERE wo.system_status IS NOT NULL AND wo.system_status <> '' ORDER BY v",
-    "disiplin":   "SELECT DISTINCT jl.disiplin AS v FROM job_list jl WHERE jl.disiplin IS NOT NULL AND jl.disiplin <> '' ORDER BY v",
-    "area":       "SELECT DISTINCT a.area_name AS v FROM job_area a WHERE a.area_name IS NOT NULL AND a.area_name <> '' ORDER BY v",
+    "project":  "SELECT DISTINCT project_number AS v FROM vw_joblist_detail WHERE project_number IS NOT NULL AND project_number <> '' ORDER BY v",
+    "area":     "SELECT DISTINCT area_name AS v FROM vw_joblist_detail WHERE area_name IS NOT NULL AND area_name <> '' ORDER BY v",
+    "disiplin": "SELECT DISTINCT disiplin AS v FROM vw_joblist_wo WHERE disiplin IS NOT NULL AND disiplin <> '' ORDER BY v",
+    "status":   "SELECT DISTINCT system_status AS v FROM vw_joblist_wo WHERE system_status IS NOT NULL AND system_status <> '' ORDER BY v",
+    "collective": "SELECT DISTINCT disiplin AS v FROM vw_joblist_detail WHERE disiplin IS NOT NULL AND disiplin <> '' ORDER BY v",
 }
 
 @app.get("/api/distinct/{tabel}/{kolom}")
@@ -2928,7 +2928,7 @@ def get_tracking_joblist(
     if project:
         clauses.append("p.project_number = %s"); params.append(project)
     if area:
-        clauses.append("a.id = %s"); params.append(area)
+        clauses.append("a.area_name = %s"); params.append(area)
     if unit:
         clauses.append("u.id = %s"); params.append(unit)
     if collective:

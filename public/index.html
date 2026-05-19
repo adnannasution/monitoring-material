@@ -1910,14 +1910,14 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <span class="search-clear" onclick="clearSearch('trkjl-search','tracking-joblist')">✕</span>
     </span>
     <label>Project:</label>
-    <select id="trkjl-filter-project" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <select id="trkjl-filter-project" onchange="fetchAndRenderTrkJl()"><option value="">Semua</option></select>
     <label>Collective:</label>
-    <select id="trkjl-filter-collective" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <select id="trkjl-filter-collective" onchange="fetchAndRenderTrkJl()"><option value="">Semua</option></select>
     <label>System Status:</label>
-    <select id="trkjl-filter-status" onchange="renderTrkJl()"><option value="">Semua</option></select>
+    <select id="trkjl-filter-status" onchange="fetchAndRenderTrkJl()"><option value="">Semua</option></select>
     <label>Disiplin:</label>
-    <select id="trkjl-filter-disiplin" onchange="renderTrkJl()"><option value="">Semua</option></select>
-    <button class="btn btn-search" onclick="renderTrkJl()">Cari</button>
+    <select id="trkjl-filter-disiplin" onchange="fetchAndRenderTrkJl()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="fetchAndRenderTrkJl()">Cari</button>
     <button class="btn btn-reset" onclick="trkJlResetFilter()">Reset</button>
     <button class="btn btn-export" onclick="exportTrkJlExcel()" style="margin-left:8px">📤 Export</button>
     <button class="btn btn-teal" onclick="fetchAndRenderTrkJl()" style="margin-left:4px">🔄 Refresh</button>
@@ -7674,8 +7674,22 @@ async function fetchAndRenderTrkJl() {
   document.getElementById('trkjl-tree').innerHTML =
     '<div style="color:#6b7280;padding:20px;text-align:center">⏳ Memuat data...</div>';
   try {
-    const rows = await apiFetch('/tracking-joblist');
+    const params = new URLSearchParams();
+    const fProj = document.getElementById('trkjl-filter-project').value;
+    const fArea = document.getElementById('trkjl-filter-area') ? document.getElementById('trkjl-filter-area').value : '';
+    const fDis  = document.getElementById('trkjl-filter-disiplin').value;
+    const fStat = document.getElementById('trkjl-filter-status').value;
+    const fColl = document.getElementById('trkjl-filter-collective').value;
+    const q     = document.getElementById('trkjl-search').value;
+    if (fProj) params.set('project', fProj);
+    if (fArea) params.set('area', fArea);
+    if (fDis)  params.set('disiplin', fDis);
+    if (fStat) params.set('status', fStat);
+    if (fColl) params.set('collective', fColl);
+    if (q)     params.set('q', q);
+    const rows = await apiFetch('/tracking-joblist?' + params.toString());
     state.trkJlData = Array.isArray(rows) ? rows : [];
+    trkJlFiltered = state.trkJlData;
     populateTrkJlFilters();
     renderTrkJl();
     document.getElementById('badge-trk-jl').textContent = new Set(state.trkJlData.map(r=>r.order).filter(Boolean)).size;
