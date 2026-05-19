@@ -34,8 +34,6 @@ from bulk_ops import (
     bulk_replace_vw_joblist_wo, bulk_replace_vw_joblist_detail,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
-from dashboard import router as dashboard_router
-from update_pr import router as update_pr_router
 
 load_dotenv()
 
@@ -52,9 +50,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "x-api-key"],
 )
-
-app.include_router(dashboard_router)
-app.include_router(update_pr_router)
 
 # ─── DB MIGRATE ON STARTUP ──────────────────────────────────────
 @app.on_event("startup")
@@ -358,14 +353,6 @@ app.mount("/static", StaticFiles(directory="public"), name="static")
 @app.get("/")
 def serve_index():
     return FileResponse("public/index.html")
-
-@app.get("/dashboard")
-def serve_dashboard():
-    return FileResponse("public/dashboard.html")
-
-@app.get("/update-pr")
-def serve_update_pr():
-    return FileResponse("public/update_pr.html")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1187,6 +1174,39 @@ def get_po(request: Request):
     where = " AND ".join(clauses)
     rows = query(f"SELECT * FROM sap_po WHERE {where} ORDER BY id", params)
     return jsonify([map_po(r) for r in rows])
+
+@app.post("/api/po/sync-to-taex")
+def sync_po_to_taex(request: Request):
+    """
+    Sinkronisasi PO dari sap_po ke taex_reservasi.
+    Match: sap_po.purchreq = taex_reservasi.pr
+           sap_po.item     = taex_reservasi.item
+    Update: po, po_date, qty_deliv, delivery_date
+    """
+    check_api_key(request)
+    result = query("""
+        WITH updated AS (
+            UPDATE taex_reservasi t
+            SET po            = sp.po,
+                po_date       = sp.doc_date,
+                qty_deliv     = sp.qty_delivered::numeric,
+                delivery_date = sp.deliv_date,
+                updated_at    = NOW()
+            FROM sap_po sp
+            WHERE sp.purchreq = t.pr
+              AND sp.item     = t.item
+              AND t.pr   IS NOT NULL AND t.pr   != ""
+              AND t.item IS NOT NULL AND t.item != ""
+            RETURNING t.id
+        )
+        SELECT COUNT(*) AS updated FROM updated
+    """)
+    updated = int(result[0]["updated"] or 0)
+    return jsonify({
+        "ok": True,
+        "updated": updated,
+        "msg": f"✅ {updated:,} baris taex_reservasi ter-update dengan data PO"
+    })
 
 @app.put("/api/po")
 async def put_po(request: Request):
