@@ -762,6 +762,7 @@ def prisma_workorders(request: Request, pg: str = "All"):
         "UPPER(COALESCE(fis,'')) != 'X'",
         "COALESCE(qty_reqmts,0) > 0",
         "(code_kertas_kerja IS NULL OR code_kertas_kerja = '')",
+        "(pr_prisma IS NULL OR pr_prisma = '')",  # belum ada PR
     ]
     params = []
 
@@ -817,6 +818,7 @@ async def create_kertas_kerja(request: Request):
         f'"order" IN ({ph})',
         "UPPER(COALESCE(del,'')) != 'X'",
         "UPPER(COALESCE(fis,'')) != 'X'",
+        "(pr_prisma IS NULL OR pr_prisma = '')",  # belum ada PR
     ]
     params = list(wos)
     pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
