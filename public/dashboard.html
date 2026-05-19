@@ -718,6 +718,7 @@ async function loadP3() {
 function buildDdParams() {
   const p = {};
   ddStack.forEach(s => {
+    // ID sekarang adalah nilai string (project_number, area_name, dll)
     if (s.level === 'project')   p.project_id = s.id;
     if (s.level === 'area')      p.area_id    = s.id;
     if (s.level === 'unit')      p.unit_id    = s.id;

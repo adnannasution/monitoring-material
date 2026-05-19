@@ -40,7 +40,7 @@ def _require_admin(request: Request):
 def readiness_equipment(request: Request, plant: str = ""):
     _require_admin(request)
 
-    plant_filter = "AND jl.plant = %s" if plant else ""
+    plant_filter = "AND wo.plant = %s" if plant else ""
     params = [plant] if plant else []
 
     rows = query(f"""
@@ -54,26 +54,21 @@ def readiness_equipment(request: Request, plant: str = ""):
         ),
         eq_ready AS (
             SELECT
-                jl.plant,
-                jl.equipment_id,
-                eq.equipment_no,
+                wo.plant,
+                wo.equipment_no,
                 BOOL_AND(
                     CASE WHEN COALESCE(or_.total_mat,0) > 0
                               AND or_.ready_mat = or_.total_mat
                          THEN TRUE ELSE FALSE END
                 ) AS equipment_ready,
-                COUNT(DISTINCT wo.id) AS total_wo,
+                COUNT(DISTINCT wo."order") AS total_wo,
                 SUM(COALESCE(or_.total_mat,0)) AS total_mat,
                 SUM(COALESCE(or_.ready_mat,0)) AS ready_mat
-            FROM job_detail_work_order wo
-            LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-            LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
-            LEFT JOIN equipment_taex eq  ON jl.equipment_id      = eq.id
-            LEFT JOIN order_ready or_   ON or_."order"      = wo."order"
-            WHERE wo.is_deleted = 0
-              AND jl.equipment_id IS NOT NULL
+            FROM vw_joblist_wo wo
+            LEFT JOIN order_ready or_ ON or_."order" = wo."order"
+            WHERE wo.equipment_no IS NOT NULL
               {plant_filter}
-            GROUP BY jl.plant, jl.equipment_id, eq.equipment_no
+            GROUP BY wo.plant, wo.equipment_no
         )
         SELECT
             p.plant_code,
@@ -316,25 +311,19 @@ DRILLDOWN_BASE = """
     WITH wo_ready AS (
         SELECT
             wo."order",
-            jd.id                         AS jd_id,
-            jl.id                         AS jl_id,
-            jl.no_joblist,
-            jl.joblist_description        AS jl_desc,
-            eq.id                         AS eq_id,
-            eq.equipment_no,
-            eq.description_of_technical_object AS eq_desc,
-            u.id                          AS unit_id,
-            u.unit_name,
-            u.unit_alias_name,
-            a.id                          AS area_id,
-            a.area_name,
-            p.id                          AS project_id,
-            p.project_number,
-            p.description                 AS project_desc,
-            jl.plant,
-            jd.no_joblist_detail,
-            jd.joblist_detail_description AS jd_desc,
-            -- WO ready: semua material sudah delivered
+            wo.equipment_no,
+            wo.disiplin        AS wo_disiplin,
+            wo.plant,
+            jld.project_number,
+            jld.joblist_detail_desc  AS jd_desc,
+            jld.no_joblist           AS no_joblist,
+            jld.joblist_description  AS jl_desc,
+            jld.no_document          AS jd_id,
+            jld.area_name,
+            jld.area_alias_name,
+            jld.unit_name,
+            jld.unit_alias_name,
+            -- WO ready: semua material di taex sudah delivered
             CASE
                 WHEN COUNT(t.id) = 0 THEN FALSE
                 WHEN SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
@@ -342,62 +331,59 @@ DRILLDOWN_BASE = """
                               THEN 1 ELSE 0 END) = COUNT(t.id)
                 THEN TRUE ELSE FALSE
             END AS wo_ready,
-            COUNT(t.id)          AS total_mat,
+            COUNT(t.id) AS total_mat,
             SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
                       AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
                      THEN 1 ELSE 0 END) AS ready_mat
-        FROM job_detail_work_order wo
-        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-        LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
-        LEFT JOIN project        p   ON jl.project_id         = p.id
-        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
-        LEFT JOIN job_unit       u   ON eq.unit_id      = u.id
-        LEFT JOIN job_area       a   ON u.area_id       = a.id
-        LEFT JOIN taex_reservasi t   ON t."order"       = wo."order"
-        WHERE wo.is_deleted = 0
+        FROM vw_joblist_wo wo
+        LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        LEFT JOIN taex_reservasi    t   ON t."order"        = wo."order"
+        WHERE 1=1
         {extra_where}
         GROUP BY
-            wo."order", jd.id, jl.id, jl.no_joblist, jl.joblist_description,
-            eq.id, eq.equipment_no, eq.description_of_technical_object,
-            u.id, u.unit_name, u.unit_alias_name,
-            a.id, a.area_name,
-            p.id, p.project_number, p.description,
-            jl.plant, jd.no_joblist_detail, jd.joblist_detail_description
+            wo."order", wo.equipment_no, wo.disiplin, wo.plant,
+            jld.project_number, jld.joblist_detail_desc,
+            jld.no_joblist, jld.joblist_description, jld.no_document,
+            jld.area_name, jld.area_alias_name,
+            jld.unit_name, jld.unit_alias_name
     )
 """
 
 def _drilldown_query(level, plant="", project_id="", area_id="", unit_id="",
                      eq_id="", jl_id="", jd_id=""):
-    """Return rows for the given drill-down level."""
+    """Return rows for the given drill-down level.
+    Menggunakan vw_joblist_wo + vw_joblist_detail sebagai data source.
+    """
     extra_conds = []
     params = []
 
     if plant:
-        extra_conds.append("jl.plant = %s"); params.append(plant)
+        extra_conds.append("wo.plant = %s"); params.append(plant)
     if project_id:
-        extra_conds.append("p.id = %s"); params.append(project_id)
+        extra_conds.append("jld.project_number = %s"); params.append(project_id)
     if area_id:
-        extra_conds.append("a.id = %s"); params.append(area_id)
+        extra_conds.append("jld.area_name = %s"); params.append(area_id)
     if unit_id:
-        extra_conds.append("u.id = %s"); params.append(unit_id)
+        extra_conds.append("jld.unit_name = %s"); params.append(unit_id)
     if eq_id:
-        extra_conds.append("eq.id = %s"); params.append(eq_id)
+        extra_conds.append("wo.equipment_no = %s"); params.append(eq_id)
     if jl_id:
-        extra_conds.append("jl.id = %s"); params.append(jl_id)
+        extra_conds.append("jld.no_joblist = %s"); params.append(jl_id)
     if jd_id:
-        extra_conds.append("jd.id = %s"); params.append(jd_id)
+        extra_conds.append("jld.no_document = %s"); params.append(jd_id)
 
     extra_where = ("AND " + " AND ".join(extra_conds)) if extra_conds else ""
     base = DRILLDOWN_BASE.format(extra_where=extra_where)
 
+    # Kolom GROUP BY per level
     GROUP_COLS = {
-        "project":   ("project_id", "project_number", "project_desc"),
-        "area":      ("area_id",    "area_name",       "area_name"),
-        "unit":      ("unit_id",    "unit_name",       "unit_alias_name"),
-        "equipment": ("eq_id",      "equipment_no",    "eq_desc"),
-        "joblist":   ("jl_id",      "no_joblist",      "jl_desc"),
-        "jobdetail": ("jd_id",      "no_joblist_detail","jd_desc"),
-        "wo":        ('"order"',    '"order"',         '"order"'),
+        "project":   ("project_number", "project_number", "project_number"),
+        "area":      ("area_name",       "area_name",      "area_alias_name"),
+        "unit":      ("unit_name",       "unit_name",      "unit_alias_name"),
+        "equipment": ("equipment_no",    "equipment_no",   "wo_disiplin"),
+        "joblist":   ("no_joblist",      "no_joblist",     "jl_desc"),
+        "jobdetail": ("jd_id",           "jd_id",          "jd_desc"),
+        "wo":        ('"order"',         '"order"',        '"order"'),
     }
 
     id_col, name_col, desc_col = GROUP_COLS[level]
@@ -405,26 +391,27 @@ def _drilldown_query(level, plant="", project_id="", area_id="", unit_id="",
     sql = f"""
         {base}
         SELECT
-            {id_col}          AS id,
-            {name_col}        AS name,
-            {desc_col}        AS description,
-            COUNT(*)          AS total_wo,
+            {id_col}    AS id,
+            {name_col}  AS name,
+            {desc_col}  AS description,
+            COUNT(DISTINCT "order") AS total_wo,
             SUM(CASE WHEN wo_ready THEN 1 ELSE 0 END) AS ready_wo,
             SUM(CASE WHEN NOT wo_ready THEN 1 ELSE 0 END) AS not_ready_wo,
             ROUND(
                 SUM(CASE WHEN wo_ready THEN 1 ELSE 0 END) * 100.0
-                / NULLIF(COUNT(*), 0), 1
+                / NULLIF(COUNT(DISTINCT "order"), 0), 1
             ) AS pct_ready,
-            SUM(total_mat)    AS total_mat,
-            SUM(ready_mat)    AS ready_mat
+            SUM(total_mat)  AS total_mat,
+            SUM(ready_mat)  AS ready_mat
         FROM wo_ready
+        WHERE {id_col} IS NOT NULL AND {id_col}::text != ''
         GROUP BY {id_col}, {name_col}, {desc_col}
         ORDER BY pct_ready DESC, name
     """
     rows = query(sql, params)
     return [{
-        "id":          str(r["id"] or ""),
-        "name":        str(r["name"] or "—"),
+        "id":          str(r["id"]          or ""),
+        "name":        str(r["name"]        or "—"),
         "description": str(r["description"] or ""),
         "total_wo":    int(r["total_wo"]    or 0),
         "ready_wo":    int(r["ready_wo"]    or 0),
@@ -432,7 +419,7 @@ def _drilldown_query(level, plant="", project_id="", area_id="", unit_id="",
         "pct_ready":   float(r["pct_ready"] or 0),
         "total_mat":   int(r["total_mat"]   or 0),
         "ready_mat":   int(r["ready_mat"]   or 0),
-    } for r in rows]
+    } for r in rows if r["id"]]
 
 
 @router.get("/drilldown")
@@ -480,67 +467,61 @@ def drilldown_detail(
         raise HTTPException(400, "item_id wajib")
 
     FILTER_MAP = {
-        "project":   "p.id = %s",
-        "area":      "a.id = %s",
-        "unit":      "u.id = %s",
-        "equipment": "eq.id = %s",
-        "joblist":   "jl.id = %s",
-        "jobdetail": "jd.id = %s",
+        "project":   "jld.project_number = %s",
+        "area":      "jld.area_name = %s",
+        "unit":      "jld.unit_name = %s",
+        "equipment": "wo.equipment_no = %s",
+        "joblist":   "jld.no_joblist = %s",
+        "jobdetail": "jld.no_document = %s",
         "wo":        'wo."order" = %s',
     }
     if level not in FILTER_MAP:
         raise HTTPException(400, "level tidak valid")
 
-    conds = [FILTER_MAP[level], "wo.is_deleted = 0"]
+    conds = [FILTER_MAP[level]]
     params = [item_id]
     if plant:
-        conds.append("jl.plant = %s"); params.append(plant)
+        conds.append("wo.plant = %s"); params.append(plant)
 
     where = " AND ".join(conds)
 
     rows = query(f"""
         SELECT
-            p.project_number,
-            a.area_name,
-            u.unit_name,
-            eq.equipment_no,
-            eq.description_of_technical_object AS eq_desc,
-            jl.no_joblist,
-            jl.joblist_description             AS jl_desc,
-            jd.no_joblist_detail,
-            jd.joblist_detail_description      AS jd_desc,
-            jd.is_jasa,
-            jd.is_material,
-            jd.planning_jasa_status_id,
-            jd.planning_material_status_id,
+            jld.project_number,
+            jld.area_name,
+            jld.unit_name,
+            wo.equipment_no,
+            wo.disiplin                        AS eq_desc,
+            jld.no_joblist,
+            jld.joblist_description            AS jl_desc,
+            jld.joblist_detail_desc            AS jd_desc,
+            jld.no_document                    AS no_joblist_detail,
+            jld.is_jasa,
+            jld.is_material,
+            jld.planning_jasa_status_id,
+            jld.planning_material_status_id,
             wo."order",
             wo.system_status,
             wo.planner_group,
-            -- Readiness material dari taex
             COUNT(t.id)           AS total_mat,
             SUM(CASE WHEN COALESCE(t.qty_reqmts,0) > 0
                       AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
                      THEN 1 ELSE 0 END) AS ready_mat,
             SUM(COALESCE(t.qty_reqmts,0)) AS sum_reqmts,
             SUM(COALESCE(t.qty_deliv,0))  AS sum_deliv
-        FROM job_detail_work_order wo
-        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-        LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
-        LEFT JOIN project        p   ON jl.project_id         = p.id
-        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
-        LEFT JOIN job_unit       u   ON eq.unit_id      = u.id
-        LEFT JOIN job_area       a   ON u.area_id       = a.id
-        LEFT JOIN taex_reservasi t   ON t."order"       = wo."order"
+        FROM vw_joblist_wo wo
+        LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        LEFT JOIN taex_reservasi    t   ON t."order"        = wo."order"
         WHERE {where}
         GROUP BY
-            p.project_number, a.area_name, u.unit_name,
-            eq.equipment_no, eq.description_of_technical_object,
-            jl.no_joblist, jl.joblist_description,
-            jd.no_joblist_detail, jd.joblist_detail_description,
-            jd.is_jasa, jd.is_material,
-            jd.planning_jasa_status_id, jd.planning_material_status_id,
+            jld.project_number, jld.area_name, jld.unit_name,
+            wo.equipment_no, wo.disiplin,
+            jld.no_joblist, jld.joblist_description,
+            jld.joblist_detail_desc, jld.no_document,
+            jld.is_jasa, jld.is_material,
+            jld.planning_jasa_status_id, jld.planning_material_status_id,
             wo."order", wo.system_status, wo.planner_group
-        ORDER BY eq.equipment_no, jl.no_joblist, jd.no_joblist_detail, wo."order"
+        ORDER BY wo.equipment_no, jld.no_joblist, jld.joblist_detail_desc, wo."order"
     """, params)
 
     def _mat_status(total, ready, reqmts, deliv):
