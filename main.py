@@ -445,6 +445,48 @@ TABLE_CONFIG = {
     },
 }
 
+# ── Distinct values untuk filter dropdown ──────────────────────────
+DISTINCT_CONFIG = {
+    "vw_joblist_wo": {
+        "revision":    "revision",
+        "disiplin":    "disiplin",
+        "jasa":        "planning_jasa_status",
+        "material":    "planning_material_status",
+    },
+    "vw_joblist_detail": {
+        "revision":    "revision",
+        "disiplin":    "disiplin",
+        "material":    "planning_material_status",
+        "proj_status": "project_status",
+    },
+    "tracking": {
+        "plant":       "plant",
+    },
+    "trkjl": {
+        "project":     "project_number",
+        "collective":  "collective",
+        "status":      "system_status",
+        "disiplin":    "disiplin",
+    },
+}
+
+@app.get("/api/distinct/{tabel}/{kolom}")
+def get_distinct(tabel: str, kolom: str, request: Request):
+    check_api_key(request)
+    cfg = DISTINCT_CONFIG.get(tabel, {})
+    col = cfg.get(kolom)
+    if not col:
+        raise HTTPException(400, "tabel/kolom tidak dikenali")
+    TABLE_MAP = {
+        "vw_joblist_wo":     "vw_joblist_wo",
+        "vw_joblist_detail": "vw_joblist_detail",
+        "tracking":          "taex_reservasi",
+        "trkjl":             "tracking_joblist",
+    }
+    tbl = TABLE_MAP.get(tabel)
+    rows = query(f'SELECT DISTINCT {col} AS v FROM {tbl} WHERE {col} IS NOT NULL AND {col} <> '' ORDER BY {col}')
+    return {"values": [r["v"] for r in rows]}
+
 @app.get("/api/data/{tabel}")
 def get_data_table(tabel: str, request: Request,
                    page: int = 1, limit: int = 100,

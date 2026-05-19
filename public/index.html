@@ -5362,6 +5362,12 @@ function _renderCachedTracking() {
   reapplyColAfterRender('trk');
 }
 
+async function populateTrkPlantFilter() {
+  const sel = document.getElementById('trk-filterPlant');
+  if (!sel || sel.options.length > 1) return;
+  await populateSelectFromDistinct('trk-filterPlant', 'tracking', 'plant');
+}
+
 async function renderTracking() {
   const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value;
@@ -5496,6 +5502,7 @@ async function renderTracking() {
   document.getElementById('trk-rowCount').textContent = trkServerMeta.total.toLocaleString('id-ID') + ' item';
   renderPagination('trk-pagination','trk',trkServerMeta.total,trkServerMeta.page,trkServerMeta.totalPages,trkServerMeta.limit,renderTracking);
   reapplyColAfterRender('trk');
+  populateTrkPlantFilter();
 }
 
 function esc(s) { return String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
@@ -7086,15 +7093,28 @@ async function fetchAndRenderVwJlWo() {
   populateVwJlWoFilters();
 }
 
-function populateVwJlWoFilters() {
-  const makeOpts = arr => '<option value="">Semua</option>' + arr.map(v=>`<option value="${v}">${v}</option>`).join('');
-  const uniq = key => [...new Set(vwJlWoFiltered.map(r=>r[key]).filter(Boolean))].sort();
-  if (state.vwJlWoData && state.vwJlWoData.length) {
-    document.getElementById('vwjlwo-filter-revision').innerHTML   = makeOpts(uniq('Revision'));
-    document.getElementById('vwjlwo-filter-disiplin').innerHTML   = makeOpts(uniq('Disiplin'));
-    document.getElementById('vwjlwo-filter-jasa').innerHTML       = makeOpts(uniq('PlanningJasaStatus'));
-    document.getElementById('vwjlwo-filter-material').innerHTML   = makeOpts(uniq('PlanningMaterialStatus'));
-  }
+async function fetchDistinct(tabel, kolom) {
+  try {
+    const res = await apiFetch(`/distinct/${tabel}/${kolom}`);
+    return res.values || [];
+  } catch(e) { return []; }
+}
+
+async function populateSelectFromDistinct(selectId, tabel, kolom) {
+  const vals = await fetchDistinct(tabel, kolom);
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  el.innerHTML = '<option value="">Semua</option>' +
+    vals.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+async function populateVwJlWoFilters() {
+  await Promise.all([
+    populateSelectFromDistinct('vwjlwo-filter-revision', 'vw_joblist_wo', 'revision'),
+    populateSelectFromDistinct('vwjlwo-filter-disiplin', 'vw_joblist_wo', 'disiplin'),
+    populateSelectFromDistinct('vwjlwo-filter-jasa',     'vw_joblist_wo', 'jasa'),
+    populateSelectFromDistinct('vwjlwo-filter-material', 'vw_joblist_wo', 'material'),
+  ]);
 }
 
 function vwJlWoResetFilter() {
@@ -7232,15 +7252,16 @@ async function fetchAndRenderVwJld() {
   vwJldServerMeta.total = 0;
   resetPg('vwjld');
   await renderVwJld();
+  populateVwJldFilters();
 }
 
-function populateVwJldFilters() {
-  const makeOpts = arr => '<option value="">Semua</option>' + arr.map(v=>`<option value="${v}">${v}</option>`).join('');
-  const uniq = key => [...new Set(vwJldFiltered.map(r=>r[key]).filter(Boolean))].sort();
-  document.getElementById('vwjld-filter-revision').innerHTML     = makeOpts(uniq('Revision'));
-  document.getElementById('vwjld-filter-disiplin').innerHTML     = makeOpts(uniq('Disiplin'));
-  document.getElementById('vwjld-filter-material').innerHTML     = makeOpts(uniq('PlanningMaterialStatus'));
-  document.getElementById('vwjld-filter-proj-status').innerHTML  = makeOpts(uniq('ProjectStatus'));
+async function populateVwJldFilters() {
+  await Promise.all([
+    populateSelectFromDistinct('vwjld-filter-revision',    'vw_joblist_detail', 'revision'),
+    populateSelectFromDistinct('vwjld-filter-disiplin',    'vw_joblist_detail', 'disiplin'),
+    populateSelectFromDistinct('vwjld-filter-material',    'vw_joblist_detail', 'material'),
+    populateSelectFromDistinct('vwjld-filter-proj-status', 'vw_joblist_detail', 'proj_status'),
+  ]);
 }
 
 function vwJldResetFilter() {
@@ -7656,20 +7677,13 @@ async function fetchAndRenderTrkJl() {
   }
 }
 
-function populateTrkJlFilters() {
-  const projects  = [...new Set(state.trkJlData.map(r => r.project_number).filter(Boolean))].sort();
-  const colls     = [...new Set(state.trkJlData.map(r => r.collective).filter(Boolean))].sort();
-  const statuses  = [...new Set(state.trkJlData.map(r => r.system_status).filter(Boolean))].sort();
-  const disiplins = [...new Set(state.trkJlData.map(r => r.disiplin).filter(Boolean))].sort();
-
-  document.getElementById('trkjl-filter-project').innerHTML =
-    '<option value="">Semua</option>' + projects.map(v => `<option value="${v}">${v}</option>`).join('');
-  document.getElementById('trkjl-filter-collective').innerHTML =
-    '<option value="">Semua</option>' + colls.map(v => `<option value="${v}">${v}</option>`).join('');
-  document.getElementById('trkjl-filter-status').innerHTML =
-    '<option value="">Semua</option>' + statuses.map(v => `<option value="${v}">${v}</option>`).join('');
-  document.getElementById('trkjl-filter-disiplin').innerHTML =
-    '<option value="">Semua</option>' + disiplins.map(v => `<option value="${v}">${v}</option>`).join('');
+async function populateTrkJlFilters() {
+  await Promise.all([
+    populateSelectFromDistinct('trkjl-filter-project',    'trkjl', 'project'),
+    populateSelectFromDistinct('trkjl-filter-collective', 'trkjl', 'collective'),
+    populateSelectFromDistinct('trkjl-filter-status',     'trkjl', 'status'),
+    populateSelectFromDistinct('trkjl-filter-disiplin',   'trkjl', 'disiplin'),
+  ]);
 }
 
 const trkJlExpanded = {};  // kept for compatibility
