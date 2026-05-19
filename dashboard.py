@@ -498,8 +498,8 @@ def drilldown_detail(
             jld.no_document                    AS no_joblist_detail,
             jld.is_jasa,
             jld.is_material,
-            jld.planning_jasa_status_id,
-            jld.planning_material_status_id,
+            jld.planning_jasa_status,
+            jld.planning_material_status,
             wo."order",
             wo.system_status,
             wo.planner_group,
@@ -519,7 +519,7 @@ def drilldown_detail(
             jld.no_joblist, jld.joblist_description,
             jld.joblist_detail_desc, jld.no_document,
             jld.is_jasa, jld.is_material,
-            jld.planning_jasa_status_id, jld.planning_material_status_id,
+            jld.planning_jasa_status, jld.planning_material_status,
             wo."order", wo.system_status, wo.planner_group
         ORDER BY wo.equipment_no, jld.no_joblist, jld.joblist_detail_desc, wo."order"
     """, params)
@@ -529,10 +529,10 @@ def drilldown_detail(
         if ready == total: return "READY"
         return "NOT READY"
 
-    def _jasa_status(planning_jasa_status_id):
-        # planning_jasa_status_id: 3 = Sudah SP/SP3MK = READY
-        if str(planning_jasa_status_id or "") in ("3",): return "READY"
-        if planning_jasa_status_id: return "ON PROCESS"
+    def _jasa_status(status):
+        s = str(status or "").strip().lower()
+        if "planning complete" in s or "sudah sp" in s or "sp3mk" in s: return "READY"
+        if s and s not in ("not planned", "belum", ""): return "ON PROCESS"
         return "N/R"
 
     result = []
@@ -540,7 +540,7 @@ def drilldown_detail(
         total = int(r["total_mat"] or 0)
         ready = int(r["ready_mat"] or 0)
         mat_status  = _mat_status(total, ready, r["sum_reqmts"], r["sum_deliv"])
-        jasa_status = _jasa_status(r["planning_jasa_status_id"])
+        jasa_status = _jasa_status(r["planning_jasa_status"])
         wo_ready = mat_status == "READY" and (not r["is_jasa"] or jasa_status == "READY")
 
         result.append({
@@ -558,6 +558,7 @@ def drilldown_detail(
             "planner_group":  r["planner_group"],
             "is_jasa":        bool(r["is_jasa"]),
             "is_material":    bool(r["is_material"]),
+            "planning_jasa_status": r["planning_jasa_status"],
             "total_mat":      total,
             "ready_mat":      ready,
             "sum_reqmts":     float(r["sum_reqmts"] or 0),
