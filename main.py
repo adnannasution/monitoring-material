@@ -2,7 +2,7 @@
 main.py — PRISMA · TA-ex System
 FastAPI backend menggantikan Node.js/Express
 Semua endpoint kompatibel 1:1 dengan frontend index.html asli
-
+ 
 Jalankan: uvicorn main:app --reload --port 8080
 """
 import io
@@ -34,6 +34,8 @@ from bulk_ops import (
     bulk_replace_vw_joblist_wo, bulk_replace_vw_joblist_detail,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
+from dashboard import router as dashboard_router
+from update_pr import router as update_pr_router
 
 load_dotenv()
 
@@ -353,6 +355,14 @@ app.mount("/static", StaticFiles(directory="public"), name="static")
 @app.get("/")
 def serve_index():
     return FileResponse("public/index.html")
+
+@app.get("/dashboard")
+def serve_dashboard():
+    return FileResponse("public/dashboard.html")
+
+@app.get("/update-pr")
+def serve_update_pr():
+    return FileResponse("public/update_pr.html")
 
 
 # ═══════════════════════════════════════════════════════════════
