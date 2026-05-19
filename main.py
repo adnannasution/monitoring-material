@@ -42,6 +42,9 @@ load_dotenv()
 # ─── APP ────────────────────────────────────────────────────────
 app = FastAPI(title="PRISMA · TA-ex System", version="2.0.0")
 
+app.include_router(dashboard_router)
+app.include_router(update_pr_router)
+
 API_KEY        = os.getenv("API_KEY", "")
 PUBLIC_API_KEY = os.getenv("PUBLIC_API_KEY", "")
 ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "*")
