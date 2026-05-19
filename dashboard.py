@@ -66,9 +66,9 @@ def readiness_equipment(request: Request, plant: str = ""):
                 SUM(COALESCE(or_.total_mat,0)) AS total_mat,
                 SUM(COALESCE(or_.ready_mat,0)) AS ready_mat
             FROM job_detail_work_order wo
-            JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-            JOIN job_list       jl  ON jd.joblist_id        = jl.id
-            LEFT JOIN equipment_taex eq ON jl.equipment_id  = eq.id
+            LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+            LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
+            LEFT JOIN equipment_taex eq  ON jl.equipment_id      = eq.id
             LEFT JOIN order_ready or_   ON or_."order"      = wo."order"
             WHERE wo.is_deleted = 0
               AND jl.equipment_id IS NOT NULL
@@ -347,13 +347,13 @@ DRILLDOWN_BASE = """
                       AND COALESCE(t.qty_deliv,0) >= t.qty_reqmts
                      THEN 1 ELSE 0 END) AS ready_mat
         FROM job_detail_work_order wo
-        JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-        JOIN job_list       jl  ON jd.joblist_id        = jl.id
-        JOIN project        p   ON jl.project_id        = p.id
-        LEFT JOIN equipment_taex eq ON jl.equipment_id  = eq.id
-        LEFT JOIN job_unit       u  ON eq.unit_id       = u.id
-        LEFT JOIN job_area       a  ON u.area_id        = a.id
-        LEFT JOIN taex_reservasi t  ON t."order"        = wo."order"
+        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
+        LEFT JOIN project        p   ON jl.project_id         = p.id
+        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
+        LEFT JOIN job_unit       u   ON eq.unit_id      = u.id
+        LEFT JOIN job_area       a   ON u.area_id       = a.id
+        LEFT JOIN taex_reservasi t   ON t."order"       = wo."order"
         WHERE wo.is_deleted = 0
         {extra_where}
         GROUP BY
@@ -524,13 +524,13 @@ def drilldown_detail(
             SUM(COALESCE(t.qty_reqmts,0)) AS sum_reqmts,
             SUM(COALESCE(t.qty_deliv,0))  AS sum_deliv
         FROM job_detail_work_order wo
-        JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
-        JOIN job_list       jl  ON jd.joblist_id        = jl.id
-        JOIN project        p   ON jl.project_id        = p.id
-        LEFT JOIN equipment_taex eq ON jl.equipment_id  = eq.id
-        LEFT JOIN job_unit       u  ON eq.unit_id       = u.id
-        LEFT JOIN job_area       a  ON u.area_id        = a.id
-        LEFT JOIN taex_reservasi t  ON t."order"        = wo."order"
+        LEFT JOIN job_detail     jd  ON wo.joblist_detail_id = jd.id
+        LEFT JOIN job_list       jl  ON jd.joblist_id        = jl.id
+        LEFT JOIN project        p   ON jl.project_id         = p.id
+        LEFT JOIN equipment_taex eq  ON jl.equipment_id = eq.id
+        LEFT JOIN job_unit       u   ON eq.unit_id      = u.id
+        LEFT JOIN job_area       a   ON u.area_id       = a.id
+        LEFT JOIN taex_reservasi t   ON t."order"       = wo."order"
         WHERE {where}
         GROUP BY
             p.project_number, a.area_name, u.unit_name,
