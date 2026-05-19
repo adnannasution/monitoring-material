@@ -868,12 +868,11 @@ function renderDdChart(data) {
   const wrap = document.getElementById('dd-chart-wrap');
 
   // Tentukan tinggi canvas berdasarkan jumlah data
-  const barH = 36;
+  const barH = 44;
   const minH = 300;
-  const h = Math.max(minH, data.length * barH + 60);
-  wrap.innerHTML = '<canvas id="dd-chart"></canvas>';
+  const h = Math.max(minH, data.length * barH + 80);
+  wrap.innerHTML = `<div style="position:relative;height:${h}px"><canvas id="dd-chart" style="cursor:pointer"></canvas></div>`;
   const canvas = document.getElementById('dd-chart');
-  canvas.height = h;
 
   const isLastLevel = ddCurLevel === 'wo';
   const labels = data.map(r => r.name + (r.description && r.description !== r.name ? ' — ' + r.description.substring(0,30) : ''));
@@ -890,7 +889,7 @@ function renderDdChart(data) {
         data: pcts,
         backgroundColor: colors,
         borderRadius: 4,
-        barThickness: 22,
+        barThickness: 28,
       }]
     },
     options: {
@@ -898,18 +897,21 @@ function renderDdChart(data) {
       responsive: true,
       maintainAspectRatio: false,
       onClick: (evt, els) => {
-        if (!els.length) return;
-        const idx = els[0].index;
-        // Double-click detection via timestamp
+        // Gunakan getElementsAtEventForMode agar klik di label/row juga terdeteksi
+        const points = charts['dd-chart'].getElementsAtEventForMode(
+          evt.native, 'nearest', { intersect: false, axis: 'y' }, false
+        );
+        const idx = points.length ? points[0].index : (els.length ? els[0].index : -1);
+        if (idx < 0) return;
         const now = Date.now();
         if (window._lastClick && now - window._lastClick < 400 && window._lastIdx === idx) {
-          // Double-click → open detail modal
           openDetailModal(data[idx], ddCurLevel);
           window._lastClick = 0;
         } else {
           window._lastClick = now;
           window._lastIdx   = idx;
           if (!isLastLevel) ddDrillDown(data[idx]);
+          else openDetailModal(data[idx], ddCurLevel);
         }
       },
       plugins: {
