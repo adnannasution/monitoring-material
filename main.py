@@ -34,6 +34,7 @@ from bulk_ops import (
     bulk_replace_vw_joblist_wo, bulk_replace_vw_joblist_detail,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
+from dashboard import router as dashboard_router
 
 load_dotenv()
 
@@ -50,6 +51,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "x-api-key"],
 )
+
+app.include_router(dashboard_router)
 
 # ─── DB MIGRATE ON STARTUP ──────────────────────────────────────
 @app.on_event("startup")
@@ -353,6 +356,10 @@ app.mount("/static", StaticFiles(directory="public"), name="static")
 @app.get("/")
 def serve_index():
     return FileResponse("public/index.html")
+
+@app.get("/dashboard")
+def serve_dashboard():
+    return FileResponse("public/dashboard.html")
 
 
 # ═══════════════════════════════════════════════════════════════
