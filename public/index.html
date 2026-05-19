@@ -3159,6 +3159,9 @@ async function _backgroundLoadTabs() {
   try { await fetchAndRenderVwJlWo(); } catch(e) { console.warn('bg vwjlwo:', e.message); }
   try { await fetchAndRenderVwJld(); } catch(e) { console.warn('bg vwjld:', e.message); }
   try { await fetchAndRenderTrkJl2(); } catch(e) { console.warn('bg trkjl2:', e.message); }
+  try { await fetchAndRenderTrkJl(); } catch(e) { console.warn('bg trkjl:', e.message); }
+  // Populate filter dropdowns dari backend
+  try { await Promise.all([populateTrkPlantFilter(), populateTrkJlFilters()]); } catch(e) {}
 }
 
 async function _fetchBadgeCounts() {
@@ -3255,7 +3258,7 @@ function renderPage(app) {
   else if (app==='equipment') { if (!state.equipmentData.length) fetchAndRenderEquipment(); else renderEquipment(); }
   else if (app==='jobarea')   { if (!state.jobAreaData.length) fetchAndRenderJobArea(); else renderJobArea(); }
   else if (app==='jobunit')   { if (!state.jobUnitData.length) fetchAndRenderJobUnit(); else renderJobUnit(); }
-  else if (app==='tracking-joblist') { if (!state.trkJlData.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
+  else if (app==='tracking-joblist') { if (!trkJlFiltered.length) fetchAndRenderTrkJl(); else renderTrkJl(); requestAnimationFrame(fixTrkJlStickyHeader); }
   else if (app==='vw-joblist-wo')   { if (!vwJlWoFiltered.length) fetchAndRenderVwJlWo(); else _renderCachedVwJlWo(); }
   else if (app==='vw-joblist-detail') { if (!vwJldFiltered.length) fetchAndRenderVwJld(); else _renderCachedVwJld(); }
   else if (app==='tracking-joblist2') { if (!trkJl2Filtered.length) fetchAndRenderTrkJl2(); else _renderCachedTrkJl2(); }
@@ -5365,7 +5368,12 @@ function _renderCachedTracking() {
 async function populateTrkPlantFilter() {
   const sel = document.getElementById('trk-filterPlant');
   if (!sel || sel.options.length > 1) return;
-  await populateSelectFromDistinct('trk-filterPlant', 'tracking', 'plant');
+  try {
+    const res = await apiFetch('/plants/list');
+    const plants = res.plants || [];
+    sel.innerHTML = '<option value="">Semua</option>' +
+      plants.map(p => `<option value="${p.code}">${p.code} — ${p.name}</option>`).join('');
+  } catch(e) { console.warn('populateTrkPlantFilter:', e.message); }
 }
 
 async function renderTracking() {

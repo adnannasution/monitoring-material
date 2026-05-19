@@ -448,44 +448,50 @@ TABLE_CONFIG = {
 # ── Distinct values untuk filter dropdown ──────────────────────────
 DISTINCT_CONFIG = {
     "vw_joblist_wo": {
-        "revision":    "revision",
-        "disiplin":    "disiplin",
-        "jasa":        "planning_jasa_status",
-        "material":    "planning_material_status",
+        "revision":    ("vw_joblist_wo",   "revision"),
+        "disiplin":    ("vw_joblist_wo",   "disiplin"),
+        "jasa":        ("vw_joblist_wo",   "planning_jasa_status"),
+        "material":    ("vw_joblist_wo",   "planning_material_status"),
     },
     "vw_joblist_detail": {
-        "revision":    "revision",
-        "disiplin":    "disiplin",
-        "material":    "planning_material_status",
-        "proj_status": "project_status",
+        "revision":    ("vw_joblist_detail", "revision"),
+        "disiplin":    ("vw_joblist_detail", "disiplin"),
+        "material":    ("vw_joblist_detail", "planning_material_status"),
+        "proj_status": ("vw_joblist_detail", "project_status"),
     },
-    "tracking": {
-        "plant":       "plant",
-    },
-    "trkjl": {
-        "project":     "project_number",
-        "collective":  "collective",
-        "status":      "system_status",
-        "disiplin":    "disiplin",
-    },
+}
+
+# Query khusus untuk trkjl karena merupakan join beberapa tabel
+TRKJL_DISTINCT = {
+    "project":    "SELECT DISTINCT p.project_number AS v FROM project p JOIN job_list jl ON jl.project_id=p.id WHERE p.project_number IS NOT NULL ORDER BY v",
+    "collective": "SELECT DISTINCT jd.collective AS v FROM job_detail jd WHERE jd.collective IS NOT NULL AND jd.collective <> '' ORDER BY v",
+    "status":     "SELECT DISTINCT wo.system_status AS v FROM job_detail_work_order wo WHERE wo.system_status IS NOT NULL AND wo.system_status <> '' ORDER BY v",
+    "disiplin":   "SELECT DISTINCT jl.disiplin AS v FROM job_list jl WHERE jl.disiplin IS NOT NULL AND jl.disiplin <> '' ORDER BY v",
+    "area":       "SELECT DISTINCT a.area_name AS v FROM job_area a WHERE a.area_name IS NOT NULL AND a.area_name <> '' ORDER BY v",
 }
 
 @app.get("/api/distinct/{tabel}/{kolom}")
 def get_distinct(tabel: str, kolom: str, request: Request):
     check_api_key(request)
+    if tabel == "trkjl":
+        sql = TRKJL_DISTINCT.get(kolom)
+        if not sql:
+            raise HTTPException(400, "kolom tidak dikenali")
+        rows = query(sql)
+        return {"values": [r["v"] for r in rows if r["v"]]}
     cfg = DISTINCT_CONFIG.get(tabel, {})
-    col = cfg.get(kolom)
-    if not col:
+    col_cfg = cfg.get(kolom)
+    if not col_cfg:
         raise HTTPException(400, "tabel/kolom tidak dikenali")
-    TABLE_MAP = {
-        "vw_joblist_wo":     "vw_joblist_wo",
-        "vw_joblist_detail": "vw_joblist_detail",
-        "tracking":          "taex_reservasi",
-        "trkjl":             "tracking_joblist",
-    }
-    tbl = TABLE_MAP.get(tabel)
-    rows = query(f'SELECT DISTINCT {col} AS v FROM {tbl} WHERE {col} IS NOT NULL AND {col} <> '' ORDER BY {col}')
+    tbl, col = col_cfg
+    rows = query("SELECT DISTINCT " + col + " AS v FROM " + tbl + " WHERE " + col + " IS NOT NULL AND " + col + " <> '' ORDER BY " + col)
     return {"values": [r["v"] for r in rows]}
+
+@app.get("/api/plants/list")
+def get_plants_list(request: Request):
+    check_api_key(request)
+    rows = query("SELECT plant_code, plant_name FROM plants ORDER BY plant_code")
+    return {"plants": [{"code": r["plant_code"], "name": r["plant_name"]} for r in rows]}
 
 @app.get("/api/data/{tabel}")
 def get_data_table(tabel: str, request: Request,
