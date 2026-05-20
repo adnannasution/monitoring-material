@@ -213,10 +213,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 
 <div class="page-tabs">
-  <div class="page-tab active" onclick="switchPage('p1')">📦 Readiness Equipment</div>
-  <div class="page-tab" onclick="switchPage('p2')">🧾 Readiness Material</div>
+  <div class="page-tab active" onclick="switchPage('p4')">📊 Readiness by Project</div>
   <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
-  <div class="page-tab" onclick="switchPage('p4')">📊 Per Project</div>
+  <div class="page-tab" onclick="switchPage('p1')" style="display:none">📦 Readiness Equipment</div>
+  <div class="page-tab" onclick="switchPage('p2')" style="display:none">🧾 Readiness Material</div>
 </div>
 
 <!-- FILTER BAR -->
@@ -226,14 +226,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="ru-btn active" onclick="setPlant('')">Select All</div>
   </div>
   <div class="filter-divider" id="ru-filter-divider"></div>
-  <span class="filter-label">Tahun:</span>
-  <select class="filter-select" id="year-select" onchange="reload()">
+  <span class="filter-label" style="display:none">Tahun:</span>
+  <select class="filter-select" id="year-select" onchange="reload()" style="display:none">
     <option value="">Semua</option>
   </select>
 </div>
 
 <!-- ══ PAGE 1: READINESS EQUIPMENT ══ -->
-<div class="page-content active" id="page-p1">
+<div class="page-content" id="page-p1">
 <div class="content">
 
   <!-- Summary Cards -->
@@ -450,7 +450,7 @@ async function init() {
   }
 
   await initP4Projects();
-  reload();
+  loadP4();
 }
 
 async function loadPlants() {
@@ -485,7 +485,7 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2','p3','p4'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p1','p2'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   const hideRU = id === 'p3' || id === 'p4';
@@ -1213,7 +1213,7 @@ function openDetailModalByIdx(idx) {
 </script>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
-<div class="page-content" id="page-p4">
+<div class="page-content active" id="page-p4">
 <div class="content">
 
   <!-- Project filter -->
