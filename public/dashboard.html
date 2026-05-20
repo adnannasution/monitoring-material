@@ -221,11 +221,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <!-- FILTER BAR -->
 <div class="filter-bar">
-  <span class="filter-label">Filter RU:</span>
+  <span class="filter-label" id="ru-filter-label">Filter RU:</span>
   <div class="ru-btns" id="ru-btns">
     <div class="ru-btn active" onclick="setPlant('')">Select All</div>
   </div>
-  <div class="filter-divider"></div>
+  <div class="filter-divider" id="ru-filter-divider"></div>
   <span class="filter-label">Tahun:</span>
   <select class="filter-select" id="year-select" onchange="reload()">
     <option value="">Semua</option>
@@ -260,7 +260,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
     <div class="card">
       <div class="card-title">Realisasi Readiness Material & Jasa per Bulan</div>
-      <canvas id="chart-monthly" height="100"></canvas>
+      <canvas id="chart-monthly" height="120"></canvas>
       <div class="legend" style="margin-top:12px">
         <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Plan/Bulan</div>
         <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Actual/Bulan</div>
@@ -381,6 +381,30 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </div>
   </div>
 
+  <!-- Table daftar item dengan tombol mata -->
+  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
+    </div>
+    <div id="dd-list-wrap" style="overflow-x:auto">
+      <table class="mini-table" id="dd-list-table">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th style="text-align:right">WO Ready</th>
+            <th style="text-align:right">Total WO</th>
+            <th style="text-align:right">% Ready</th>
+            <th style="text-align:center">Detail</th>
+          </tr>
+        </thead>
+        <tbody id="dd-list-tbody">
+          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 </div>
 
@@ -461,12 +485,20 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2','p3'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2','p3','p4'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
+  const hideRU = id === 'p3' || id === 'p4';
+  const rl = document.getElementById('ru-filter-label');
+  const rb = document.getElementById('ru-btns');
+  const rd = document.getElementById('ru-filter-divider');
+  if (rl) rl.style.display = hideRU ? 'none' : '';
+  if (rb) rb.style.display = hideRU ? 'none' : '';
+  if (rd) rd.style.display = hideRU ? 'none' : '';
   if (id === 'p1') loadP1();
   else if (id === 'p2') loadP2();
-  else loadP3();
+  else if (id === 'p3') loadP3();
+  else loadP4();
 }
 
 // ── CHART HELPERS ─────────────────────────────────────────────
@@ -1179,33 +1211,6 @@ function openDetailModalByIdx(idx) {
 }
 
 </script>
-
-  <!-- Table daftar item dengan tombol mata -->
-  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
-      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
-    </div>
-    <div id="dd-list-wrap" style="overflow-x:auto">
-      <table class="mini-table" id="dd-list-table">
-        <thead>
-          <tr>
-            <th>Nama</th>
-            <th style="text-align:right">WO Ready</th>
-            <th style="text-align:right">Total WO</th>
-            <th style="text-align:right">% Ready</th>
-            <th style="text-align:center">Detail</th>
-          </tr>
-        </thead>
-        <tbody id="dd-list-tbody">
-          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-</div>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
 <div class="page-content" id="page-p4">
