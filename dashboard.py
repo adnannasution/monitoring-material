@@ -606,28 +606,27 @@ def project_equipment(request: Request, project_number: str = ""):
         return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
 
     rows = query("""
-        WITH equipment_list AS (
-            SELECT DISTINCT
-                jld.no_joblist          AS equipment_no,
-                jld.joblist_description AS equipment_desc,
-                jld.area_name,
-                jld.unit_name,
-                jld.equipment_no        AS eq_no,
-                wo.plant
-            FROM vw_joblist_detail jld
-            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
-            WHERE jld.project_number = %s
-              AND jld.no_joblist IS NOT NULL
-        ),
-        wo_per_eq AS (
-            SELECT DISTINCT
-                el.equipment_no,
-                el.area_name,
-                el.plant,
-                wo."order"
-            FROM equipment_list el
-            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.eq_no
-        ),
+       WITH equipment_list AS (
+    SELECT
+        jld.equipment_no,
+        jld.area_name,
+        jld.unit_name,
+        wo.plant,
+        ROW_NUMBER() OVER (ORDER BY jld.equipment_no, jld.area_name) AS row_id
+    FROM vw_joblist_detail jld
+    LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
+    WHERE jld.project_number = %s
+      AND jld.equipment_no IS NOT NULL
+),
+wo_per_eq AS (
+    SELECT DISTINCT
+        el.row_id       AS equipment_no,
+        el.area_name,
+        el.plant,
+        wo."order"
+    FROM equipment_list el
+    LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
+),
         order_ready AS (
             -- Cek readiness tiap WO dari taex_reservasi
             SELECT t."order",
