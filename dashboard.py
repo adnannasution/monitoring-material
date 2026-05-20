@@ -608,19 +608,18 @@ def project_equipment(request: Request, project_number: str = ""):
     rows = query("""
        WITH equipment_list AS (
     SELECT
-        jld.equipment_no,
-        jld.area_name,
-        jld.unit_name,
+        wo.equipment_no,
         wo.plant,
-        ROW_NUMBER() OVER (ORDER BY jld.equipment_no, jld.area_name) AS row_id
-    FROM vw_joblist_detail jld
-    LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
+        jld.area_name,
+        jld.unit_name
+    FROM vw_joblist_wo wo
+    LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
     WHERE jld.project_number = %s
-      AND jld.equipment_no IS NOT NULL
+      AND wo.equipment_no IS NOT NULL
 ),
 wo_per_eq AS (
     SELECT DISTINCT
-        el.row_id       AS equipment_no,
+        el.equipment_no,
         el.area_name,
         el.plant,
         wo."order"
