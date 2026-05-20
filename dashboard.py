@@ -606,22 +606,20 @@ def project_equipment(request: Request, project_number: str = ""):
         return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
 
     rows = query("""
-       WITH equipment_list AS (
+      WITH equipment_list AS (
     SELECT
-        wo.equipment_no,
-        wo.plant,
+        jld.equipment_no,
         jld.area_name,
         jld.unit_name
-    FROM vw_joblist_wo wo
-    LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+    FROM vw_joblist_detail jld
     WHERE jld.project_number = %s
-      AND wo.equipment_no IS NOT NULL
+      AND jld.equipment_no IS NOT NULL
 ),
 wo_per_eq AS (
     SELECT DISTINCT
         el.equipment_no,
         el.area_name,
-        el.plant,
+        wo.plant,
         wo."order"
     FROM equipment_list el
     LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
