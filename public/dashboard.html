@@ -727,6 +727,7 @@ async function loadP3() {
     if (!d) return;
     renderDdSummary(d.data);
     renderDdChart(d.data);
+    renderDdList(d.data);
     renderBreadcrumb();
   } catch(e) {
     document.getElementById('dd-chart-wrap').innerHTML =
@@ -1148,7 +1149,63 @@ function renderP4MonthlyChart(monthly) {
   });
 }
 
+
+let _ddListData = [];
+function renderDdList(data) {
+  _ddListData = data || [];
+  const tbody = document.getElementById('dd-list-tbody');
+  if (!_ddListData.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-sm)">Tidak ada data</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _ddListData.map((r, i) => {
+    const pctColor = r.pct_ready === 100 ? '#16a34a' : r.pct_ready >= 70 ? '#3b82f6' : r.pct_ready >= 40 ? '#d97706' : '#dc2626';
+    const label = r.description && r.description !== r.name ? r.name + ' — ' + r.description.substring(0,40) : r.name;
+    return `<tr>
+      <td style="font-size:12px;font-weight:600;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description||r.name}">${label}</td>
+      <td style="text-align:right;font-size:12px;color:var(--green);font-weight:700">${fmt(r.ready_wo)}</td>
+      <td style="text-align:right;font-size:12px">${fmt(r.total_wo)}</td>
+      <td style="text-align:right;font-size:12px;font-weight:700;color:${pctColor}">${r.pct_ready.toFixed(1)}%</td>
+      <td style="text-align:center">
+        <button onclick="openDetailModalByIdx(${i})"
+          style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--blue)" title="Lihat detail">👁</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function openDetailModalByIdx(idx) {
+  const item = _ddListData[idx];
+  if (item) openDetailModal(item, ddCurLevel);
+}
+
 </script>
+
+  <!-- Table daftar item dengan tombol mata -->
+  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
+    </div>
+    <div id="dd-list-wrap" style="overflow-x:auto">
+      <table class="mini-table" id="dd-list-table">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th style="text-align:right">WO Ready</th>
+            <th style="text-align:right">Total WO</th>
+            <th style="text-align:right">% Ready</th>
+            <th style="text-align:center">Detail</th>
+          </tr>
+        </thead>
+        <tbody id="dd-list-tbody">
+          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</div>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
 <div class="page-content" id="page-p4">
