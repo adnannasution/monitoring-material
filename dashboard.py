@@ -606,32 +606,54 @@ def project_equipment(request: Request, project_number: str = ""):
         return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
 
     rows = query("""
-        WITH project_orders AS (
-            SELECT DISTINCT wo."order", wo.equipment_no, wo.plant,
-                   jld.area_name, jld.unit_name
-            FROM vw_joblist_wo wo
-            JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        WITH equipment_list AS (
+            -- Ambil distinct equipment per project dari vw_joblist_detail
+            SELECT DISTINCT
+                jld.equipment_no,
+                jld.area_name,
+                jld.unit_name,
+                wo.plant
+            FROM vw_joblist_detail jld
+            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
             WHERE jld.project_number = %s
+              AND jld.equipment_no IS NOT NULL
+        ),
+        wo_per_eq AS (
+            -- Semua WO milik equipment tersebut
+            SELECT DISTINCT
+                el.equipment_no,
+                el.area_name,
+                el.unit_name,
+                el.plant,
+                wo."order"
+            FROM equipment_list el
+            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
         ),
         order_ready AS (
+            -- Cek readiness tiap WO dari taex_reservasi
             SELECT t."order",
                    COUNT(*) AS total_mat,
                    SUM(CASE WHEN COALESCE(t.qty_deliv,0) >= t.qty_reqmts
                                  AND t.qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
             FROM taex_reservasi t
-            WHERE t."order" IN (SELECT "order" FROM project_orders)
+            WHERE t."order" IN (SELECT "order" FROM wo_per_eq WHERE "order" IS NOT NULL)
             GROUP BY t."order"
         ),
         eq_ready AS (
-            SELECT po.equipment_no, po.plant, po.area_name, po.unit_name,
-                   BOOL_AND(
-                       CASE WHEN COALESCE(or_.total_mat,0) > 0
-                                 AND or_.ready_mat = or_.total_mat
-                            THEN TRUE ELSE FALSE END
-                   ) AS equipment_ready
-            FROM project_orders po
-            LEFT JOIN order_ready or_ ON or_."order" = po."order"
-            GROUP BY po.equipment_no, po.plant, po.area_name, po.unit_name
+            -- Equipment ready = semua WO-nya ready
+            SELECT
+                we.equipment_no,
+                we.area_name,
+                we.plant,
+                BOOL_AND(
+                    CASE WHEN we."order" IS NULL THEN FALSE
+                         WHEN COALESCE(or_.total_mat,0) > 0
+                              AND or_.ready_mat = or_.total_mat THEN TRUE
+                         ELSE FALSE END
+                ) AS equipment_ready
+            FROM wo_per_eq we
+            LEFT JOIN order_ready or_ ON or_."order" = we."order"
+            GROUP BY we.equipment_no, we.area_name, we.plant
         )
         SELECT
             area_name,
