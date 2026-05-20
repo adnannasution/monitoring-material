@@ -216,15 +216,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div class="page-tab active" onclick="switchPage('p1')">📦 Readiness Equipment</div>
   <div class="page-tab" onclick="switchPage('p2')">🧾 Readiness Material</div>
   <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
+  <div class="page-tab" onclick="switchPage('p4')">📊 Per Project</div>
 </div>
 
 <!-- FILTER BAR -->
-<div class="filter-bar" id="filter-bar">
-  <span class="filter-label" id="ru-filter-label">Filter RU:</span>
+<div class="filter-bar">
+  <span class="filter-label">Filter RU:</span>
   <div class="ru-btns" id="ru-btns">
     <div class="ru-btn active" onclick="setPlant('')">Select All</div>
   </div>
-  <div class="filter-divider" id="ru-filter-divider"></div>
+  <div class="filter-divider"></div>
   <span class="filter-label">Tahun:</span>
   <select class="filter-select" id="year-select" onchange="reload()">
     <option value="">Semua</option>
@@ -362,7 +363,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div style="background:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div id="breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px"></div>
     <div style="display:flex;gap:8px">
-      <button id="btn-dd-back" onclick="ddBack()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--blue);background:#eff6ff;color:var(--blue);font-size:12px;cursor:pointer;font-weight:600;display:none">← Mundur</button>
       <button onclick="ddReset()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:#f8fafc;font-size:12px;cursor:pointer;font-weight:600">🔄 Reset</button>
     </div>
   </div>
@@ -374,34 +374,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div class="card" style="padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div class="card-title" id="dd-chart-title" style="margin-bottom:0">Project</div>
-      <div style="font-size:11px;color:var(--text-sm)">Klik bar → drill-down &nbsp;|&nbsp; Klik 👁 → lihat detail</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik → drill-down &nbsp;|&nbsp; Klik 2x → lihat detail 👁</div>
     </div>
     <div id="dd-chart-wrap" style="overflow-y:auto;max-height:520px">
       <canvas id="dd-chart"></canvas>
-    </div>
-  </div>
-
-  <!-- Table daftar item dengan tombol mata -->
-  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
-      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
-    </div>
-    <div id="dd-list-wrap" style="overflow-x:auto">
-      <table class="mini-table" id="dd-list-table">
-        <thead>
-          <tr>
-            <th>Nama</th>
-            <th style="text-align:right">WO Ready</th>
-            <th style="text-align:right">Total WO</th>
-            <th style="text-align:right">% Ready</th>
-            <th style="text-align:center">Detail</th>
-          </tr>
-        </thead>
-        <tbody id="dd-list-tbody">
-          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
-        </tbody>
-      </table>
     </div>
   </div>
 
@@ -418,9 +394,7 @@ let charts  = {};
 
 // ── Auth header ───────────────────────────────────────────────
 function headers() {
-  // Baca ulang token setiap request supaya tidak stale
-  const t = localStorage.getItem('auth_token') || token || '';
-  return { 'x-api-key': '', 'x-auth-token': t, 'Content-Type': 'application/json' };
+  return { 'x-api-key': '', 'x-auth-token': token, 'Content-Type': 'application/json' };
 }
 
 async function apiFetch(url) {
@@ -451,6 +425,7 @@ async function init() {
     ys.appendChild(o);
   }
 
+  await initP4Projects();
   reload();
 }
 
@@ -489,11 +464,6 @@ function switchPage(id) {
   document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p1','p2','p3'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  // Sembunyikan filter RU di tab Drill-down Readiness
-  const isP3 = id === 'p3';
-  document.getElementById('ru-filter-label').style.display = isP3 ? 'none' : '';
-  document.getElementById('ru-btns').style.display = isP3 ? 'none' : '';
-  document.getElementById('ru-filter-divider').style.display = isP3 ? 'none' : '';
   if (id === 'p1') loadP1();
   else if (id === 'p2') loadP2();
   else loadP3();
@@ -631,24 +601,24 @@ function renderMonthlyChart(monthly) {
       ]
     },
     options: {
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      callbacks: {
-        afterBody: (items) => {
-          const idx = items[0]?.dataIndex;
-          if (idx === undefined) return [];
-          const m = monthly[idx];
-          if (!m || !m.top_projects || !m.top_projects.length) return [];
-          const lines = ['', 'Top Project:'];
-          m.top_projects.forEach(p => {
-            lines.push('  ' + p.project + '  —  ' + p.jumlah.toLocaleString('id-ID') + ' mat');
-          });
-          return lines;
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex;
+              if (idx === undefined) return [];
+              const m = monthly[idx];
+              if (!m || !m.top_projects || !m.top_projects.length) return [];
+              const lines = ['', 'Top Project:'];
+              m.top_projects.forEach(p => {
+                lines.push('  ' + p.project + '  —  ' + p.jumlah.toLocaleString('id-ID') + ' mat');
+              });
+              return lines;
+            }
+          }
         }
-      }
-    }
-  },
+      },
       scales: {
         y:  { position:'left',  grid: { color:'#f1f5f9' } },
         y2: { position:'right', grid: { display: false } }
@@ -749,7 +719,7 @@ let ddCurLevel = 'project';
 async function loadP3() {
   const params = buildDdParams();
   const qs = new URLSearchParams(params);
-  // Filter RU tidak digunakan di drill-down
+  if (curPlant) qs.set('plant', curPlant);
   qs.set('level', ddCurLevel);
 
   try {
@@ -757,7 +727,6 @@ async function loadP3() {
     if (!d) return;
     renderDdSummary(d.data);
     renderDdChart(d.data);
-    renderDdList(d.data);
     renderBreadcrumb();
   } catch(e) {
     document.getElementById('dd-chart-wrap').innerHTML =
@@ -791,9 +760,6 @@ function renderBreadcrumb() {
            <span style="color:var(--text);font-weight:700">${DD_LABELS[ddCurLevel]}</span>`;
   bc.innerHTML = html;
   document.getElementById('dd-chart-title').textContent = DD_LABELS[ddCurLevel];
-  // Tampilkan tombol Mundur kalau ada stack
-  const btnBack = document.getElementById('btn-dd-back');
-  if (btnBack) btnBack.style.display = ddStack.length > 0 ? '' : 'none';
 }
 
 function renderDdSummary(data) {
@@ -950,13 +916,22 @@ function renderDdChart(data) {
       responsive: true,
       maintainAspectRatio: false,
       onClick: (evt, els) => {
-        // Single klik = drill-down saja (modal hanya via icon mata)
+        // Gunakan getElementsAtEventForMode agar klik di label/row juga terdeteksi
         const points = charts['dd-chart'].getElementsAtEventForMode(
           evt.native, 'nearest', { intersect: false, axis: 'y' }, false
         );
         const idx = points.length ? points[0].index : (els.length ? els[0].index : -1);
         if (idx < 0) return;
-        if (!isLastLevel) ddDrillDown(data[idx]);
+        const now = Date.now();
+        if (window._lastClick && now - window._lastClick < 400 && window._lastIdx === idx) {
+          openDetailModal(data[idx], ddCurLevel);
+          window._lastClick = 0;
+        } else {
+          window._lastClick = now;
+          window._lastIdx   = idx;
+          if (!isLastLevel) ddDrillDown(data[idx]);
+          else openDetailModal(data[idx], ddCurLevel);
+        }
       },
       plugins: {
         legend: { display: false },
@@ -967,7 +942,7 @@ function renderDdChart(data) {
             return [
               `WO Ready: ${r.ready_wo} / ${r.total_wo}`,
               `Material Ready: ${fmt(r.ready_mat)} / ${fmt(r.total_mat)}`,
-              isLastLevel ? '👁 Klik ikon mata untuk lihat detail' : '← Klik untuk drill-down',
+              isLastLevel ? '' : '← Klik untuk drill-down',
             ].filter(Boolean);
           }
         }}
@@ -1019,46 +994,239 @@ function ddReset() {
   loadP3();
 }
 
-function ddBack() {
-  if (ddStack.length === 0) return;
-  ddStack.pop();
-  if (ddStack.length === 0) {
-    ddCurLevel = 'project';
-  } else {
-    const prevLevel = ddStack[ddStack.length - 1].level;
-    const nextIdx = DD_LEVELS.indexOf(prevLevel) + 1;
-    ddCurLevel = DD_LEVELS[nextIdx] || DD_LEVELS[DD_LEVELS.length - 1];
-  }
-  loadP3();
+// ══════════════════════════════════════════════════════════════
+// PAGE 4 — PER PROJECT
+// ══════════════════════════════════════════════════════════════
+async function initP4Projects() {
+  try {
+    const projects = await apiFetch('/api/dashboard/projects');
+    if (!projects) return;
+    const sel = document.getElementById('p4-project-select');
+    projects.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
 }
 
-let _ddListData = [];
-function renderDdList(data) {
-  _ddListData = data || [];
-  const tbody = document.getElementById('dd-list-tbody');
-  if (!_ddListData.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-sm)">Tidak ada data</td></tr>';
-    return;
+async function loadP4() {
+  const proj = document.getElementById('p4-project-select').value;
+  document.getElementById('p4-empty').style.display      = proj ? 'none' : '';
+  document.getElementById('p4-eq-section').style.display  = proj ? '' : 'none';
+  document.getElementById('p4-mat-section').style.display = proj ? '' : 'none';
+  if (!proj) return;
+
+  document.getElementById('p4-loading').style.display = '';
+  try {
+    const [eq, mat] = await Promise.all([
+      apiFetch('/api/dashboard/project-equipment?project_number=' + encodeURIComponent(proj)),
+      apiFetch('/api/dashboard/project-material?project_number='  + encodeURIComponent(proj)),
+    ]);
+    if (eq)  renderP4Equipment(eq);
+    if (mat) renderP4Material(mat);
+  } catch(e) {
+    console.error('loadP4 error:', e);
+  } finally {
+    document.getElementById('p4-loading').style.display = 'none';
   }
-  tbody.innerHTML = _ddListData.map((r, i) => {
-    const pctColor = r.pct_ready === 100 ? '#16a34a' : r.pct_ready >= 70 ? '#3b82f6' : r.pct_ready >= 40 ? '#d97706' : '#dc2626';
-    const label = r.description && r.description !== r.name ? r.name + ' — ' + r.description.substring(0,40) : r.name;
-    return `<tr>
-      <td style="font-size:12px;font-weight:600;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description||r.name}">${label}</td>
-      <td style="text-align:right;font-size:12px;color:var(--green);font-weight:700">${fmt(r.ready_wo)}</td>
-      <td style="text-align:right;font-size:12px">${fmt(r.total_wo)}</td>
-      <td style="text-align:right;font-size:12px;font-weight:700;color:${pctColor}">${r.pct_ready.toFixed(1)}%</td>
-      <td style="text-align:center">
-        <button onclick="openDetailModalByIdx(${i})"
-          style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--blue)" title="Lihat detail">👁</button>
-      </td>
-    </tr>`;
-  }).join('');
 }
-function openDetailModalByIdx(idx) {
-  const item = _ddListData[idx];
-  if (item) openDetailModal(item, ddCurLevel);
+
+function renderP4Equipment(d) {
+  destroyChart('p4-donut-eq');
+  document.getElementById('p4-donut-eq-total').textContent = fmt(d.summary.total_equipment);
+  const ctx = document.getElementById('p4-donut-eq').getContext('2d');
+  charts['p4-donut-eq'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Ready','Not Ready'],
+      datasets: [{ data: [d.summary.ready, d.summary.not_ready],
+                   backgroundColor: ['#3b82f6','#cbd5e1'], borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: {
+      cutout: '72%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        label: c => ' ' + c.label + ': ' + fmt(c.raw) +
+          ' (' + pct(d.summary.total_equipment ? c.raw / d.summary.total_equipment * 100 : 0) + ')'
+      }}}
+    }
+  });
+
+  const totalPct = d.summary.total_equipment ? d.summary.ready / d.summary.total_equipment * 100 : 0;
+  let html = d.by_area.map(r => `
+    <tr>
+      <td style="font-weight:600">${r.area_name}</td>
+      <td style="text-align:right;color:var(--red)">${fmt(r.not_ready)}</td>
+      <td style="text-align:right;color:var(--green)">${fmt(r.ready)}</td>
+      <td style="text-align:right;font-weight:700">${fmt(r.total_equipment)}</td>
+      <td><div class="pct-bar">
+        <div class="pct-track"><div class="pct-fill green" style="width:${r.pct_ready}%"></div></div>
+        <div class="pct-num">${r.pct_ready.toFixed(1)}%</div>
+      </div></td>
+    </tr>`).join('');
+  html += `<tr style="background:#f8fafc;font-weight:700">
+    <td>Total</td>
+    <td style="text-align:right;color:var(--red)">${fmt(d.summary.not_ready)}</td>
+    <td style="text-align:right;color:var(--green)">${fmt(d.summary.ready)}</td>
+    <td style="text-align:right">${fmt(d.summary.total_equipment)}</td>
+    <td><div class="pct-bar">
+      <div class="pct-track"><div class="pct-fill green" style="width:${totalPct}%"></div></div>
+      <div class="pct-num">${totalPct.toFixed(1)}%</div>
+    </div></td>
+  </tr>`;
+  document.getElementById('p4-eq-tbody').innerHTML = html;
 }
+
+function renderP4Material(d) {
+  const CA = ['#3b82f6','#f59e0b','#10b981','#ef4444','#6b7280'];
+  const CP = ['#3b82f6','#22c55e','#f59e0b','#f97316','#dc2626','#8b5cf6','#64748b','#0891b2'];
+  _renderP4Donut('p4-donut-actual',   'p4-donut-actual-total',   'p4-legend-actual',   'p4-tbody-actual',   d.actual,   CA);
+  _renderP4Donut('p4-donut-prognosa', 'p4-donut-prognosa-total', 'p4-legend-prognosa', 'p4-tbody-prognosa', d.prognosa, CP);
+}
+
+function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
+  destroyChart(canvasId);
+  document.getElementById(totalId).textContent = fmt(data.total);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.items.map(i => i.status),
+      datasets: [{ data: data.items.map(i => i.jumlah), backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: {
+      cutout: '70%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        label: c => ' ' + c.label + ': ' + fmt(c.raw) + ' (' + pct(data.total ? c.raw/data.total*100 : 0) + ')'
+      }}}
+    }
+  });
+  document.getElementById(legendId).innerHTML = data.items.map((item, i) =>
+    '<div class="legend-item"><div class="legend-dot" style="background:' +
+    colors[i%colors.length] + '"></div>' + item.status + '</div>'
+  ).join('');
+  document.getElementById(tbodyId).innerHTML = data.items.map((item, i) =>
+    '<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
+    colors[i%colors.length] + ';margin-right:6px"></span>' + item.status + '</td>' +
+    '<td style="text-align:right;font-weight:700">' + fmt(item.jumlah) + '</td>' +
+    '<td style="text-align:right">' + item.pct.toFixed(2) + '%</td></tr>'
+  ).join('') +
+  '<tr style="font-weight:700;background:#f8fafc"><td>Total</td>' +
+  '<td style="text-align:right">' + fmt(data.total) + '</td>' +
+  '<td style="text-align:right">100%</td></tr>';
+}
+
 </script>
+
+<!-- ══ PAGE 4: PER PROJECT ══ -->
+<div class="page-content" id="page-p4">
+<div class="content">
+
+  <!-- Project filter -->
+  <div class="card" style="margin-bottom:16px;padding:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="filter-label">Pilih Project:</span>
+      <select class="filter-select" id="p4-project-select" onchange="loadP4()"
+              style="min-width:220px;font-size:13px;padding:6px 12px">
+        <option value="">— Pilih Project —</option>
+      </select>
+      <span id="p4-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
+    </div>
+  </div>
+
+  <!-- Equipment section -->
+  <div id="p4-eq-section" style="display:none">
+    <div class="grid-3" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-title">Readiness Equipment</div>
+        <div class="donut-wrap">
+          <canvas id="p4-donut-eq"></canvas>
+          <div class="donut-center">
+            <div class="donut-num" id="p4-donut-eq-total">—</div>
+            <div class="donut-sub">Total Eq.</div>
+          </div>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Ready</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#cbd5e1"></div> Not Ready</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Detail per Area</div>
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th style="text-align:right">Not Ready</th>
+              <th style="text-align:right">Ready</th>
+              <th style="text-align:right">Total</th>
+              <th>% Ready</th>
+            </tr>
+          </thead>
+          <tbody id="p4-eq-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Material section -->
+  <div id="p4-mat-section" style="display:none">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Actual Status Material</div>
+        <div class="donut-wrap">
+          <canvas id="p4-donut-actual"></canvas>
+          <div class="donut-center">
+            <div class="donut-num" id="p4-donut-actual-total">—</div>
+            <div class="donut-sub">Total Mat.</div>
+          </div>
+        </div>
+        <div class="legend" id="p4-legend-actual"></div>
+        <br>
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>Status Material</th>
+              <th style="text-align:right">Jumlah</th>
+              <th style="text-align:right">%</th>
+            </tr>
+          </thead>
+          <tbody id="p4-tbody-actual"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Prognosa Status Material</div>
+        <div class="donut-wrap">
+          <canvas id="p4-donut-prognosa"></canvas>
+          <div class="donut-center">
+            <div class="donut-num" id="p4-donut-prognosa-total">—</div>
+            <div class="donut-sub">Total Mat.</div>
+          </div>
+        </div>
+        <div class="legend" id="p4-legend-prognosa"></div>
+        <br>
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>Status Prognosa</th>
+              <th style="text-align:right">Jumlah</th>
+              <th style="text-align:right">%</th>
+            </tr>
+          </thead>
+          <tbody id="p4-tbody-prognosa"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="p4-empty" style="text-align:center;padding:60px;color:var(--text-sm)">
+    <div style="font-size:48px;margin-bottom:12px">📊</div>
+    <div style="font-size:14px;font-weight:600">Pilih project untuk melihat data readiness</div>
+  </div>
+
+</div>
+</div>
+
 </body>
 </html>

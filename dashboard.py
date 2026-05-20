@@ -579,3 +579,192 @@ def drilldown_detail(request: Request, level: str = "equipment",
         },
         "rows": result,
     })
+
+
+# ═══════════════════════════════════════════════════════════════
+# PER PROJECT — Tab 4
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/projects")
+def get_projects(request: Request):
+    """List semua project untuk dropdown filter."""
+    _require_admin(request)
+    rows = query("""
+        SELECT DISTINCT project_number
+        FROM vw_joblist_detail
+        WHERE project_number IS NOT NULL AND project_number != ''
+        ORDER BY project_number
+    """)
+    return J([r["project_number"] for r in rows])
+
+
+@router.get("/project-equipment")
+def project_equipment(request: Request, project_number: str = ""):
+    """Readiness equipment untuk 1 project."""
+    _require_admin(request)
+    if not project_number:
+        return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
+
+    rows = query("""
+        WITH project_orders AS (
+            SELECT DISTINCT wo."order", wo.equipment_no, wo.plant,
+                   jld.area_name, jld.unit_name
+            FROM vw_joblist_wo wo
+            JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+            WHERE jld.project_number = %s
+        ),
+        order_ready AS (
+            SELECT t."order",
+                   COUNT(*) AS total_mat,
+                   SUM(CASE WHEN COALESCE(t.qty_deliv,0) >= t.qty_reqmts
+                                 AND t.qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
+            FROM taex_reservasi t
+            WHERE t."order" IN (SELECT "order" FROM project_orders)
+            GROUP BY t."order"
+        ),
+        eq_ready AS (
+            SELECT po.equipment_no, po.plant, po.area_name, po.unit_name,
+                   BOOL_AND(
+                       CASE WHEN COALESCE(or_.total_mat,0) > 0
+                                 AND or_.ready_mat = or_.total_mat
+                            THEN TRUE ELSE FALSE END
+                   ) AS equipment_ready
+            FROM project_orders po
+            LEFT JOIN order_ready or_ ON or_."order" = po."order"
+            GROUP BY po.equipment_no, po.plant, po.area_name, po.unit_name
+        )
+        SELECT
+            area_name,
+            COUNT(*) AS total_equipment,
+            SUM(CASE WHEN equipment_ready THEN 1 ELSE 0 END) AS ready,
+            SUM(CASE WHEN NOT equipment_ready THEN 1 ELSE 0 END) AS not_ready,
+            ROUND(
+                SUM(CASE WHEN equipment_ready THEN 1 ELSE 0 END) * 100.0
+                / NULLIF(COUNT(*), 0), 2
+            ) AS pct_ready
+        FROM eq_ready
+        GROUP BY area_name
+        ORDER BY area_name
+    """, [project_number])
+
+    total_eq  = sum(int(r["total_equipment"] or 0) for r in rows)
+    total_rdy = sum(int(r["ready"] or 0) for r in rows)
+    total_nrd = sum(int(r["not_ready"] or 0) for r in rows)
+
+    return J({
+        "summary": {
+            "total_equipment": total_eq,
+            "ready":     total_rdy,
+            "not_ready": total_nrd,
+            "pct_ready": round(total_rdy / total_eq * 100, 2) if total_eq else 0,
+        },
+        "by_area": [{
+            "area_name":       r["area_name"] or "—",
+            "total_equipment": int(r["total_equipment"] or 0),
+            "ready":           int(r["ready"] or 0),
+            "not_ready":       int(r["not_ready"] or 0),
+            "pct_ready":       float(r["pct_ready"] or 0),
+        } for r in rows],
+    })
+
+
+@router.get("/project-material")
+def project_material(request: Request, project_number: str = ""):
+    """Readiness material untuk 1 project."""
+    _require_admin(request)
+    if not project_number:
+        return J({"actual": {"total":0,"items":[]}, "prognosa": {"total":0,"items":[]}})
+
+    # Sub-query orders milik project ini
+    order_sub = """
+        SELECT DISTINCT wo."order"
+        FROM vw_joblist_wo wo
+        JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        WHERE jld.project_number = %s
+    """
+
+    actual_rows = query(f"""
+        SELECT
+            CASE
+                WHEN COALESCE(t.qty_stock,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0
+                     THEN 'Stock On Hand'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND COALESCE(t.qty_deliv,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0
+                     THEN 'PO-Material Telah Tiba'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND COALESCE(t.qty_deliv,0) < COALESCE(t.qty_reqmts,0)
+                     THEN 'PO-Material Belum Tiba'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '')
+                     THEN 'PR-Proses Pengadaan'
+                ELSE 'Belum PR'
+            END AS status_material,
+            COUNT(*) AS jumlah
+        FROM taex_reservasi t
+        WHERE COALESCE(t.qty_reqmts,0) > 0
+          AND t."order" IN ({order_sub})
+        GROUP BY status_material
+        ORDER BY jumlah DESC
+    """, [project_number])
+
+    total_actual = sum(int(r["jumlah"] or 0) for r in actual_rows)
+    actual = [{
+        "status": r["status_material"],
+        "jumlah": int(r["jumlah"] or 0),
+        "pct":    round(int(r["jumlah"] or 0) / total_actual * 100, 2) if total_actual else 0,
+    } for r in actual_rows]
+
+    prognosa_rows = query(f"""
+        SELECT
+            CASE
+                WHEN COALESCE(t.qty_stock,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0
+                     THEN 'Stock On Hand'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND t.delivery_date IS NOT NULL
+                     AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date::date < wo.basic_start_date::date
+                     THEN 'PO-DT Sebelum MD'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND t.delivery_date IS NOT NULL
+                     AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date::date > wo.basic_start_date::date
+                     THEN 'PO-DT Melebihi MD'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     THEN 'PO-DT Sebelum MD'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '')
+                     AND wo.basic_start_date IS NOT NULL
+                     AND (t.reqmts_date IS NULL OR t.reqmts_date::date <= wo.basic_start_date::date)
+                     THEN 'PR-Prognosa DT sebelum MD'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '')
+                     THEN 'PR-Prognosa DT Melebihi MD'
+                ELSE 'Create PR'
+            END AS prognosa_status,
+            COUNT(*) AS jumlah
+        FROM taex_reservasi t
+        LEFT JOIN LATERAL (
+            SELECT basic_start_date FROM work_order wo
+            WHERE wo."order" = t."order"
+            ORDER BY wo.id LIMIT 1
+        ) wo ON TRUE
+        WHERE COALESCE(t.qty_reqmts,0) > 0
+          AND t."order" IN ({order_sub})
+        GROUP BY prognosa_status
+        ORDER BY jumlah DESC
+    """, [project_number])
+
+    total_prognosa = sum(int(r["jumlah"] or 0) for r in prognosa_rows)
+    prognosa = [{
+        "status": r["prognosa_status"],
+        "jumlah": int(r["jumlah"] or 0),
+        "pct":    round(int(r["jumlah"] or 0) / total_prognosa * 100, 2) if total_prognosa else 0,
+    } for r in prognosa_rows]
+
+    return J({
+        "actual":   {"total": total_actual,   "items": actual},
+        "prognosa": {"total": total_prognosa, "items": prognosa},
+    })
