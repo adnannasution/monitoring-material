@@ -768,3 +768,51 @@ def project_material(request: Request, project_number: str = ""):
         "actual":   {"total": total_actual,   "items": actual},
         "prognosa": {"total": total_prognosa, "items": prognosa},
     })
+
+
+@router.get("/project-monthly")
+def project_monthly(request: Request, project_number: str = ""):
+    """Readiness material per bulan untuk 1 project."""
+    _require_admin(request)
+    if not project_number:
+        return J({"monthly": []})
+
+    order_sub = """
+        SELECT DISTINCT wo."order"
+        FROM vw_joblist_wo wo
+        JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        WHERE jld.project_number = %s
+    """
+
+    plan_rows = query(f"""
+        SELECT TO_CHAR(t.reqmts_date::date, 'YYYY-MM') AS bulan, COUNT(*) AS jumlah
+        FROM taex_reservasi t
+        WHERE t.reqmts_date IS NOT NULL
+          AND t."order" IN ({order_sub})
+        GROUP BY bulan ORDER BY bulan
+    """, [project_number])
+
+    actual_rows = query(f"""
+        SELECT TO_CHAR(t.delivery_date::date, 'YYYY-MM') AS bulan, COUNT(*) AS jumlah
+        FROM taex_reservasi t
+        WHERE t.delivery_date IS NOT NULL
+          AND t.po IS NOT NULL AND t.po != ''
+          AND t."order" IN ({order_sub})
+        GROUP BY bulan ORDER BY bulan
+    """, [project_number])
+
+    plan_map   = {r["bulan"]: int(r["jumlah"] or 0) for r in plan_rows}
+    actual_map = {r["bulan"]: int(r["jumlah"] or 0) for r in actual_rows}
+    all_months = sorted(set(list(plan_map.keys()) + list(actual_map.keys())))
+
+    cum_plan = cum_act = 0
+    monthly = []
+    for m in all_months:
+        p = plan_map.get(m, 0)
+        a = actual_map.get(m, 0)
+        cum_plan += p
+        cum_act  += a
+        monthly.append({"bulan": m, "plan": p, "actual": a,
+                        "kum_plan": cum_plan, "kum_actual": cum_act})
+
+    return J({"monthly": monthly})
