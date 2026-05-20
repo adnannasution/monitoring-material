@@ -607,27 +607,26 @@ def project_equipment(request: Request, project_number: str = ""):
 
     rows = query("""
         WITH equipment_list AS (
-            -- Ambil distinct equipment per project dari vw_joblist_detail
             SELECT DISTINCT
-                jld.equipment_no,
+                jld.no_joblist          AS equipment_no,
+                jld.joblist_description AS equipment_desc,
                 jld.area_name,
                 jld.unit_name,
+                jld.equipment_no        AS eq_no,
                 wo.plant
             FROM vw_joblist_detail jld
             LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = jld.equipment_no
             WHERE jld.project_number = %s
-              AND jld.equipment_no IS NOT NULL
+              AND jld.no_joblist IS NOT NULL
         ),
         wo_per_eq AS (
-            -- Semua WO milik equipment tersebut
             SELECT DISTINCT
                 el.equipment_no,
                 el.area_name,
-                el.unit_name,
                 el.plant,
                 wo."order"
             FROM equipment_list el
-            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
+            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.eq_no
         ),
         order_ready AS (
             -- Cek readiness tiap WO dari taex_reservasi
