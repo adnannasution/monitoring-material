@@ -220,7 +220,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 
 <!-- FILTER BAR -->
-<div class="filter-bar">
+<div class="filter-bar" id="filter-bar" style="display:none">
   <span class="filter-label" id="ru-filter-label">Filter RU:</span>
   <div class="ru-btns" id="ru-btns">
     <div class="ru-btn active" onclick="setPlant('')">Select All</div>
@@ -1267,7 +1267,7 @@ function openDetailModalByIdx(idx) {
   <div id="p4-monthly-section" style="display:none;margin-bottom:20px">
     <div class="card">
       <div class="card-title">Realisasi Readiness Material & Jasa per Bulan</div>
-      <canvas id="p4-chart-monthly" height="120"></canvas>
+      <canvas id="p4-chart-monthly" height="80"></canvas>
       <div class="legend" style="margin-top:12px">
         <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Plan/Bulan</div>
         <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Actual/Bulan</div>
