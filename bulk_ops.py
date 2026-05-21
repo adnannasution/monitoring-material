@@ -359,7 +359,7 @@ def bulk_replace_project(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO project
                 (id, project_number, project_type_id, start_date, finish_date,
                  revision, description, project_status, plant,
@@ -407,7 +407,7 @@ def bulk_replace_job_list(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO job_list
                 (id, project_id, equipment_id, plant, created, created_by,
                  is_deleted, modified, modified_by, joblist_description, no_joblist)
@@ -448,7 +448,7 @@ def bulk_replace_job_detail(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO job_detail
                 (id, joblist_id, joblist_detail_reason_id, joblist_detail_description,
                  is_mechanical_integrity, is_optimization, job_discipline_id, plant,
@@ -537,7 +537,7 @@ def bulk_replace_job_detail_work_order(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO job_detail_work_order
                 (id, joblist_detail_id, notification, created_on, superior_order, "order",
                  description, equipment, functional_loc, location, revision,
@@ -596,7 +596,7 @@ def bulk_replace_equipment_taex(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO equipment_taex
                 (id, plant, created, created_by, is_deleted, modified, modified_by,
                  unit_id, catalog_profile, criticallity, criticallity_text,
@@ -659,7 +659,7 @@ def bulk_replace_job_area(df) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO job_area
                 (id, area_name, plant, created, created_by, is_deleted,
                  modified, modified_by, area_alias_name)
@@ -695,7 +695,7 @@ def bulk_replace_job_unit(df) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-                        sql = """
+            sql = """
                 INSERT INTO job_unit
                 (id, area_id, unit_name, plant, created, created_by, is_deleted,
                  modified, modified_by, unit_alias_name)
