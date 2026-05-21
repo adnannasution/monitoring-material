@@ -30,13 +30,11 @@ def _s(v):
 
 
 # ─── TAEX RESERVASI ──────────────────────────────────────────
-def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
+def bulk_replace_taex(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (order+material+itm), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            if mode == "replace":
-                cur.execute("DELETE FROM taex_reservasi")
-
             rows = []
             for _, raw in df.iterrows():
                 r = normalize_taex(raw.to_dict())
@@ -59,46 +57,32 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                     _s(r.get("Reservno")),
                 ))
 
-            if mode == "append":
-                sql = """
-                    INSERT INTO taex_reservasi
-                    (plant, equipment, "order", revision, material, itm,
-                     material_description, qty_reqmts, qty_stock,
-                     pr, item, qty_pr, cost_ctrs,
-                     po, po_date, qty_deliv, delivery_date,
-                     sloc, del, fis, ict, pg,
-                     recipient, unloading_point, reqmts_date,
-                     qty_f_avail_check, qty_withdrawn,
-                     uom, gl_acct, res_price, res_per, res_curr, reservno)
-                    VALUES %s
-                    ON CONFLICT ("order", material, itm) DO UPDATE SET
-                        plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
-                        revision=EXCLUDED.revision, material_description=EXCLUDED.material_description,
-                        qty_reqmts=EXCLUDED.qty_reqmts, qty_stock=EXCLUDED.qty_stock,
-                        cost_ctrs=EXCLUDED.cost_ctrs, sloc=EXCLUDED.sloc,
-                        del=EXCLUDED.del, fis=EXCLUDED.fis, ict=EXCLUDED.ict, pg=EXCLUDED.pg,
-                        recipient=EXCLUDED.recipient, unloading_point=EXCLUDED.unloading_point,
-                        reqmts_date=EXCLUDED.reqmts_date,
-                        qty_f_avail_check=EXCLUDED.qty_f_avail_check,
-                        qty_withdrawn=EXCLUDED.qty_withdrawn,
-                        uom=EXCLUDED.uom, gl_acct=EXCLUDED.gl_acct,
-                        res_price=EXCLUDED.res_price, res_per=EXCLUDED.res_per,
-                        res_curr=EXCLUDED.res_curr, reservno=EXCLUDED.reservno,
-                        updated_at=NOW()
-                """
-            else:
-                sql = """
-                    INSERT INTO taex_reservasi
-                    (plant, equipment, "order", revision, material, itm,
-                     material_description, qty_reqmts, qty_stock,
-                     pr, item, qty_pr, cost_ctrs,
-                     po, po_date, qty_deliv, delivery_date,
-                     sloc, del, fis, ict, pg,
-                     recipient, unloading_point, reqmts_date,
-                     qty_f_avail_check, qty_withdrawn,
-                     uom, gl_acct, res_price, res_per, res_curr, reservno)
-                    VALUES %s
-                """
+            sql = """
+                INSERT INTO taex_reservasi
+                (plant, equipment, "order", revision, material, itm,
+                 material_description, qty_reqmts, qty_stock,
+                 pr, item, qty_pr, cost_ctrs,
+                 po, po_date, qty_deliv, delivery_date,
+                 sloc, del, fis, ict, pg,
+                 recipient, unloading_point, reqmts_date,
+                 qty_f_avail_check, qty_withdrawn,
+                 uom, gl_acct, res_price, res_per, res_curr, reservno)
+                VALUES %s
+                ON CONFLICT ("order", material, itm) DO UPDATE SET
+                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
+                    revision=EXCLUDED.revision, material_description=EXCLUDED.material_description,
+                    qty_reqmts=EXCLUDED.qty_reqmts, qty_stock=EXCLUDED.qty_stock,
+                    cost_ctrs=EXCLUDED.cost_ctrs, sloc=EXCLUDED.sloc,
+                    del=EXCLUDED.del, fis=EXCLUDED.fis, ict=EXCLUDED.ict, pg=EXCLUDED.pg,
+                    recipient=EXCLUDED.recipient, unloading_point=EXCLUDED.unloading_point,
+                    reqmts_date=EXCLUDED.reqmts_date,
+                    qty_f_avail_check=EXCLUDED.qty_f_avail_check,
+                    qty_withdrawn=EXCLUDED.qty_withdrawn,
+                    uom=EXCLUDED.uom, gl_acct=EXCLUDED.gl_acct,
+                    res_price=EXCLUDED.res_price, res_per=EXCLUDED.res_per,
+                    res_curr=EXCLUDED.res_curr, reservno=EXCLUDED.reservno,
+                    updated_at=NOW()
+            """
 
             execute_values(cur, sql, rows)
 
@@ -113,17 +97,10 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
 
 # ─── PRISMA RESERVASI ─────────────────────────────────────────
 def bulk_replace_prisma(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (order, itm, material), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM prisma_reservasi")
-            sql = """
-                INSERT INTO prisma_reservasi
-                (plant, equipment, revision, "order", reservno, itm, material, material_description,
-                 del, fis, ict, pg, recipient, unloading_point, reqmts_date,
-                 qty_reqmts, uom, pr_prisma, item_prisma, qty_pr_prisma, qty_stock_onhand, code_kertas_kerja)
-                VALUES %s
-            """
             rows = []
             for _, raw in df.iterrows():
                 r = raw.to_dict()
@@ -138,6 +115,25 @@ def bulk_replace_prisma(df: pd.DataFrame) -> int:
                     _n(r.get("Qty_StockOnhand")), _s(r.get("CodeKertasKerja")),
                 ))
 
+            sql = """
+                INSERT INTO prisma_reservasi
+                (plant, equipment, revision, "order", reservno, itm, material, material_description,
+                 del, fis, ict, pg, recipient, unloading_point, reqmts_date,
+                 qty_reqmts, uom, pr_prisma, item_prisma, qty_pr_prisma, qty_stock_onhand, code_kertas_kerja)
+                VALUES %s
+                ON CONFLICT ("order", itm, material) DO UPDATE SET
+                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
+                    revision=EXCLUDED.revision, reservno=EXCLUDED.reservno,
+                    material_description=EXCLUDED.material_description,
+                    del=EXCLUDED.del, fis=EXCLUDED.fis, ict=EXCLUDED.ict, pg=EXCLUDED.pg,
+                    recipient=EXCLUDED.recipient, unloading_point=EXCLUDED.unloading_point,
+                    reqmts_date=EXCLUDED.reqmts_date, qty_reqmts=EXCLUDED.qty_reqmts,
+                    uom=EXCLUDED.uom, pr_prisma=EXCLUDED.pr_prisma,
+                    item_prisma=EXCLUDED.item_prisma, qty_pr_prisma=EXCLUDED.qty_pr_prisma,
+                    qty_stock_onhand=EXCLUDED.qty_stock_onhand,
+                    code_kertas_kerja=EXCLUDED.code_kertas_kerja,
+                    updated_at=NOW()
+            """
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -151,16 +147,10 @@ def bulk_replace_prisma(df: pd.DataFrame) -> int:
 
 # ─── SAP PR ──────────────────────────────────────────────────
 def bulk_replace_pr(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (pr, item), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM sap_pr")
-            sql = """
-                INSERT INTO sap_pr
-                (plant, pr, item, material, material_description, d, r, pgr, s, tracking_no,
-                 qty_pr, un, req_date, valn_price, pr_curr, pr_per, release_date, tracking)
-                VALUES %s
-            """
             rows = []
             for _, raw in df.iterrows():
                 r = normalize_sap(raw.to_dict())
@@ -173,6 +163,25 @@ def bulk_replace_pr(df: pd.DataFrame) -> int:
                     _n(r.get("Valn_price")), _s(r.get("PR_Curr")), _n(r.get("PR_Per")),
                     _s(r.get("Release_Date")), _s(r.get("Tracking")),
                 ))
+
+            sql = """
+                INSERT INTO sap_pr
+                (plant, pr, item, material, material_description, d, r, pgr, s, tracking_no,
+                 qty_pr, un, req_date, valn_price, pr_curr, pr_per, release_date, tracking)
+                VALUES %s
+                ON CONFLICT (pr, item) DO UPDATE SET
+                    plant=EXCLUDED.plant,
+                    material=EXCLUDED.material,
+                    material_description=EXCLUDED.material_description,
+                    d=EXCLUDED.d, r=EXCLUDED.r, pgr=EXCLUDED.pgr, s=EXCLUDED.s,
+                    tracking_no=EXCLUDED.tracking_no,
+                    qty_pr=EXCLUDED.qty_pr, un=EXCLUDED.un,
+                    req_date=EXCLUDED.req_date,
+                    valn_price=EXCLUDED.valn_price, pr_curr=EXCLUDED.pr_curr,
+                    pr_per=EXCLUDED.pr_per, release_date=EXCLUDED.release_date,
+                    tracking=EXCLUDED.tracking,
+                    updated_at=NOW()
+            """
 
             execute_values(cur, sql, rows)
 
@@ -187,15 +196,25 @@ def bulk_replace_pr(df: pd.DataFrame) -> int:
 
 # ─── SAP PO ──────────────────────────────────────────────────
 def bulk_replace_po(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (po, po_item), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM sap_po")
             sql = """
                 INSERT INTO sap_po
                 (plnt, purchreq, item, material, short_text, po, po_item, d, dci, pgr,
                  doc_date, po_quantity, qty_delivered, deliv_date, oun, net_price, crcy, per)
                 VALUES %s
+                ON CONFLICT (po, po_item) DO UPDATE SET
+                    plnt=EXCLUDED.plnt, purchreq=EXCLUDED.purchreq,
+                    item=EXCLUDED.item, material=EXCLUDED.material,
+                    short_text=EXCLUDED.short_text,
+                    d=EXCLUDED.d, dci=EXCLUDED.dci, pgr=EXCLUDED.pgr,
+                    doc_date=EXCLUDED.doc_date,
+                    po_quantity=EXCLUDED.po_quantity, qty_delivered=EXCLUDED.qty_delivered,
+                    deliv_date=EXCLUDED.deliv_date, oun=EXCLUDED.oun,
+                    net_price=EXCLUDED.net_price, crcy=EXCLUDED.crcy, per=EXCLUDED.per,
+                    updated_at=NOW()
             """
             rows = []
             def _nk(k):
@@ -236,16 +255,10 @@ def bulk_replace_po(df: pd.DataFrame) -> int:
 
 # ─── KUMPULAN SUMMARY ─────────────────────────────────────────
 def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (order, itm, material), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM kumpulan_summary")
-            sql = """
-                INSERT INTO kumpulan_summary
-                (plant, equipment, revision, "order", reservno, itm, material, material_description,
-                 qty_req, qty_stock, qty_pr, qty_to_pr, code_tracking)
-                VALUES %s
-            """
             rows = []
             for _, r in df.iterrows():
                 rows.append((
@@ -257,6 +270,20 @@ def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
                     _s(r.get("CodeTracking")),
                 ))
 
+            sql = """
+                INSERT INTO kumpulan_summary
+                (plant, equipment, revision, "order", reservno, itm, material, material_description,
+                 qty_req, qty_stock, qty_pr, qty_to_pr, code_tracking)
+                VALUES %s
+                ON CONFLICT ("order", itm, material) DO UPDATE SET
+                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
+                    revision=EXCLUDED.revision, reservno=EXCLUDED.reservno,
+                    material_description=EXCLUDED.material_description,
+                    qty_req=EXCLUDED.qty_req, qty_stock=EXCLUDED.qty_stock,
+                    qty_pr=EXCLUDED.qty_pr, qty_to_pr=EXCLUDED.qty_to_pr,
+                    code_tracking=EXCLUDED.code_tracking,
+                    updated_at=NOW()
+            """
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -270,18 +297,10 @@ def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
 
 # ─── WORK ORDER ──────────────────────────────────────────────
 def bulk_replace_order(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (order), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM work_order")
-            sql = """
-                INSERT INTO work_order
-                (plant, "order", superior_order, notification, created_on, description, revision,
-                 equipment, system_status, user_status, funct_location, location, wbs_ord_header,
-                 cost_center, total_plan_cost, total_act_cost, planner_group, main_work_ctr,
-                 entry_by, changed_by, basic_start_date, basic_finish_date, actual_release)
-                VALUES %s
-            """
             rows = []
             for _, raw in df.iterrows():
                 r = normalize_order(raw.to_dict())
@@ -300,6 +319,30 @@ def bulk_replace_order(df: pd.DataFrame) -> int:
                     _s(r.get("Actual_Release")),
                 ))
 
+            sql = """
+                INSERT INTO work_order
+                (plant, "order", superior_order, notification, created_on, description, revision,
+                 equipment, system_status, user_status, funct_location, location, wbs_ord_header,
+                 cost_center, total_plan_cost, total_act_cost, planner_group, main_work_ctr,
+                 entry_by, changed_by, basic_start_date, basic_finish_date, actual_release)
+                VALUES %s
+                ON CONFLICT ("order") DO UPDATE SET
+                    plant=EXCLUDED.plant, superior_order=EXCLUDED.superior_order,
+                    notification=EXCLUDED.notification, created_on=EXCLUDED.created_on,
+                    description=EXCLUDED.description, revision=EXCLUDED.revision,
+                    equipment=EXCLUDED.equipment, system_status=EXCLUDED.system_status,
+                    user_status=EXCLUDED.user_status, funct_location=EXCLUDED.funct_location,
+                    location=EXCLUDED.location, wbs_ord_header=EXCLUDED.wbs_ord_header,
+                    cost_center=EXCLUDED.cost_center,
+                    total_plan_cost=EXCLUDED.total_plan_cost,
+                    total_act_cost=EXCLUDED.total_act_cost,
+                    planner_group=EXCLUDED.planner_group, main_work_ctr=EXCLUDED.main_work_ctr,
+                    entry_by=EXCLUDED.entry_by, changed_by=EXCLUDED.changed_by,
+                    basic_start_date=EXCLUDED.basic_start_date,
+                    basic_finish_date=EXCLUDED.basic_finish_date,
+                    actual_release=EXCLUDED.actual_release,
+                    updated_at=NOW()
+            """
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -316,8 +359,7 @@ def bulk_replace_project(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM project WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO project
                 (id, project_number, project_type_id, start_date, finish_date,
                  revision, description, project_status, plant,
@@ -365,8 +407,7 @@ def bulk_replace_job_list(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM job_list WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO job_list
                 (id, project_id, equipment_id, plant, created, created_by,
                  is_deleted, modified, modified_by, joblist_description, no_joblist)
@@ -407,8 +448,7 @@ def bulk_replace_job_detail(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM job_detail WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO job_detail
                 (id, joblist_id, joblist_detail_reason_id, joblist_detail_description,
                  is_mechanical_integrity, is_optimization, job_discipline_id, plant,
@@ -497,8 +537,7 @@ def bulk_replace_job_detail_work_order(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM job_detail_work_order WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO job_detail_work_order
                 (id, joblist_detail_id, notification, created_on, superior_order, "order",
                  description, equipment, functional_loc, location, revision,
@@ -557,8 +596,7 @@ def bulk_replace_equipment_taex(df: pd.DataFrame) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM equipment_taex WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO equipment_taex
                 (id, plant, created, created_by, is_deleted, modified, modified_by,
                  unit_id, catalog_profile, criticallity, criticallity_text,
@@ -621,8 +659,7 @@ def bulk_replace_job_area(df) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM job_area WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO job_area
                 (id, area_name, plant, created, created_by, is_deleted,
                  modified, modified_by, area_alias_name)
@@ -658,8 +695,7 @@ def bulk_replace_job_unit(df) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM job_unit WHERE is_deleted = 0")
-            sql = """
+                        sql = """
                 INSERT INTO job_unit
                 (id, area_id, unit_name, plant, created, created_by, is_deleted,
                  modified, modified_by, unit_alias_name)
@@ -692,10 +728,10 @@ def bulk_replace_job_unit(df) -> int:
 
 # ─── VW JOBLIST WO ───────────────────────────────────────────
 def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama ("order"), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM vw_joblist_wo")
             sql = """
                 INSERT INTO vw_joblist_wo
                 (plant, equipment_no, disiplin, joblist_description,
@@ -707,6 +743,28 @@ def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
                  bas_start_date, basic_fin_date, actual_release,
                  cost_center, entered_by)
                 VALUES %s
+                ON CONFLICT ("order") DO UPDATE SET
+                    plant=EXCLUDED.plant, equipment_no=EXCLUDED.equipment_no,
+                    disiplin=EXCLUDED.disiplin,
+                    joblist_description=EXCLUDED.joblist_description,
+                    planning_jasa_status=EXCLUDED.planning_jasa_status,
+                    planning_material_status=EXCLUDED.planning_material_status,
+                    code_name=EXCLUDED.code_name, is_lldii=EXCLUDED.is_lldii,
+                    notification=EXCLUDED.notification, created_on=EXCLUDED.created_on,
+                    superior_order=EXCLUDED.superior_order,
+                    description=EXCLUDED.description,
+                    functional_loc=EXCLUDED.functional_loc, location=EXCLUDED.location,
+                    revision=EXCLUDED.revision, system_status=EXCLUDED.system_status,
+                    user_status=EXCLUDED.user_status,
+                    wbs_ord_header=EXCLUDED.wbs_ord_header,
+                    total_plnnd_costs=EXCLUDED.total_plnnd_costs,
+                    totalact_costs=EXCLUDED.totalact_costs,
+                    planner_group=EXCLUDED.planner_group,
+                    main_work_ctr=EXCLUDED.main_work_ctr, change_by=EXCLUDED.change_by,
+                    bas_start_date=EXCLUDED.bas_start_date,
+                    basic_fin_date=EXCLUDED.basic_fin_date,
+                    actual_release=EXCLUDED.actual_release,
+                    cost_center=EXCLUDED.cost_center, entered_by=EXCLUDED.entered_by
             """
             def _i(v):
                 try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
@@ -740,10 +798,10 @@ def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
 
 # ─── VW JOBLIST DETAIL ───────────────────────────────────────
 def bulk_replace_vw_joblist_detail(df: pd.DataFrame) -> int:
+    """Selalu upsert — update baris yang sama (id), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM vw_joblist_detail")
             sql = """
                 INSERT INTO vw_joblist_detail
                 (id, joblist_id, joblist_detail_desc, reason_name, doc_type_name,
@@ -759,6 +817,40 @@ def bulk_replace_vw_joblist_detail(df: pd.DataFrame) -> int:
                  code_name, planning_jasa_status, planning_material_status,
                  lldi_status, is_freezing)
                 VALUES %s
+                ON CONFLICT (id) DO UPDATE SET
+                    joblist_id=EXCLUDED.joblist_id,
+                    joblist_detail_desc=EXCLUDED.joblist_detail_desc,
+                    reason_name=EXCLUDED.reason_name, doc_type_name=EXCLUDED.doc_type_name,
+                    no_document=EXCLUDED.no_document,
+                    is_mechanical_integrity=EXCLUDED.is_mechanical_integrity,
+                    job_discipline_name=EXCLUDED.job_discipline_name,
+                    nomor_pm=EXCLUDED.nomor_pm, notes=EXCLUDED.notes,
+                    plant=EXCLUDED.plant, created=EXCLUDED.created,
+                    creator_name=EXCLUDED.creator_name,
+                    creator_job_title=EXCLUDED.creator_job_title,
+                    is_deleted=EXCLUDED.is_deleted,
+                    joblist_description=EXCLUDED.joblist_description,
+                    no_joblist=EXCLUDED.no_joblist,
+                    project_number=EXCLUDED.project_number,
+                    project_type_code=EXCLUDED.project_type_code,
+                    project_type_name=EXCLUDED.project_type_name,
+                    start_date=EXCLUDED.start_date, finish_date=EXCLUDED.finish_date,
+                    revision=EXCLUDED.revision, description=EXCLUDED.description,
+                    project_status=EXCLUDED.project_status,
+                    equipment_no=EXCLUDED.equipment_no,
+                    area_name=EXCLUDED.area_name, area_alias_name=EXCLUDED.area_alias_name,
+                    unit_name=EXCLUDED.unit_name, unit_alias_name=EXCLUDED.unit_alias_name,
+                    functional_location=EXCLUDED.functional_location,
+                    location=EXCLUDED.location, disiplin=EXCLUDED.disiplin,
+                    criticallity=EXCLUDED.criticallity,
+                    criticallity_text=EXCLUDED.criticallity_text,
+                    main_work_center=EXCLUDED.main_work_center,
+                    is_all_in=EXCLUDED.is_all_in, is_jasa=EXCLUDED.is_jasa,
+                    is_lldii=EXCLUDED.is_lldii, is_material=EXCLUDED.is_material,
+                    code_name=EXCLUDED.code_name,
+                    planning_jasa_status=EXCLUDED.planning_jasa_status,
+                    planning_material_status=EXCLUDED.planning_material_status,
+                    lldi_status=EXCLUDED.lldi_status, is_freezing=EXCLUDED.is_freezing
             """
             def _i(v):
                 try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
