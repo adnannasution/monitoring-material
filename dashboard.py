@@ -606,20 +606,22 @@ def project_equipment(request: Request, project_number: str = ""):
         return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
 
     rows = query("""
-      WITH equipment_list AS (
-    SELECT
-        jld.equipment_no,
+     WITH equipment_list AS (
+    SELECT DISTINCT
+        wo.equipment_no,
+        wo.plant,
         jld.area_name,
         jld.unit_name
-    FROM vw_joblist_detail jld
+    FROM vw_joblist_wo wo
+    LEFT JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
     WHERE jld.project_number = %s
-      AND jld.equipment_no IS NOT NULL
+      AND wo.equipment_no IS NOT NULL
 ),
 wo_per_eq AS (
     SELECT DISTINCT
         el.equipment_no,
         el.area_name,
-        wo.plant,
+        el.plant,
         wo."order"
     FROM equipment_list el
     LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
@@ -835,121 +837,196 @@ def project_monthly(request: Request, project_number: str = ""):
     return J({"monthly": monthly})
 
 # ═══════════════════════════════════════════════════════════════
-# EQUIPMENT BY MATERIAL STATUS — untuk cross-filter sederhana
+# DETAIL ENDPOINTS — untuk drill-through panel di Page 4
 # ═══════════════════════════════════════════════════════════════
-@router.get("/project-equipment-by-mat-status")
-def project_equipment_by_mat_status(
+
+@router.get("/project-equipment-detail")
+def project_equipment_detail(
     request: Request,
     project_number: str = "",
-    mat_status: str = "",
-    mat_type: str = "actual",
+    area: str = "",
+    readiness: str = ""   # "ready" | "not_ready" | ""
 ):
-    """Berapa equipment yang punya material dengan status tertentu (ready vs not ready)."""
+    """Detail list equipment per project, opsional filter area & readiness."""
     _require_admin(request)
-    if not project_number or not mat_status:
-        return J({"summary": {"total_equipment":0,"ready":0,"not_ready":0,"pct_ready":0}, "by_area": []})
+    if not project_number:
+        return J({"rows": [], "total": 0})
 
-    safe_proj   = project_number.replace("'", "''")
-    safe_status = mat_status.replace("'", "''")
+    params = [project_number]
+    area_filter = ""
+    if area:
+        area_filter = "AND jld.area_name = %s"
+        params.append(area)
 
-    if mat_type == "prognosa":
-        status_expr = """CASE
-            WHEN COALESCE(t.qty_stock,0)>=COALESCE(t.qty_reqmts,0) AND COALESCE(t.qty_reqmts,0)>0 THEN 'Stock On Hand'
-            WHEN t.po IS NOT NULL AND t.po!='' AND t.delivery_date IS NOT NULL AND wb.basic_start_date IS NOT NULL AND t.delivery_date::date<wb.basic_start_date::date THEN 'PO-DT Sebelum MD'
-            WHEN t.po IS NOT NULL AND t.po!='' AND t.delivery_date IS NOT NULL AND wb.basic_start_date IS NOT NULL AND t.delivery_date::date>wb.basic_start_date::date THEN 'PO-DT Melebihi MD'
-            WHEN t.po IS NOT NULL AND t.po!='' THEN 'PO-DT Sebelum MD'
-            WHEN t.pr IS NOT NULL AND t.pr!='' AND (t.po IS NULL OR t.po='') AND wb.basic_start_date IS NOT NULL AND (t.reqmts_date IS NULL OR t.reqmts_date::date<=wb.basic_start_date::date) THEN 'PR-Prognosa DT sebelum MD'
-            WHEN t.pr IS NOT NULL AND t.pr!='' AND (t.po IS NULL OR t.po='') THEN 'PR-Prognosa DT Melebihi MD'
-            ELSE 'Create PR' END"""
-        lateral = """LEFT JOIN LATERAL (
-            SELECT basic_start_date FROM work_order wb
-            WHERE wb."order"=t."order" ORDER BY wb.id LIMIT 1
-        ) wb ON TRUE"""
-    else:
-        status_expr = """CASE
-            WHEN COALESCE(t.qty_stock,0)>=COALESCE(t.qty_reqmts,0) AND COALESCE(t.qty_reqmts,0)>0 THEN 'Stock On Hand'
-            WHEN t.po IS NOT NULL AND t.po!='' AND COALESCE(t.qty_deliv,0)>=COALESCE(t.qty_reqmts,0) AND COALESCE(t.qty_reqmts,0)>0 THEN 'PO-Material Telah Tiba'
-            WHEN t.po IS NOT NULL AND t.po!='' AND COALESCE(t.qty_deliv,0)<COALESCE(t.qty_reqmts,0) THEN 'PO-Material Belum Tiba'
-            WHEN t.pr IS NOT NULL AND t.pr!='' AND (t.po IS NULL OR t.po='') THEN 'PR-Proses Pengadaan'
-            ELSE 'Belum PR' END"""
-        lateral = ""
-
-    # Step 1: Ambil orders yang punya minimal 1 material dengan status ini
-    # Step 2: Dari orders tsb, ambil equipment-nya
-    # Step 3: Cek readiness equipment berdasarkan SEMUA materialnya (bukan hanya yang difilter)
     rows = query(f"""
-        WITH filtered_orders AS (
-            -- Orders yang punya >= 1 material dengan status yang dipilih
-            SELECT DISTINCT t."order"
-            FROM taex_reservasi t
-            {lateral}
-            JOIN (
-                SELECT DISTINCT wo."order"
-                FROM vw_joblist_wo wo
-                JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
-                WHERE jld.project_number = '{safe_proj}'
-            ) po ON po."order" = t."order"
-            WHERE COALESCE(t.qty_reqmts,0) > 0
-              AND ({status_expr}) = '{safe_status}'
+        WITH equipment_list AS (
+            SELECT DISTINCT jld.equipment_no, jld.area_name, jld.unit_name
+            FROM vw_joblist_detail jld
+            WHERE jld.project_number = %s
+              AND jld.equipment_no IS NOT NULL
+              {area_filter}
         ),
-        eq_from_filtered AS (
-            -- Equipment yang punya WO di filtered_orders
-            SELECT DISTINCT wo.equipment_no, jld.area_name
-            FROM vw_joblist_wo wo
-            JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
-            WHERE wo."order" IN (SELECT "order" FROM filtered_orders)
-              AND wo.equipment_no IS NOT NULL
+        wo_per_eq AS (
+            SELECT DISTINCT el.equipment_no, el.area_name, el.unit_name, wo."order"
+            FROM equipment_list el
+            LEFT JOIN vw_joblist_wo wo ON wo.equipment_no = el.equipment_no
         ),
-        all_orders_per_eq AS (
-            -- Semua WO untuk equipment tersebut (untuk hitung readiness yg benar)
-            SELECT DISTINCT wo.equipment_no, wo."order"
-            FROM vw_joblist_wo wo
-            WHERE wo.equipment_no IN (SELECT equipment_no FROM eq_from_filtered)
-        ),
-        order_readiness AS (
+        order_ready AS (
             SELECT t."order",
                    COUNT(*) AS total_mat,
-                   SUM(CASE WHEN COALESCE(t.qty_deliv,0)>=t.qty_reqmts AND t.qty_reqmts>0 THEN 1 ELSE 0 END) AS ready_mat
+                   SUM(CASE WHEN COALESCE(t.qty_deliv,0) >= t.qty_reqmts
+                                 AND t.qty_reqmts > 0 THEN 1 ELSE 0 END) AS ready_mat
             FROM taex_reservasi t
-            WHERE t."order" IN (SELECT "order" FROM all_orders_per_eq)
+            WHERE t."order" IN (SELECT "order" FROM wo_per_eq WHERE "order" IS NOT NULL)
             GROUP BY t."order"
         ),
-        eq_ready AS (
-            SELECT ef.equipment_no, ef.area_name,
-                   BOOL_AND(
-                       CASE WHEN COALESCE(or_.total_mat,0)>0 AND or_.ready_mat=or_.total_mat
-                            THEN TRUE ELSE FALSE END
-                   ) AS eq_ready
-            FROM eq_from_filtered ef
-            JOIN all_orders_per_eq ao ON ao.equipment_no = ef.equipment_no
-            LEFT JOIN order_readiness or_ ON or_."order" = ao."order"
-            GROUP BY ef.equipment_no, ef.area_name
+        eq_status AS (
+            SELECT
+                we.equipment_no, we.area_name, we.unit_name,
+                COUNT(DISTINCT we."order") AS total_wo,
+                SUM(COALESCE(or_.total_mat,0)) AS total_mat,
+                SUM(COALESCE(or_.ready_mat,0)) AS ready_mat,
+                BOOL_AND(
+                    CASE WHEN we."order" IS NULL THEN FALSE
+                         WHEN COALESCE(or_.total_mat,0) > 0
+                              AND or_.ready_mat = or_.total_mat THEN TRUE
+                         ELSE FALSE END
+                ) AS equipment_ready
+            FROM wo_per_eq we
+            LEFT JOIN order_ready or_ ON or_."order" = we."order"
+            GROUP BY we.equipment_no, we.area_name, we.unit_name
         )
-        SELECT area_name,
-               COUNT(*) AS total_equipment,
-               SUM(CASE WHEN eq_ready THEN 1 ELSE 0 END) AS ready,
-               SUM(CASE WHEN NOT eq_ready THEN 1 ELSE 0 END) AS not_ready,
-               ROUND(SUM(CASE WHEN eq_ready THEN 1 ELSE 0 END)*100.0/NULLIF(COUNT(*),0),2) AS pct_ready
-        FROM eq_ready
-        GROUP BY area_name ORDER BY area_name
-    """, [])
+        SELECT equipment_no, area_name, unit_name,
+               total_wo, total_mat, ready_mat, equipment_ready
+        FROM eq_status
+        ORDER BY area_name, equipment_no
+    """, params)
 
-    total_eq  = sum(int(r["total_equipment"] or 0) for r in rows)
-    total_rdy = sum(int(r["ready"] or 0) for r in rows)
-    total_nrd = sum(int(r["not_ready"] or 0) for r in rows)
+    # Filter readiness kalau ada
+    if readiness == "ready":
+        rows = [r for r in rows if r["equipment_ready"]]
+    elif readiness == "not_ready":
+        rows = [r for r in rows if not r["equipment_ready"]]
+
     return J({
-        "summary": {
-            "total_equipment": total_eq,
-            "ready": total_rdy,
-            "not_ready": total_nrd,
-            "pct_ready": round(total_rdy/total_eq*100,2) if total_eq else 0,
-        },
-        "by_area": [{
+        "total": len(rows),
+        "rows": [{
+            "equipment_no":    r["equipment_no"] or "—",
             "area_name":       r["area_name"] or "—",
-            "total_equipment": int(r["total_equipment"] or 0),
-            "ready":           int(r["ready"] or 0),
-            "not_ready":       int(r["not_ready"] or 0),
-            "pct_ready":       float(r["pct_ready"] or 0),
-        } for r in rows],
-        "filter_label": mat_status,
+            "unit_name":       r["unit_name"] or "—",
+            "total_wo":        int(r["total_wo"] or 0),
+            "total_mat":       int(r["total_mat"] or 0),
+            "ready_mat":       int(r["ready_mat"] or 0),
+            "equipment_ready": bool(r["equipment_ready"]),
+        } for r in rows]
+    })
+
+
+@router.get("/project-material-detail")
+def project_material_detail(
+    request: Request,
+    project_number: str = "",
+    status: str = "",      # nilai status_material atau prognosa_status
+    status_type: str = "actual"  # "actual" | "prognosa"
+):
+    """Detail list material per project, filter by status actual/prognosa."""
+    _require_admin(request)
+    if not project_number:
+        return J({"rows": [], "total": 0})
+
+    order_sub = """
+        SELECT DISTINCT wo."order"
+        FROM vw_joblist_wo wo
+        JOIN vw_joblist_detail jld ON jld.equipment_no = wo.equipment_no
+        WHERE jld.project_number = %s
+    """
+
+    if status_type == "prognosa":
+        status_expr = """
+            CASE
+                WHEN COALESCE(t.qty_stock,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0 THEN 'Stock On Hand'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date::date < wo.basic_start_date::date THEN 'PO-DT Sebelum MD'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date::date > wo.basic_start_date::date THEN 'PO-DT Melebihi MD'
+                WHEN t.po IS NOT NULL AND t.po != '' THEN 'PO-DT Sebelum MD'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '') AND wo.basic_start_date IS NOT NULL
+                     AND (t.reqmts_date IS NULL OR t.reqmts_date::date <= wo.basic_start_date::date)
+                     THEN 'PR-Prognosa DT sebelum MD'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '') THEN 'PR-Prognosa DT Melebihi MD'
+                ELSE 'Create PR'
+            END
+        """
+        join_wo = """
+            LEFT JOIN LATERAL (
+                SELECT basic_start_date FROM work_order wo
+                WHERE wo."order" = t."order"
+                ORDER BY wo.id LIMIT 1
+            ) wo ON TRUE
+        """
+    else:
+        status_expr = """
+            CASE
+                WHEN COALESCE(t.qty_stock,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0 THEN 'Stock On Hand'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND COALESCE(t.qty_deliv,0) >= COALESCE(t.qty_reqmts,0)
+                     AND COALESCE(t.qty_reqmts,0) > 0 THEN 'PO-Material Telah Tiba'
+                WHEN t.po IS NOT NULL AND t.po != ''
+                     AND COALESCE(t.qty_deliv,0) < COALESCE(t.qty_reqmts,0) THEN 'PO-Material Belum Tiba'
+                WHEN t.pr IS NOT NULL AND t.pr != ''
+                     AND (t.po IS NULL OR t.po = '') THEN 'PR-Proses Pengadaan'
+                ELSE 'Belum PR'
+            END
+        """
+        join_wo = ""
+
+    params = [project_number]
+    status_filter = ""
+    if status:
+        status_filter = f"AND ({status_expr}) = %s"
+        params.append(status)
+
+    rows = query(f"""
+        SELECT
+            t."order", t.material, t.material_description,
+            t.itm, t.equipment,
+            t.qty_reqmts, t.qty_stock, t.qty_deliv,
+            t.pr, t.item AS pr_item, t.po, t.delivery_date, t.reqmts_date,
+            t.uom, t.sloc, t.cost_ctrs,
+            ({status_expr}) AS status_label
+        FROM taex_reservasi t
+        {join_wo}
+        WHERE COALESCE(t.qty_reqmts,0) > 0
+          AND t."order" IN ({order_sub})
+          {status_filter}
+        ORDER BY t."order", t.itm
+    """, params)
+
+    return J({
+        "total": len(rows),
+        "rows": [{
+            "order":        r["order"] or "—",
+            "itm":          r["itm"] or "—",
+            "material":     r["material"] or "—",
+            "description":  r["material_description"] or "—",
+            "equipment":    r["equipment"] or "—",
+            "qty_reqmts":   float(r["qty_reqmts"] or 0),
+            "qty_stock":    float(r["qty_stock"] or 0),
+            "qty_deliv":    float(r["qty_deliv"] or 0),
+            "pr":           r["pr"] or "—",
+            "pr_item":      r["pr_item"] or "—",
+            "po":           r["po"] or "—",
+            "delivery_date":str(r["delivery_date"] or "—"),
+            "reqmts_date":  str(r["reqmts_date"] or "—"),
+            "uom":          r["uom"] or "—",
+            "sloc":         r["sloc"] or "—",
+            "cost_ctrs":    r["cost_ctrs"] or "—",
+            "status_label": r["status_label"] or "—",
+        } for r in rows]
     })

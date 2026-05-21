@@ -4,84 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TA Excellence Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
-// ── Update Equipment donut berdasarkan material status yang diklik ──────
-async function _updateEqByMatStatus(status, statusType) {
-  const proj = document.getElementById('p4-project-select').value;
-  if (!proj) return;
-
-  // Tampilkan badge filter
-  document.getElementById('p4-eq-filter-label').textContent = status;
-  document.getElementById('p4-eq-filter-badge').style.display = '';
-  document.getElementById('p4-donut-eq-total').textContent = '...';
-
-  try {
-    const url = '/api/dashboard/project-equipment-by-mat-status?project_number='
-      + encodeURIComponent(proj)
-      + '&mat_status=' + encodeURIComponent(status)
-      + '&mat_type=' + statusType;
-    const d = await apiFetch(url);
-    if (!d) return;
-
-    // Render ulang donut equipment
-    destroyChart('p4-donut-eq');
-    document.getElementById('p4-donut-eq-total').textContent = fmt(d.summary.total_equipment);
-    const ctx = document.getElementById('p4-donut-eq').getContext('2d');
-    charts['p4-donut-eq'] = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Ready','Not Ready'],
-        datasets: [{ data: [d.summary.ready, d.summary.not_ready],
-                     backgroundColor: ['#3b82f6','#cbd5e1'], borderWidth: 0, hoverOffset: 6 }]
-      },
-      options: {
-        cutout: '72%',
-        plugins: { legend: { display: false }, tooltip: { callbacks: {
-          label: c => ' ' + c.label + ': ' + fmt(c.raw) +
-            ' (' + pct(d.summary.total_equipment ? c.raw/d.summary.total_equipment*100 : 0) + ')'
-        }}}
-      }
-    });
-
-    // Update tabel area
-    const totalPct = d.summary.total_equipment ? d.summary.ready/d.summary.total_equipment*100 : 0;
-    let html = d.by_area.map(r =>
-      '<tr><td style="font-weight:600">' + r.area_name + '</td>' +
-      '<td style="text-align:right;color:var(--red)">' + fmt(r.not_ready) + '</td>' +
-      '<td style="text-align:right;color:var(--green)">' + fmt(r.ready) + '</td>' +
-      '<td style="text-align:right;font-weight:700">' + fmt(r.total_equipment) + '</td>' +
-      '<td><div class="pct-bar"><div class="pct-track"><div class="pct-fill green" style="width:' + r.pct_ready + '%"></div></div>' +
-      '<div class="pct-num">' + r.pct_ready.toFixed(1) + '%</div></div></td></tr>'
-    ).join('');
-    html += '<tr style="background:#f8fafc;font-weight:700"><td>Total</td>' +
-      '<td style="text-align:right;color:var(--red)">' + fmt(d.summary.not_ready) + '</td>' +
-      '<td style="text-align:right;color:var(--green)">' + fmt(d.summary.ready) + '</td>' +
-      '<td style="text-align:right">' + fmt(d.summary.total_equipment) + '</td>' +
-      '<td><div class="pct-bar"><div class="pct-track"><div class="pct-fill green" style="width:' + totalPct + '%"></div></div>' +
-      '<div class="pct-num">' + totalPct.toFixed(1) + '%</div></div></td></tr>';
-    document.getElementById('p4-eq-tbody').innerHTML = html;
-
-  } catch(e) { console.error('_updateEqByMatStatus error:', e); }
-}
-
-// Reset equipment donut ke data original
-async function resetEqFilter() {
-  document.getElementById('p4-eq-filter-badge').style.display = 'none';
-  // Reset donut material highlight
-  ['p4-donut-actual','p4-donut-prognosa'].forEach(cid => {
-    var store = window['_p4donut_' + cid];
-    var c = charts[cid];
-    if (c && store) { c.data.datasets[0].backgroundColor = [...store.usedColors]; c.update(); }
-  });
-  const proj = document.getElementById('p4-project-select').value;
-  if (!proj) return;
-  try {
-    const eq = await apiFetch('/api/dashboard/project-equipment?project_number=' + encodeURIComponent(proj));
-    if (eq) renderP4Equipment(eq);
-  } catch(e) {}
-}
-
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
   --blue:    #1a56db;
@@ -1104,6 +1027,215 @@ function ddReset() {
   loadP3();
 }
 
+
+
+// ══════════════════════════════════════════════════════════════
+// DETAIL PANEL — cross-filtering & drill-through
+// ══════════════════════════════════════════════════════════════
+let _detailRows = [];
+let _detailType = '';  // 'equipment' | 'material'
+
+function showDetailPanel(title, sub) {
+  document.getElementById('p4-detail-title').textContent = title;
+  document.getElementById('p4-detail-sub').textContent   = sub;
+  const panel = document.getElementById('p4-detail-panel');
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeDetailPanel() {
+  document.getElementById('p4-detail-panel').style.display = 'none';
+  _detailRows = [];
+  // Reset highlight chart
+  clearChartHighlight('p4-donut-eq');
+  clearChartHighlight('p4-donut-actual');
+  clearChartHighlight('p4-donut-prognosa');
+  clearRowHighlight();
+}
+
+function clearChartHighlight(chartId) {
+  const c = charts[chartId];
+  if (!c) return;
+  c.data.datasets[0].backgroundColor = c.__origColors || c.data.datasets[0].backgroundColor;
+  c.update();
+}
+
+function clearRowHighlight() {
+  document.querySelectorAll('#p4-eq-tbody tr').forEach(r => r.classList.remove('row-active'));
+}
+
+function setLoading(show) {
+  document.getElementById('p4-detail-loading').style.display       = show ? '' : 'none';
+  document.getElementById('p4-detail-table-wrap').style.display    = show ? 'none' : '';
+}
+
+// ── Fetch equipment detail ─────────────────────────────────────
+async function fetchEquipmentDetail(area, readiness, title, sub) {
+  const proj = document.getElementById('p4-project-select').value;
+  if (!proj) return;
+  showDetailPanel(title, sub);
+  setLoading(true);
+  _detailType = 'equipment';
+  try {
+    let url = `/api/dashboard/project-equipment-detail?project_number=${encodeURIComponent(proj)}`;
+    if (area)      url += `&area=${encodeURIComponent(area)}`;
+    if (readiness) url += `&readiness=${encodeURIComponent(readiness)}`;
+    const d = await apiFetch(url);
+    if (!d) return;
+    _detailRows = d.rows;
+    document.getElementById('p4-detail-sub').textContent = sub + ` — ${d.total.toLocaleString('id-ID')} equipment`;
+    renderEquipmentTable(d.rows);
+  } catch(e) {
+    document.getElementById('p4-detail-table-wrap').innerHTML =
+      `<div style="padding:24px;color:red">Gagal memuat: ${e.message}</div>`;
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderEquipmentTable(rows) {
+  if (!rows.length) {
+    document.getElementById('p4-detail-table-wrap').innerHTML =
+      '<div style="padding:24px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+    return;
+  }
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="background:#1a56db;color:#fff;position:sticky;top:0">
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Equipment No</th>
+        <th style="padding:9px 12px;text-align:left">Area</th>
+        <th style="padding:9px 12px;text-align:left">Unit</th>
+        <th style="padding:9px 12px;text-align:right">Total WO</th>
+        <th style="padding:9px 12px;text-align:right">Total Mat.</th>
+        <th style="padding:9px 12px;text-align:right">Mat. Ready</th>
+        <th style="padding:9px 12px;text-align:center">Status</th>
+      </tr>
+    </thead><tbody>`;
+  rows.forEach((r, i) => {
+    const badge = r.equipment_ready
+      ? '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:99px;font-weight:700;font-size:11px">✓ Ready</span>'
+      : '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:99px;font-weight:700;font-size:11px">✗ Not Ready</span>';
+    html += `<tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'':'background:#fafafa'}">
+      <td style="padding:8px 12px;font-weight:700;color:var(--blue)">${r.equipment_no}</td>
+      <td style="padding:8px 12px">${r.area_name}</td>
+      <td style="padding:8px 12px">${r.unit_name}</td>
+      <td style="padding:8px 12px;text-align:right">${fmt(r.total_wo)}</td>
+      <td style="padding:8px 12px;text-align:right">${fmt(r.total_mat)}</td>
+      <td style="padding:8px 12px;text-align:right;color:var(--green);font-weight:700">${fmt(r.ready_mat)}</td>
+      <td style="padding:8px 12px;text-align:center">${badge}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('p4-detail-table-wrap').innerHTML = html;
+}
+
+// ── Fetch material detail ──────────────────────────────────────
+async function fetchMaterialDetail(status, statusType, title, sub) {
+  const proj = document.getElementById('p4-project-select').value;
+  if (!proj) return;
+  showDetailPanel(title, sub);
+  setLoading(true);
+  _detailType = 'material';
+  try {
+    let url = `/api/dashboard/project-material-detail?project_number=${encodeURIComponent(proj)}&status_type=${statusType}`;
+    if (status) url += `&status=${encodeURIComponent(status)}`;
+    const d = await apiFetch(url);
+    if (!d) return;
+    _detailRows = d.rows;
+    document.getElementById('p4-detail-sub').textContent = sub + ` — ${d.total.toLocaleString('id-ID')} material`;
+    renderMaterialTable(d.rows);
+  } catch(e) {
+    document.getElementById('p4-detail-table-wrap').innerHTML =
+      `<div style="padding:24px;color:red">Gagal memuat: ${e.message}</div>`;
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderMaterialTable(rows) {
+  if (!rows.length) {
+    document.getElementById('p4-detail-table-wrap').innerHTML =
+      '<div style="padding:24px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+    return;
+  }
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="background:#1a56db;color:#fff;position:sticky;top:0">
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Order</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Itm</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Material</th>
+        <th style="padding:9px 12px;text-align:left">Deskripsi</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Equipment</th>
+        <th style="padding:9px 12px;text-align:right;white-space:nowrap">Qty Req</th>
+        <th style="padding:9px 12px;text-align:right;white-space:nowrap">Qty Deliv</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">PR</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">PO</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Delivery Date</th>
+        <th style="padding:9px 12px;text-align:left;white-space:nowrap">Status</th>
+      </tr>
+    </thead><tbody>`;
+  rows.forEach((r, i) => {
+    const statusColors = {
+      'Belum PR':               '#fef9c3;color:#854d0e',
+      'PR-Proses Pengadaan':    '#eff6ff;color:#1e40af',
+      'PO-Material Belum Tiba': '#fff7ed;color:#c2410c',
+      'PO-Material Telah Tiba': '#f0fdf4;color:#15803d',
+      'Stock On Hand':          '#f0fdf4;color:#15803d',
+      'Create PR':              '#fef2f2;color:#dc2626',
+    };
+    const sc = statusColors[r.status_label] || '#f8fafc;color:#64748b';
+    html += `<tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'':'background:#fafafa'}">
+      <td style="padding:8px 12px;font-weight:700;color:var(--blue);white-space:nowrap">${r.order}</td>
+      <td style="padding:8px 12px;white-space:nowrap">${r.itm}</td>
+      <td style="padding:8px 12px;white-space:nowrap;font-weight:600">${r.material}</td>
+      <td style="padding:8px 12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description}">${r.description}</td>
+      <td style="padding:8px 12px;white-space:nowrap">${r.equipment}</td>
+      <td style="padding:8px 12px;text-align:right">${r.qty_reqmts} ${r.uom}</td>
+      <td style="padding:8px 12px;text-align:right">${r.qty_deliv} ${r.uom}</td>
+      <td style="padding:8px 12px;white-space:nowrap">${r.pr !== '—' ? r.pr + (r.pr_item !== '—' ? '/' + r.pr_item : '') : '—'}</td>
+      <td style="padding:8px 12px;white-space:nowrap">${r.po}</td>
+      <td style="padding:8px 12px;white-space:nowrap">${r.delivery_date}</td>
+      <td style="padding:8px 12px;white-space:nowrap">
+        <span style="background:${sc};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600">${r.status_label}</span>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('p4-detail-table-wrap').innerHTML = html;
+}
+
+// ── Export Excel sederhana (CSV) ──────────────────────────────
+function exportDetailExcel() {
+  if (!_detailRows.length) return;
+  let csv = '';
+  if (_detailType === 'equipment') {
+    csv = 'Equipment No,Area,Unit,Total WO,Total Mat,Mat Ready,Status\n';
+    _detailRows.forEach(r => {
+      csv += `${r.equipment_no},${r.area_name},${r.unit_name},${r.total_wo},${r.total_mat},${r.ready_mat},${r.equipment_ready?'Ready':'Not Ready'}\n`;
+    });
+  } else {
+    csv = 'Order,Itm,Material,Deskripsi,Equipment,Qty Req,UoM,Qty Deliv,PR,PO,Delivery Date,Status\n';
+    _detailRows.forEach(r => {
+      csv += `${r.order},${r.itm},${r.material},"${r.description}",${r.equipment},${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},${r.po},${r.delivery_date},"${r.status_label}"\n`;
+    });
+  }
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `detail_${_detailType}_${Date.now()}.csv`;
+  a.click();
+}
+
+// ── CSS untuk row active ───────────────────────────────────────
+const _style = document.createElement('style');
+_style.textContent = `
+  .row-active { background:#eff6ff !important; outline:2px solid #3b82f6; }
+  #p4-eq-tbody tr { cursor:pointer; transition:background 0.15s; }
+  #p4-eq-tbody tr:hover { background:#f0f9ff !important; }
+  .chart-clickable { cursor:pointer; }
+`;
+document.head.appendChild(_style);
+
 // ══════════════════════════════════════════════════════════════
 // PAGE 4 — PER PROJECT
 // ══════════════════════════════════════════════════════════════
@@ -1149,25 +1281,41 @@ function renderP4Equipment(d) {
   destroyChart('p4-donut-eq');
   document.getElementById('p4-donut-eq-total').textContent = fmt(d.summary.total_equipment);
   const ctx = document.getElementById('p4-donut-eq').getContext('2d');
+  const eqColors = ['#3b82f6','#cbd5e1'];
   charts['p4-donut-eq'] = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: ['Ready','Not Ready'],
       datasets: [{ data: [d.summary.ready, d.summary.not_ready],
-                   backgroundColor: ['#3b82f6','#cbd5e1'], borderWidth: 0, hoverOffset: 6 }]
+                   backgroundColor: [...eqColors], borderWidth: 0, hoverOffset: 6 }]
     },
     options: {
       cutout: '72%',
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const idx   = els[0].index;
+        const label = ['Ready','Not Ready'][idx];
+        const rd    = ['ready','not_ready'][idx];
+        // Highlight segment
+        const ds = charts['p4-donut-eq'].data.datasets[0];
+        ds.backgroundColor = eqColors.map((c,i) => i===idx ? c : c+'44');
+        charts['p4-donut-eq'].update();
+        clearRowHighlight();
+        fetchEquipmentDetail('', rd, 'Detail Equipment — ' + label,
+          'Project: ' + document.getElementById('p4-project-select').value);
+      },
       plugins: { legend: { display: false }, tooltip: { callbacks: {
         label: c => ' ' + c.label + ': ' + fmt(c.raw) +
           ' (' + pct(d.summary.total_equipment ? c.raw / d.summary.total_equipment * 100 : 0) + ')'
       }}}
     }
   });
+  document.getElementById('p4-donut-eq').classList.add('chart-clickable');
 
   const totalPct = d.summary.total_equipment ? d.summary.ready / d.summary.total_equipment * 100 : 0;
+  const proj4 = document.getElementById('p4-project-select').value;
   let html = d.by_area.map(r => `
-    <tr>
+    <tr data-area="${r.area_name}" onclick="onAreaRowClick(this.dataset.area)" title="Klik untuk lihat detail equipment area ini">
       <td style="font-weight:600">${r.area_name}</td>
       <td style="text-align:right;color:var(--red)">${fmt(r.not_ready)}</td>
       <td style="text-align:right;color:var(--green)">${fmt(r.ready)}</td>
@@ -1203,7 +1351,6 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   const ctx = document.getElementById(canvasId).getContext('2d');
   const statusType = canvasId.includes('prognosa') ? 'prognosa' : 'actual';
   const usedColors = colors.slice(0, data.items.length);
-  window['_p4donut_' + canvasId] = { data, statusType, usedColors };
 
   charts[canvasId] = new Chart(ctx, {
     type: 'doughnut',
@@ -1218,54 +1365,59 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
         if (!els.length) return;
         const idx    = els[0].index;
         const status = data.items[idx].status;
-        // Highlight segment diklik, dim yang lain
+        // Highlight segment
         const ds = charts[canvasId].data.datasets[0];
         ds.backgroundColor = usedColors.map((c, i) => i === idx ? c : c + '55');
         charts[canvasId].update();
         // Reset donut lawan
         const otherId = statusType === 'actual' ? 'p4-donut-prognosa' : 'p4-donut-actual';
-        const otherStore = window['_p4donut_' + otherId];
-        if (charts[otherId] && otherStore) {
-          charts[otherId].data.datasets[0].backgroundColor = [...otherStore.usedColors];
+        if (charts[otherId]) {
+          const otherColors = statusType === 'actual'
+            ? ['#3b82f6','#22c55e','#f59e0b','#f97316','#dc2626','#8b5cf6','#64748b','#0891b2']
+            : ['#3b82f6','#f59e0b','#10b981','#ef4444','#6b7280'];
+          charts[otherId].data.datasets[0].backgroundColor = otherColors.slice(0, charts[otherId].data.datasets[0].data.length);
           charts[otherId].update();
         }
-        // Update Equipment donut berdasarkan mat status ini
-        _updateEqByMatStatus(status, statusType);
+        clearRowHighlight();
+        const typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
+        fetchMaterialDetail(status, statusType,
+          'Detail Material — ' + status,
+          typeLabel + ' | Project: ' + document.getElementById('p4-project-select').value);
       },
       plugins: { legend: { display: false }, tooltip: { callbacks: {
-        label: c => ' ' + c.label + ': ' + fmt(c.raw) + ' (' + pct(data.total ? c.raw/data.total*100 : 0) + ') — klik filter'
+        label: c => ' ' + c.label + ': ' + fmt(c.raw) + ' (' + pct(data.total ? c.raw/data.total*100 : 0) + ')'
       }}}
     }
   });
-  document.getElementById(canvasId).style.cursor = 'pointer';
+  document.getElementById(canvasId).classList.add('chart-clickable');
 
-  // Legend clickable
+
+  // Legend — clickable (pakai data-index, hindari escaping di onclick)
+  window['_p4donut_' + canvasId] = { data, statusType, usedColors };
   document.getElementById(legendId).innerHTML = data.items.map((item, i) =>
-    '<div class="legend-item" style="cursor:pointer" data-cid="' + canvasId + '" data-idx="' + i + '" ' +
-    'onclick="_donutLegClick(this.dataset.cid,+this.dataset.idx)">' +
-    '<div class="legend-dot" style="background:' + usedColors[i%usedColors.length] + '"></div>' + item.status + '</div>'
+    `<div class="legend-item" style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
+      onclick="var s=window['_p4donut_'+this.dataset.cid];_donutLegendClick(this.dataset.cid,+this.dataset.idx)">` +
+    `<div class="legend-dot" style="background:${usedColors[i%usedColors.length]}"></div>${item.status}</div>`
   ).join('');
 
-  // Tabel row clickable
+  // Tabel row — clickable (pakai data-index)
   document.getElementById(tbodyId).innerHTML = data.items.map((item, i) =>
-    '<tr style="cursor:pointer" data-cid="' + canvasId + '" data-idx="' + i + '" ' +
-    'onclick="_donutLegClick(this.dataset.cid,+this.dataset.idx)">' +
-    '<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
-    usedColors[i%usedColors.length] + ';margin-right:6px"></span>' + item.status + '</td>' +
-    '<td style="text-align:right;font-weight:700">' + fmt(item.jumlah) + '</td>' +
-    '<td style="text-align:right">' + item.pct.toFixed(2) + '%</td></tr>'
+    `<tr style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
+      onclick="_donutLegendClick(this.dataset.cid,+this.dataset.idx)">` +
+    `<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${usedColors[i%usedColors.length]};margin-right:6px"></span>${item.status}</td>` +
+    `<td style="text-align:right;font-weight:700">${fmt(item.jumlah)}</td>` +
+    `<td style="text-align:right">${item.pct.toFixed(2)}%</td></tr>`
   ).join('') +
-  '<tr style="font-weight:700;background:#f8fafc"><td>Total</td>' +
-  '<td style="text-align:right">' + fmt(data.total) + '</td>' +
-  '<td style="text-align:right">100%</td></tr>';
+  `<tr style="font-weight:700;background:#f8fafc"><td>Total</td>` +
+  `<td style="text-align:right">${fmt(data.total)}</td>` +
+  `<td style="text-align:right">100%</td></tr>`;
 }
 
-function _donutLegClick(canvasId, idx) {
+function _donutLegendClick(canvasId, idx) {
   var store = window['_p4donut_' + canvasId];
   if (!store) return;
-  var status = store.data.items[idx].status;
-  var statusType = store.statusType;
-  var usedColors = store.usedColors;
+  var data = store.data, statusType = store.statusType, usedColors = store.usedColors;
+  var status = data.items[idx].status;
   var c = charts[canvasId];
   if (c) {
     c.data.datasets[0].backgroundColor = usedColors.map(function(col,i){ return i===idx ? col : col+'55'; });
@@ -1273,11 +1425,29 @@ function _donutLegClick(canvasId, idx) {
   }
   var otherId = statusType === 'actual' ? 'p4-donut-prognosa' : 'p4-donut-actual';
   var otherStore = window['_p4donut_' + otherId];
-  if (charts[otherId] && otherStore) {
-    charts[otherId].data.datasets[0].backgroundColor = otherStore.usedColors.slice();
-    charts[otherId].update();
+  var otherC = charts[otherId];
+  if (otherC && otherStore) {
+    otherC.data.datasets[0].backgroundColor = otherStore.usedColors.slice();
+    otherC.update();
   }
-  _updateEqByMatStatus(status, statusType);
+  clearRowHighlight();
+  var typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
+  fetchMaterialDetail(status, statusType,
+    'Detail Material — ' + status,
+    typeLabel + ' | Project: ' + document.getElementById('p4-project-select').value);
+}
+
+function onAreaRowClick(areaName) {
+  clearRowHighlight();
+  document.querySelectorAll('#p4-eq-tbody tr').forEach(r => {
+    const firstCell = r.querySelector('td');
+    if (firstCell && firstCell.textContent.trim() === areaName) r.classList.add('row-active');
+  });
+  const c = charts['p4-donut-eq'];
+  if (c) { c.data.datasets[0].backgroundColor = ['#3b82f6','#cbd5e1']; c.update(); }
+  fetchEquipmentDetail(areaName, '',
+    'Detail Equipment — ' + areaName,
+    'Project: ' + document.getElementById('p4-project-select').value);
 }
 
 
@@ -1360,12 +1530,7 @@ function openDetailModalByIdx(idx) {
   <div id="p4-eq-section" style="display:none">
     <div class="grid-3" style="margin-bottom:20px">
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div class="card-title" style="margin-bottom:0">Readiness Equipment</div>
-          <div id="p4-eq-filter-badge" style="display:none;font-size:10px;padding:3px 10px;background:#fef9c3;border:1px solid #fde68a;color:#92400e;border-radius:99px;font-weight:700;cursor:pointer" onclick="resetEqFilter()">
-            🔍 <span id="p4-eq-filter-label"></span> &nbsp;✕
-          </div>
-        </div>
+        <div class="card-title">Readiness Equipment</div>
         <div class="donut-wrap">
           <canvas id="p4-donut-eq"></canvas>
           <div class="donut-center">
@@ -1467,6 +1632,38 @@ function openDetailModalByIdx(idx) {
   </div>
 
 </div>
+</div>
+
+
+<!-- ══ DETAIL PANEL (drill-through) ══ -->
+<div id="p4-detail-panel" style="display:none;margin:0 0 32px 0">
+  <div class="content">
+    <div class="card" style="padding:0;overflow:hidden">
+      <!-- Header panel -->
+      <div style="padding:14px 20px;background:linear-gradient(135deg,#1e3a8a,#1a56db);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div id="p4-detail-title" style="font-size:14px;font-weight:700;color:#fff">Detail Data</div>
+          <div id="p4-detail-sub" style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="p4-detail-export" onclick="exportDetailExcel()"
+            style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">
+            ⬇ Export Excel
+          </button>
+          <button onclick="closeDetailPanel()"
+            style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:14px">
+            ✕
+          </button>
+        </div>
+      </div>
+      <!-- Loading state -->
+      <div id="p4-detail-loading" style="padding:32px;text-align:center;color:var(--text-sm);display:none">
+        <div class="spin" style="margin:0 auto 8px"></div> Memuat data...
+      </div>
+      <!-- Table wrap -->
+      <div id="p4-detail-table-wrap" style="overflow-x:auto;max-height:480px;overflow-y:auto"></div>
+    </div>
+  </div>
 </div>
 
 </body>
