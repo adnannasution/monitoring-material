@@ -1153,6 +1153,10 @@ async function fetchMaterialDetail(status, statusType, title, sub) {
 }
 
 function renderMaterialTable(rows) {
+  _matPage = 1; _matSearch = '';
+  renderMaterialTablePaged(rows);
+}
+function _renderMaterialTable_unused(rows) { // kept for reference
   if (!rows.length) {
     document.getElementById('p4-detail-table-wrap').innerHTML =
       '<div style="padding:24px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
@@ -1379,6 +1383,7 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
           charts[otherId].update();
         }
         clearRowHighlight();
+        _updateEqByMatStatus(status, statusType);
         const typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
         fetchMaterialDetail(status, statusType,
           'Detail Material — ' + status,
@@ -1431,6 +1436,7 @@ function _donutLegendClick(canvasId, idx) {
     otherC.update();
   }
   clearRowHighlight();
+  _updateEqByMatStatus(status, statusType);
   var typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
   fetchMaterialDetail(status, statusType,
     'Detail Material — ' + status,
@@ -1508,6 +1514,183 @@ function openDetailModalByIdx(idx) {
   if (item) openDetailModal(item, ddCurLevel);
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// MINI CHART — Equipment terkait mat status yang diklik
+// ══════════════════════════════════════════════════════════════
+async function _updateEqByMatStatus(status, statusType) {
+  const proj = document.getElementById('p4-project-select').value;
+  if (!proj) return;
+  document.getElementById('p4-mfc-label').textContent = status;
+  document.getElementById('p4-mat-filter-card').style.display = '';
+  document.getElementById('p4-mfc-total').textContent = '...';
+  document.getElementById('p4-mfc-ready').textContent = '...';
+  document.getElementById('p4-mfc-notready').textContent = '...';
+  document.getElementById('p4-mfc-tbody').innerHTML = '';
+  try {
+    const d = await apiFetch(
+      '/api/dashboard/project-equipment-by-mat-status'
+      + '?project_number=' + encodeURIComponent(proj)
+      + '&mat_status=' + encodeURIComponent(status)
+      + '&mat_type=' + statusType
+    );
+    if (!d) return;
+    const s = d.summary;
+    document.getElementById('p4-mfc-total').textContent    = fmt(s.total_equipment);
+    document.getElementById('p4-mfc-ready').textContent    = fmt(s.ready);
+    document.getElementById('p4-mfc-notready').textContent = fmt(s.not_ready);
+
+    // Mini donut
+    destroyChart('p4-mini-donut');
+    const ctx = document.getElementById('p4-mini-donut').getContext('2d');
+    charts['p4-mini-donut'] = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: ['Ready','Not Ready'],
+              datasets: [{ data: [s.ready, s.not_ready],
+                           backgroundColor: ['#3b82f6','#cbd5e1'], borderWidth: 0, hoverOffset: 4 }] },
+      options: { cutout: '68%', plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => ' ' + c.label + ': ' + fmt(c.raw) } } } }
+    });
+
+    // Area table
+    document.getElementById('p4-mfc-tbody').innerHTML = d.by_area.map(r =>
+      '<tr><td>' + r.area_name + '</td>'
+      + '<td style="text-align:right;color:var(--red)">' + fmt(r.not_ready) + '</td>'
+      + '<td style="text-align:right;color:var(--green)">' + fmt(r.ready) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + fmt(r.total_equipment) + '</td></tr>'
+    ).join('') + '<tr style="font-weight:700;background:#f8fafc"><td>Total</td>'
+      + '<td style="text-align:right;color:var(--red)">' + fmt(s.not_ready) + '</td>'
+      + '<td style="text-align:right;color:var(--green)">' + fmt(s.ready) + '</td>'
+      + '<td style="text-align:right">' + fmt(s.total_equipment) + '</td></tr>';
+
+    // Scroll ke card
+    document.getElementById('p4-mat-filter-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) { console.error('_updateEqByMatStatus:', e); }
+}
+
+function closeMiniChart() {
+  document.getElementById('p4-mat-filter-card').style.display = 'none';
+  destroyChart('p4-mini-donut');
+  // Reset highlight donut
+  ['p4-donut-actual','p4-donut-prognosa'].forEach(function(cid) {
+    var store = window['_p4donut_' + cid];
+    var c = charts[cid];
+    if (c && store) { c.data.datasets[0].backgroundColor = [...store.usedColors]; c.update(); }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// PAGINATION + SEARCH untuk renderMaterialTable
+// ══════════════════════════════════════════════════════════════
+let _matPage = 1;
+const _matPageSize = 25;
+let _matSearch = '';
+
+function renderMaterialTablePaged(rows) {
+  const wrap = document.getElementById('p4-detail-table-wrap');
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+    return;
+  }
+
+  // Filter by search
+  const q = _matSearch.toLowerCase();
+  const filtered = q ? rows.filter(r =>
+    (r.order||'').toLowerCase().includes(q) ||
+    (r.material||'').toLowerCase().includes(q) ||
+    (r.description||'').toLowerCase().includes(q) ||
+    (r.equipment||'').toLowerCase().includes(q) ||
+    (r.status_label||'').toLowerCase().includes(q) ||
+    (r.pr||'').toLowerCase().includes(q) ||
+    (r.po||'').toLowerCase().includes(q)
+  ) : rows;
+
+  const total = filtered.length;
+  const totalPages = Math.ceil(total / _matPageSize) || 1;
+  if (_matPage > totalPages) _matPage = totalPages;
+  const start = (_matPage - 1) * _matPageSize;
+  const pageRows = filtered.slice(start, start + _matPageSize);
+
+  const statusColors = {
+    'Belum PR':'background:#fef9c3;color:#854d0e',
+    'PR-Proses Pengadaan':'background:#eff6ff;color:#1e40af',
+    'PO-Material Belum Tiba':'background:#fff7ed;color:#c2410c',
+    'PO-Material Telah Tiba':'background:#f0fdf4;color:#15803d',
+    'Stock On Hand':'background:#f0fdf4;color:#15803d',
+    'Create PR':'background:#fef2f2;color:#dc2626',
+  };
+
+  let tableHtml = `<div style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <input id="p4-mat-search" type="text" placeholder="🔍 Cari Order, Material, Equipment, Status..."
+      value="${_matSearch.replace(/"/g,'&quot;')}"
+      oninput="_matSearch=this.value;_matPage=1;renderMaterialTablePaged(_detailRows)"
+      style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+    <span style="font-size:11px;color:var(--text-sm);white-space:nowrap">
+      ${start+1}–${Math.min(start+_matPageSize,total)} dari ${fmt(total)} baris
+      ${q ? '(difilter dari ' + fmt(rows.length) + ')' : ''}
+    </span>
+  </div>
+  <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#1a56db;color:#fff;position:sticky;top:0">
+      <th style="padding:8px 12px;white-space:nowrap">Order</th>
+      <th style="padding:8px 12px;white-space:nowrap">Itm</th>
+      <th style="padding:8px 12px;white-space:nowrap">Material</th>
+      <th style="padding:8px 12px">Deskripsi</th>
+      <th style="padding:8px 12px;white-space:nowrap">Equipment</th>
+      <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Req</th>
+      <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Deliv</th>
+      <th style="padding:8px 12px;white-space:nowrap">PR</th>
+      <th style="padding:8px 12px;white-space:nowrap">PO</th>
+      <th style="padding:8px 12px;white-space:nowrap">Delivery Date</th>
+      <th style="padding:8px 12px;white-space:nowrap">Status</th>
+    </tr></thead><tbody>`;
+
+  pageRows.forEach((r, i) => {
+    const sc = statusColors[r.status_label] || 'background:#f8fafc;color:#64748b';
+    tableHtml += `<tr style="border-bottom:1px solid #f1f5f9;${i%2?'background:#fafafa':''}">
+      <td style="padding:7px 12px;font-weight:700;color:var(--blue);white-space:nowrap">${r.order}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.itm}</td>
+      <td style="padding:7px 12px;font-weight:600;white-space:nowrap">${r.material}</td>
+      <td style="padding:7px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description}">${r.description}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.equipment}</td>
+      <td style="padding:7px 12px;text-align:right">${r.qty_reqmts} ${r.uom}</td>
+      <td style="padding:7px 12px;text-align:right">${r.qty_deliv} ${r.uom}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.pr !== '—' ? r.pr + (r.pr_item !== '—' ? '/'+r.pr_item : '') : '—'}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.po}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.delivery_date}</td>
+      <td style="padding:7px 12px;white-space:nowrap">
+        <span style="${sc};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">${r.status_label}</span>
+      </td></tr>`;
+  });
+
+  tableHtml += `</tbody></table></div>`;
+
+  // Pagination bar
+  if (totalPages > 1) {
+    let pgHtml = '<div style="padding:10px 12px;background:#f8fafc;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:6px">';
+    pgHtml += `<button onclick="_matPage=Math.max(1,_matPage-1);renderMaterialTablePaged(_detailRows)"
+      style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_matPage===1?';opacity:.4;cursor:default':''}">‹ Prev</button>`;
+    const start_p = Math.max(1, _matPage-2);
+    const end_p   = Math.min(totalPages, start_p+4);
+    for (let p = start_p; p <= end_p; p++) {
+      pgHtml += `<button onclick="_matPage=${p};renderMaterialTablePaged(_detailRows)"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;${p===_matPage?'background:var(--blue);color:#fff;':'background:#fff;'}">${p}</button>`;
+    }
+    pgHtml += `<button onclick="_matPage=Math.min(${totalPages},_matPage+1);renderMaterialTablePaged(_detailRows)"
+      style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_matPage===totalPages?';opacity:.4;cursor:default':''}">Next ›</button>`;
+    pgHtml += `<span style="font-size:11px;color:var(--text-sm);margin-left:8px">Hal ${_matPage}/${totalPages}</span></div>`;
+    tableHtml += pgHtml;
+  }
+
+  wrap.innerHTML = tableHtml;
+  // Fokus ke search kalau ada
+  if (q) {
+    const el = document.getElementById('p4-mat-search');
+    if (el) { el.focus(); const len = el.value.length; el.setSelectionRange(len,len); }
+  }
+}
+
 </script>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
@@ -1557,6 +1740,51 @@ function openDetailModalByIdx(idx) {
           </thead>
           <tbody id="p4-eq-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Mini card: equipment terkait mat status (muncul saat klik donut) -->
+    <div id="p4-mat-filter-card" style="display:none;margin-bottom:20px">
+      <div class="card" style="border:2px solid #fde68a;padding:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div class="card-title" style="margin-bottom:4px">Equipment Terkait</div>
+            <div id="p4-mfc-label" style="font-size:11px;font-weight:700;padding:2px 10px;background:#fef9c3;border:1px solid #fde68a;color:#92400e;border-radius:99px;display:inline-block"></div>
+          </div>
+          <button onclick="closeMiniChart()" style="border:none;background:#f1f5f9;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:14px;color:var(--text-sm)">✕</button>
+        </div>
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+          <div style="position:relative;width:120px;height:120px;flex-shrink:0">
+            <canvas id="p4-mini-donut" width="120" height="120"></canvas>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+              <div id="p4-mfc-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
+              <div style="font-size:9px;color:var(--text-sm);font-weight:600">Equipment</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;gap:16px;margin-bottom:12px">
+              <div style="text-align:center;padding:8px 16px;background:#f0fdf4;border-radius:8px;flex:1">
+                <div id="p4-mfc-ready" style="font-size:20px;font-weight:800;color:#16a34a">—</div>
+                <div style="font-size:10px;color:#16a34a;font-weight:600">Ready</div>
+              </div>
+              <div style="text-align:center;padding:8px 16px;background:#fef2f2;border-radius:8px;flex:1">
+                <div id="p4-mfc-notready" style="font-size:20px;font-weight:800;color:#dc2626">—</div>
+                <div style="font-size:10px;color:#dc2626;font-weight:600">Not Ready</div>
+              </div>
+            </div>
+            <div id="p4-mfc-area-table" style="max-height:160px;overflow-y:auto">
+              <table class="mini-table" style="font-size:11px">
+                <thead><tr>
+                  <th>Area</th>
+                  <th style="text-align:right">Not Ready</th>
+                  <th style="text-align:right">Ready</th>
+                  <th style="text-align:right">Total</th>
+                </tr></thead>
+                <tbody id="p4-mfc-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
