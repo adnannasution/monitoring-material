@@ -720,7 +720,12 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <a id="btn-dashboard" href="/dashboard" target="_blank" style="display:none;padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer;text-decoration:none">📊 Dashboard</a>
       <button onclick="doLogout()" style="padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer">🚪 Logout</button>
     </div>
+
+    <button onclick="confirmClearWorkflow()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;margin-right:4px;" onmouseover="this.style.background='rgba(217,119,6,0.7)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">🗑 Hapus KK+Summary</button>
+
     <button onclick="confirmResetAll()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;" onmouseover="this.style.background='rgba(220,38,38,0.7)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">🗑 Reset Data</button>
+
+
   </div>
 </div>
 
@@ -952,6 +957,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <button class="btn btn-search" onclick="kkApplyFilter()">Cari</button>
     <button class="btn btn-reset" onclick="kkResetFilter()">Reset</button>
     <button class="btn btn-success" onclick="submitKertasKerja()" style="margin-left:8px">✅ Submit Kertas Kerja</button>
+    
+    
+    
     <button class="col-toggle-btn" onclick="toggleColPanel('kk')" style="margin-left:4px">⚙ Kolom</button>
     <span class="filter-right" id="kk-rowCount"></span>
   </div>
@@ -8430,6 +8438,34 @@ function kkDeselectAllWO() {
     const order = cb.value;
     _kkSetAllMats(order, false);
   });
+}
+
+
+async function confirmClearWorkflow() {
+  const ok = await showConfirm({
+    title: 'Hapus Kertas Kerja + Summary',
+    msg: 'Hapus semua data <b>Kertas Kerja</b>, <b>Summary</b>, dan <b>Kumpulan Summary</b>?',
+    sub: 'Data di ketiga tab tersebut akan dihapus dari server. Tab lain tidak terpengaruh.',
+    icon: '🗑', okLabel: 'Ya, Hapus Semua', okColor: '#d97706', headerColor: '#d97706',
+  });
+  if (!ok) return;
+  showLoading('Menghapus data workflow...');
+  try {
+    await Promise.all([
+      apiFetch('/state/kk_current',    { method:'POST', body:{ value:{ code:null, data:[] } } }),
+      apiFetch('/state/summary_current', { method:'POST', body:{ value:[] } }),
+      apiFetch('/kumpulan', { method:'DELETE' }),
+    ]);
+    state.kkData      = []; state.kkCode     = null;
+    state.summaryData = []; state.kumpulanData = [];
+    ksFiltered = []; ksServerMeta = { total:0, totalPages:1, page:1, limit:100 };
+    hideLoading();
+    renderKK(); renderSummary(); renderKumpulan(); updateBadges();
+    toast('Kertas Kerja + Summary berhasil dihapus', 'ok');
+  } catch(e) {
+    hideLoading();
+    toast('Gagal hapus: ' + e.message, 'err');
+  }
 }
 
 </script>

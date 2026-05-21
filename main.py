@@ -3928,6 +3928,12 @@ def public_info(request: Request):
         "note": "PUBLIC_API_KEY tersedia di environment variable server"
     })
 
+@app.delete("/api/kumpulan")
+def delete_all_kumpulan(request: Request):
+    check_api_key(request)
+    execute("DELETE FROM kumpulan_summary")
+    return {"ok": True}
+
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
