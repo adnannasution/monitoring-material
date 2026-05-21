@@ -812,6 +812,47 @@ def prisma_workorders(request: Request, pg: str = "All"):
     } for r in rows])
 
 
+@app.get("/api/prisma/wo-materials")
+def prisma_wo_materials(request: Request, order: str = "", pg: str = "All"):
+    """Materials per WO untuk expand di modal Buat Kertas Kerja."""
+    check_api_key(request)
+    user = get_current_user(request)
+    if not order:
+        return jsonify([])
+
+    conds = [
+        '"order" = %s',
+        "UPPER(COALESCE(del,'')) != 'X'",
+        "UPPER(COALESCE(fis,'')) != 'X'",
+        "COALESCE(qty_reqmts,0) > 0",
+        "(code_kertas_kerja IS NULL OR code_kertas_kerja = '')",
+        "(pr_prisma IS NULL OR pr_prisma = '')",
+    ]
+    params = [order]
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+
+    suffix = PG_SUFFIX_MAP.get(pg)
+    if suffix:
+        conds.append("pg LIKE %s"); params.append(f"%{suffix}")
+
+    where = " AND ".join(conds)
+    rows = query(f"""
+        SELECT itm, material, material_description,
+               COALESCE(qty_reqmts,0) AS qty_reqmts, uom
+        FROM prisma_reservasi
+        WHERE {where}
+        ORDER BY itm
+    """, params)
+
+    return jsonify([{
+        "itm":         r["itm"] or "",
+        "material":    r["material"] or "",
+        "description": r["material_description"] or "",
+        "qty":         float(r["qty_reqmts"] or 0),
+        "uom":         r["uom"] or "",
+    } for r in rows])
+
+
 # ─── CREATE Kertas Kerja server-side ─────────────────────────
 @app.post("/api/kertas-kerja/create")
 async def create_kertas_kerja(request: Request):
@@ -824,26 +865,52 @@ async def create_kertas_kerja(request: Request):
     user = get_current_user(request)
     body = await request.json()
 
-    code = body.get("code", "").strip()
-    wos  = body.get("wos", [])
+    code  = body.get("code", "").strip()
+    wos   = body.get("wos", [])    # WO penuh (semua material)
+    items = body.get("items", [])  # [{order, itm}] material spesifik
 
     if not code:
         raise HTTPException(400, "Kode Kertas Kerja wajib diisi")
-    if not wos:
-        raise HTTPException(400, "Pilih minimal satu Work Order")
+    if not wos and not items:
+        raise HTTPException(400, "Pilih minimal satu Work Order atau Material")
 
-    ph     = ",".join(["%s"] * len(wos))
-    conds  = [
-        f'"order" IN ({ph})',
-        "UPPER(COALESCE(del,'')) != 'X'",
-        "UPPER(COALESCE(fis,'')) != 'X'",
-        "(pr_prisma IS NULL OR pr_prisma = '')",  # belum ada PR
-    ]
-    params = list(wos)
-    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
-    where  = " AND ".join(conds)
+    pc, pp = plant_clause(user, "plant")
+    rows = []
 
-    rows = query(f"SELECT * FROM prisma_reservasi WHERE {where} ORDER BY id", params)
+    # Ambil semua material dari WO penuh
+    if wos:
+        ph = ",".join(["%s"] * len(wos))
+        conds = [
+            f'"order" IN ({ph})',
+            "UPPER(COALESCE(del,'')) != 'X'",
+            "UPPER(COALESCE(fis,'')) != 'X'",
+            "(pr_prisma IS NULL OR pr_prisma = '')",
+        ]
+        params = list(wos)
+        conds.append(pc); params.extend(pp)
+        where = " AND ".join(conds)
+        rows += query(f"SELECT * FROM prisma_reservasi WHERE {where} ORDER BY id", params)
+
+    # Ambil material spesifik (expand + partial select)
+    if items:
+        for item in items:
+            ord_val = item.get("order","")
+            itm_val = item.get("itm","")
+            if not ord_val or not itm_val:
+                continue
+            # Skip kalau WO sudah masuk via wos (hindari duplikat)
+            if ord_val in wos:
+                continue
+            conds2 = [
+                '"order" = %s', 'itm = %s',
+                "UPPER(COALESCE(del,'')) != 'X'",
+                "UPPER(COALESCE(fis,'')) != 'X'",
+                "(pr_prisma IS NULL OR pr_prisma = '')",
+            ]
+            params2 = [ord_val, itm_val]
+            conds2.append(pc); params2.extend(pp)
+            where2 = " AND ".join(conds2)
+            rows += query(f"SELECT * FROM prisma_reservasi WHERE {where2}", params2)
 
     if not rows:
         raise HTTPException(404, "Tidak ada data PRISMA untuk WO yang dipilih")
@@ -874,7 +941,7 @@ async def create_kertas_kerja(request: Request):
     return jsonify({
         "ok": True, "code": code,
         "rows": len(kk_data),
-        "orders": len(wos),
+        "orders": len(set(r["Order"] for r in kk_data)),
         "msg": f"✅ Kertas Kerja {code} dibuat dengan {len(kk_data)} baris dari {len(wos)} WO"
     })
 
