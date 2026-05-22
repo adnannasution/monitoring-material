@@ -853,6 +853,57 @@ def prisma_wo_materials(request: Request, order: str = "", pg: str = "All"):
     } for r in rows])
 
 
+@app.get("/api/prisma/search-materials")
+def prisma_search_materials(request: Request, pg: str = "All", q: str = ""):
+    """Cari material lintas WO untuk panel Buat Kertas Kerja."""
+    check_api_key(request)
+    user = get_current_user(request)
+    q = q.strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    conds = [
+        "UPPER(COALESCE(del,'')) != 'X'",
+        "UPPER(COALESCE(fis,'')) != 'X'",
+        "COALESCE(qty_reqmts,0) > 0",
+        "(code_kertas_kerja IS NULL OR code_kertas_kerja = '')",
+        "(pr_prisma IS NULL OR pr_prisma = '')",
+        "(LOWER(material) LIKE %s OR LOWER(material_description) LIKE %s)",
+    ]
+    params = [f"%{q.lower()}%", f"%{q.lower()}%"]
+    pc, pp = plant_clause(user, "plant"); conds.append(pc); params.extend(pp)
+    suffix = PG_SUFFIX_MAP.get(pg)
+    if suffix:
+        conds.append("pg LIKE %s"); params.append(f"%{suffix}")
+
+    where = " AND ".join(conds)
+    rows = query(f"""
+        SELECT "order", itm, material, material_description,
+               COALESCE(qty_reqmts,0) AS qty, uom
+        FROM prisma_reservasi
+        WHERE {where}
+        ORDER BY "order", itm
+        LIMIT 300
+    """, params)
+
+    grouped = {}
+    order_list = []
+    for r in rows:
+        o = r["order"]
+        if o not in grouped:
+            grouped[o] = []
+            order_list.append(o)
+        grouped[o].append({
+            "itm":         r["itm"] or "",
+            "material":    r["material"] or "",
+            "description": r["material_description"] or "",
+            "qty":         float(r["qty"] or 0),
+            "uom":         r["uom"] or "",
+        })
+
+    return jsonify([{"order": o, "materials": grouped[o]} for o in order_list])
+
+
 # ─── CREATE Kertas Kerja server-side ─────────────────────────
 @app.post("/api/kertas-kerja/create")
 async def create_kertas_kerja(request: Request):
