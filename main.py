@@ -1577,7 +1577,7 @@ def get_tracking(
     karena taex sudah merupakan breakdown per reservasi/material.
     """
     check_api_key(request)
-    limit  = min(5000, max(1, limit))
+    limit  = min(200000, max(1, limit))
     offset = (page - 1) * limit
 
     conds, params = [], []
