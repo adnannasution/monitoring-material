@@ -743,9 +743,6 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
   <div class="tab" id="tab-kk-create" style="display:none">📝 Buat KK</div>
 
-
-  <div class="tab" id="tab-joblist-taex" onclick="switchApp('joblist-taex')">📁 Joblist TAEX<span class="tab-badge" id="badge-joblist-taex">0</span></div>
-
   <div class="tab" id="tab-vw-joblist-wo" onclick="switchApp('vw-joblist-wo')">📊 VW Joblist WO<span class="tab-badge" id="badge-vwjlwo">0</span></div>
   <div class="tab" id="tab-vw-joblist-detail" onclick="switchApp('vw-joblist-detail')">📋 VW Joblist Detail<span class="tab-badge" id="badge-vwjld">0</span></div>
   <div class="tab" id="tab-tracking-joblist2" onclick="switchApp('tracking-joblist2')">🔗 Tracking Joblist<span class="tab-badge" id="badge-trk-jl2">0</span></div>
@@ -2184,135 +2181,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div></div>
 </div>
 
-
-
-
-
-<!-- PAGE: JOBLIST TAEX -->
-<div class="page" id="page-joblist-taex">
-  <div class="info-bar">
-    <span>Total: <b id="joblist-taex-total">—</b></span>
-    <div class="info-divider"></div>
-    <span>Material: <b id="joblist-taex-material">—</b></span>
-    <div class="info-divider"></div>
-    <span>Jasa: <b id="joblist-taex-jasa">—</b></span>
-    <div class="info-divider"></div>
-    <button class="btn btn-teal" onclick="openJoblistTaexUploadModal()">📥 Upload Excel</button>
-    <button class="btn" onclick="deleteJoblistTaex()" style="background:#dc2626;color:white;margin-left:4px">🗑 Hapus Semua</button>
-  </div>
-  <div class="filter-bar">
-    <label>Cari:</label>
-    <span class="search-wrap">
-      <input type="text" id="joblist-taex-search"
-             placeholder="Equipment, project, area, package..."
-             oninput="debounceRender('joblist-taex')">
-      <span class="search-clear" onclick="clearSearch('joblist-taex-search','joblist-taex')">✕</span>
-    </span>
-    <label>Area:</label>
-    <select id="joblist-taex-filter-area" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
-    <label>Disiplin:</label>
-    <select id="joblist-taex-filter-disiplin" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
-    <label>Project:</label>
-    <select id="joblist-taex-filter-project" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
-    <label>Package:</label>
-    <select id="joblist-taex-filter-package" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
-    <button class="btn btn-search" onclick="fetchAndRenderJoblistTaex()">Cari</button>
-    <button class="btn btn-reset" onclick="joblistTaexResetFilter()">Reset</button>
-    <button class="btn btn-export" onclick="exportJoblistTaexExcel()" style="margin-left:8px">📤 Export</button>
-    <span class="filter-right" id="joblist-taex-rowCount"></span>
-  </div>
-  <div class="table-container">
-    <div class="table-wrap">
-      <table id="joblist-taex-table">
-        <thead><tr>
-          <th>No Joblist</th>
-          <th>Job Detail Desc</th>
-          <th>Equipment No</th>
-          <th>Deskripsi Equipment</th>
-          <th>Area</th>
-          <th>Unit</th>
-          <th>Disiplin</th>
-          <th>Project Number</th>
-          <th>Project Status</th>
-          <th>Revision</th>
-          <th>Order</th>
-          <th>Reason</th>
-          <th>Doc Type</th>
-          <th>No Document</th>
-          <th>Nomor PM</th>
-          <th>MI</th>
-          <th>Is Jasa</th>
-          <th>Is Material</th>
-          <th>LLDII</th>
-          <th>Planning Jasa</th>
-          <th>Planning Material</th>
-          <th>Code Name</th>
-          <th>No Package</th>
-          <th>Package Desc</th>
-          <th>Creator</th>
-          <th>Plant</th>
-        </tr></thead>
-        <tbody id="joblist-taex-tbody">
-          <tr class="loading-row"><td colspan="26">Upload file Excel untuk memulai</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pagination" id="joblist-taex-pagination"></div>
-  </div>
-</div>
-
-
-
 </div><!-- /pages -->
 </div><!-- /body -->
-
-
-
-
-<!-- MODAL: JOBLIST TAEX UPLOAD -->
-<div class="modal-overlay" id="modal-joblist-taex-upload">
-  <div class="modal" style="width:640px;">
-    <div class="modal-header" style="background:#1e40af;">
-      <h3>📥 Upload Excel Joblist TAEX</h3>
-      <button class="modal-close" onclick="closeModal('modal-joblist-taex-upload')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e40af;">
-        <b>Format file:</b> 75 kolom — Id, JoblistId, JoblistDetailDescription, ..., NoPackage, PackageDescription<br>
-        <span style="color:#6b7280;margin-top:4px;display:block">Upload akan mengganti semua data (replace all)</span>
-      </div>
-      <div class="upload-zone" id="joblist-taex-upload-zone"
-           onclick="document.getElementById('joblist-taex-file-input').click()"
-           ondragover="handleDrag(event,'joblist-taex-upload-zone')"
-           ondragleave="handleDragLeave(event,'joblist-taex-upload-zone')"
-           ondrop="handleDropNew(event,'joblist-taex')">
-        <input type="file" id="joblist-taex-file-input" accept=".xlsx,.xls,.csv"
-               onchange="handleFileSelectNew(event,'joblist-taex')">
-        <div class="upload-icon">📁</div>
-        <p>Klik atau seret file Excel / CSV ke sini</p>
-        <span>.xlsx, .xls, .csv</span>
-      </div>
-      <div id="joblist-taex-upload-preview" style="display:none">
-        <span id="joblist-taex-preview-info" style="font-size:12px;font-weight:600;display:block;margin-top:10px;"></span>
-      </div>
-      <div id="joblist-taex-progress-panel" style="display:none;margin-top:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span id="joblist-taex-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
-          <span id="joblist-taex-progress-pct" style="font-size:13px;font-weight:700;color:#1e40af;"></span>
-        </div>
-        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
-          <div id="joblist-taex-progress-bar"
-               style="height:100%;width:0%;background:linear-gradient(90deg,#1e40af,#60a5fa);border-radius:99px;transition:width 0.4s;"></div>
-        </div>
-        <span id="joblist-taex-progress-eta" style="font-size:11px;color:#6b7280;display:block;margin-top:4px;"></span>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-reset" id="joblist-taex-cancel-btn"
-              onclick="closeModal('modal-joblist-taex-upload')">Batal</button>
-    </div>
-  </div>
-</div>
 
 <!-- MODAL: UPLOAD PO -->
 <div class="modal-overlay" id="modal-po-upload">
@@ -4283,6 +4153,8 @@ function generateKKCode() {
 async function openKertasKerjaModal() {
   // Reset cache & form untuk sesi baru
   Object.keys(_kkMatCache).forEach(k => delete _kkMatCache[k]);
+  _kkSelections = {};
+  _kkWOListState = { html: '', count: 0 };
   _kkSearchMode = 'wo';
   const _kkSearch = document.getElementById('kk-wo-search');
   if (_kkSearch) _kkSearch.value = '';
@@ -4384,6 +4256,9 @@ async function kkOnPGTypeChange() {
         </div>
       </div>
     `).join('');
+    // Simpan snapshot HTML awal dan reset seleksi karena PG baru
+    _kkWOListState = { html: list.innerHTML, count: wos.length };
+    _kkSelections = {};
   } catch(e) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">❌ Gagal memuat: ${e.message}</div>`;
   }
@@ -4404,7 +4279,7 @@ async function createKertasKerja() {
       body: { wos: fullWOs, items: specificItems },
     });
     const code = res.code || '';
-    // Sync state dari server response
+    // Reload data dari server (backend simpan di kk_current, tidak ada di response)
     const kkState = await apiFetch('/state/kk_current');
     if (kkState?.value) {
       const newData = kkState.value.data || [];
@@ -8568,6 +8443,8 @@ document.getElementById('login-page').style.display = 'none';
 // KERTAS KERJA — Expand WO + Cascading Checkbox
 // ══════════════════════════════════════════════════════════════
 const _kkMatCache = {}; // cache material per WO
+let _kkSelections = {}; // { [order]: 'full' | Set<itm> }  — persists across re-renders
+let _kkWOListState = { html: '', count: 0 }; // snapshot HTML list WO awal untuk restore
 
 async function kkToggleExpand(order, pg) {
   const matDiv = document.getElementById('kkmat-' + order);
@@ -8596,11 +8473,8 @@ async function kkToggleExpand(order, pg) {
     const mats = await apiFetch(`/prisma/wo-materials?order=${encodeURIComponent(order)}&pg=${encodeURIComponent(pg||'All')}`);
     _kkMatCache[order] = mats;
     _kkRenderMaterials(order, mats);
-    // Sesuaikan state checklist material dengan WO checkbox
-    const woCb = document.getElementById('kkwocb-' + order);
-    if (woCb && woCb.checked) {
-      _kkSetAllMats(order, true);
-    }
+    // Restore seleksi dari _kkSelections setelah material di-render
+    kkRestoreSelections(order);
   } catch(e) {
     matDiv.innerHTML = `<div style="font-size:11px;color:red;padding:4px">❌ ${e.message}</div>`;
   }
@@ -8641,6 +8515,11 @@ function _kkRenderMaterials(order, mats) {
 
 // WO checkbox berubah → update semua material di bawahnya
 function kkWOCheckChange(order, checked) {
+  if (checked) {
+    _kkSelections[order] = 'full';
+  } else {
+    delete _kkSelections[order];
+  }
   _kkSetAllMats(order, checked);
   kkUpdateSelectedCount();
 }
@@ -8653,65 +8532,70 @@ function _kkSetAllMats(order, checked) {
   if (woCb) { woCb.indeterminate = false; woCb.checked = checked; }
 }
 
-// Material checkbox berubah → update WO checkbox state
+// Material checkbox berubah → update WO checkbox state + simpan ke _kkSelections
 function kkMatCheckChange(order) {
-  const mats    = [...document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`)];
-  const total   = mats.length;
-  const checked = mats.filter(cb => cb.checked).length;
-  const woCb    = document.getElementById('kkwocb-' + order);
+  const mats        = [...document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`)];
+  const checkedMats = mats.filter(cb => cb.checked);
+  const total       = mats.length;
+  const checked     = checkedMats.length;
+
+  // Simpan ke selection store agar persists saat list di-render ulang
+  if (checked === 0) {
+    delete _kkSelections[order];
+  } else {
+    _kkSelections[order] = new Set(checkedMats.map(cb => cb.dataset.itm));
+  }
+
+  const woCb = document.getElementById('kkwocb-' + order);
   if (!woCb) return;
   if (checked === 0) {
     woCb.checked = false; woCb.indeterminate = false;
   } else if (checked === total && _kkSearchMode !== 'mat') {
-    // Di mode By Material, material yang di-render hanya yang cocok search,
-    // bukan semua material WO → jangan pernah set WO sebagai full-checked
+    // Di mode By Material hanya material yg cocok search yang di-render,
+    // jangan anggap WO fully-checked karena material lain tidak terlihat
     woCb.checked = true;  woCb.indeterminate = false;
   } else {
     woCb.checked = false; woCb.indeterminate = true;
   }
 }
 
-// Kumpulkan seleksi: fullWOs (WO penuh) dan specificItems (per material)
+// Kumpulkan seleksi dari _kkSelections (source of truth, persists across re-renders)
 function kkCollectSelection() {
-  const fullWOs = [];
+  const fullWOs      = [];
   const specificItems = [];
-
-  document.querySelectorAll('.kk-wo-check').forEach(woCb => {
-    const order = woCb.value;
-    const matChecks = document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`);
-
-    // Mode By Material: selalu ambil per-material spesifik, jangan pernah fullWO.
-    // Di mode ini hanya material yang cocok search yang di-render,
-    // sehingga tidak bisa dianggap mewakili semua material WO.
-    if (_kkSearchMode === 'mat') {
-      [...matChecks].filter(cb => cb.checked).forEach(cb => {
-        specificItems.push({ order, itm: cb.dataset.itm });
-      });
-      return;
-    }
-
-    const matDiv = document.getElementById('kkmat-' + order);
-    const isExpanded = matDiv && matDiv.style.display !== 'none';
-
-    if (!isExpanded || !matChecks.length) {
-      // Tidak di-expand atau belum load → kalau WO tercentang, ambil semua
-      if (woCb.checked) fullWOs.push(order);
+  Object.entries(_kkSelections).forEach(([order, sel]) => {
+    if (sel === 'full') {
+      fullWOs.push(order);
     } else {
-      // Sudah di-expand → cek per material
-      const checkedMats = [...matChecks].filter(cb => cb.checked);
-      if (checkedMats.length === matChecks.length && woCb.checked) {
-        // Semua material tercentang → treat sebagai full WO
-        fullWOs.push(order);
-      } else {
-        // Partial → ambil yang tercentang saja
-        checkedMats.forEach(cb => {
-          specificItems.push({ order, itm: cb.dataset.itm });
-        });
+      // Set<itm>
+      sel.forEach(itm => specificItems.push({ order, itm }));
+    }
+  });
+  return { fullWOs, specificItems };
+}
+
+// Terapkan _kkSelections ke checkbox DOM (dipanggil setelah list di-render ulang)
+function kkRestoreSelections(onlyOrder) {
+  const orders = onlyOrder ? [onlyOrder] : Object.keys(_kkSelections);
+  orders.forEach(order => {
+    const sel  = _kkSelections[order];
+    if (!sel) return;
+    const woCb   = document.getElementById('kkwocb-' + order);
+    const matCbs = [...document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`)];
+    if (sel === 'full') {
+      if (woCb) { woCb.checked = true; woCb.indeterminate = false; }
+      matCbs.forEach(cb => cb.checked = true);
+    } else {
+      matCbs.forEach(cb => { cb.checked = sel.has(cb.dataset.itm); });
+      if (woCb) {
+        const n = matCbs.filter(cb => cb.checked).length;
+        // Jika mat belum di-expand (tidak ada matCbs), tandai indeterminate di WO
+        woCb.checked      = false;
+        woCb.indeterminate = n > 0;
       }
     }
   });
-
-  return { fullWOs, specificItems };
+  kkUpdateSelectedCount();
 }
 
 // Pilih Semua & Hapus Semua (hanya WO yang tampil/tidak tersembunyi oleh search)
@@ -8722,6 +8606,7 @@ function kkSelectAllWO() {
     if (!cb) return;
     cb.checked = true; cb.indeterminate = false;
     _kkSetAllMats(cb.value, true);
+    _kkSelections[cb.value] = 'full';
   });
   kkUpdateSelectedCount();
 }
@@ -8733,12 +8618,14 @@ function kkDeselectAllWO() {
     if (!cb) return;
     cb.checked = false; cb.indeterminate = false;
     _kkSetAllMats(cb.value, false);
+    delete _kkSelections[cb.value];
   });
   kkUpdateSelectedCount();
 }
 
 function kkUpdateSelectedCount() {
-  const total = document.querySelectorAll('.kk-wo-check:checked').length;
+  // Hitung dari _kkSelections agar akurat meski list di-render ulang
+  const total = Object.keys(_kkSelections).length;
   const el = document.getElementById('kk-card-selected-wo');
   if (el) el.textContent = total.toLocaleString('id-ID');
 }
@@ -8771,13 +8658,20 @@ function kkSetSearchMode(mode) {
   if (mode === 'wo') {
     woBtn.style.cssText  += ';' + activeStyle;
     matBtn.style.cssText += ';' + inactiveStyle;
-    if (inp) inp.placeholder = 'Cari nomor Work Order...';
-    // Restore full list
-    document.querySelectorAll('.kk-wo-item').forEach(i => i.style.display = '');
-    const cnt = document.querySelectorAll('.kk-wo-item').length;
-    const el = document.getElementById('kk-wo-count');
-    if (el) el.textContent = cnt + ' WO';
-    if (inp) inp.value = '';
+    if (inp) { inp.placeholder = 'Cari nomor Work Order...'; inp.value = ''; }
+    // Restore list WO awal (beserta seleksi) jika tersedia
+    if (_kkWOListState.html) {
+      const list = document.getElementById('kk-wo-list');
+      list.innerHTML = _kkWOListState.html;
+      const el = document.getElementById('kk-wo-count');
+      if (el) el.textContent = `${_kkWOListState.count} tersedia`;
+      kkRestoreSelections();
+    } else {
+      document.querySelectorAll('.kk-wo-item').forEach(i => i.style.display = '');
+      const cnt = document.querySelectorAll('.kk-wo-item').length;
+      const el = document.getElementById('kk-wo-count');
+      if (el) el.textContent = cnt + ' WO';
+    }
   } else {
     matBtn.style.cssText += ';' + activeStyle;
     woBtn.style.cssText  += ';' + inactiveStyle;
@@ -8802,7 +8696,14 @@ async function kkSearchByMaterial() {
   const list = document.getElementById('kk-wo-list');
   const countEl = document.getElementById('kk-wo-count');
   if (q.length < 2) {
-    if (countEl) countEl.textContent = 'ketik min. 2 karakter';
+    // Restore list WO awal beserta seleksi yang sudah ada
+    if (_kkWOListState.html) {
+      list.innerHTML = _kkWOListState.html;
+      if (countEl) countEl.textContent = `${_kkWOListState.count} tersedia`;
+      kkRestoreSelections();
+    } else {
+      if (countEl) countEl.textContent = 'ketik min. 2 karakter';
+    }
     return;
   }
   list.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px">🔍 Mencari material...</div>';
@@ -8852,11 +8753,12 @@ async function kkSearchByMaterial() {
         </div>
       </div>
     `).join('');
-    // Cache hasil search ke _kkMatCache supaya kkCollectSelection bisa baca
+    // Cache hasil search ke _kkMatCache
     results.forEach(r => {
       if (!_kkMatCache[r.order]) _kkMatCache[r.order] = r.materials;
     });
-    kkUpdateSelectedCount();
+    // Terapkan seleksi yang sudah ada ke hasil search yang baru di-render
+    kkRestoreSelections();
   } catch(e) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">❌ Gagal: ${e.message}</div>`;
   }
@@ -8896,197 +8798,6 @@ async function confirmClearWorkflow() {
     hideLoading();
     toast('Gagal hapus: ' + e.message, 'err');
   }
-}
-
-
-
-
-// ============================================================
-// JOBLIST TAEX
-// ============================================================
-let joblistTaexFiltered = [];
-let joblistTaexServerMeta = { total: 0, totalPages: 1, page: 1, limit: 100 };
-let _joblistTaexFiltersLoaded = false;
-
-// Daftarkan ke NEW_UPLOAD_META agar handleFileSelectNew() bisa handle
-NEW_UPLOAD_META['joblist-taex'] = {
-  backendType: 'joblisttaex',
-  reloadFn:    fetchAndRenderJoblistTaex,
-  modalId:     'modal-joblist-taex-upload'
-};
-
-// Daftarkan ke HEADER_TITLES
-HEADER_TITLES['joblist-taex'] = ['Joblist TAEX', 'Data Lengkap 75 Kolom'];
-
-// Hook ke switchApp — override renderPage untuk app baru ini
-const _renderPageOrig = renderPage;
-function renderPage(app) {
-  if (app === 'joblist-taex') {
-    fetchAndRenderJoblistTaex();
-    return;
-  }
-  _renderPageOrig(app);
-}
-
-// Hook ke debounceRender
-const _debounceRenderOrig = debounceRender;
-function debounceRender(app) {
-  if (app === 'joblist-taex') {
-    clearTimeout(_debounceTimers['joblist-taex']);
-    _debounceTimers['joblist-taex'] = setTimeout(() => {
-      joblistTaexServerMeta.total = 0;
-      resetPg('joblist-taex');
-      fetchAndRenderJoblistTaex();
-    }, 350);
-    return;
-  }
-  _debounceRenderOrig(app);
-}
-
-function openJoblistTaexUploadModal() {
-  document.getElementById('joblist-taex-file-input').value = '';
-  document.getElementById('joblist-taex-upload-preview').style.display = 'none';
-  document.getElementById('joblist-taex-progress-panel').style.display = 'none';
-  openModal('modal-joblist-taex-upload');
-}
-
-async function fetchAndRenderJoblistTaex() {
-  const q      = (document.getElementById('joblist-taex-search')?.value || '');
-  const fArea  = document.getElementById('joblist-taex-filter-area')?.value  || '';
-  const fDis   = document.getElementById('joblist-taex-filter-disiplin')?.value || '';
-  const fProj  = document.getElementById('joblist-taex-filter-project')?.value || '';
-  const fPkg   = document.getElementById('joblist-taex-filter-package')?.value || '';
-  const pg     = getPg('joblist-taex');
-
-  const params = new URLSearchParams({
-    page: pg.page, limit: pg.size,
-    q, area: fArea, disiplin: fDis, project: fProj, package: fPkg,
-    known_total: joblistTaexServerMeta.total || 0,
-  });
-
-  const tbody = document.getElementById('joblist-taex-tbody');
-  tbody.innerHTML = '<tr class="loading-row"><td colspan="26">⏳ Memuat data...</td></tr>';
-
-  try {
-    const result = await apiFetch('/joblist-taex?' + params.toString());
-    joblistTaexServerMeta = result.pagination || { total:0, totalPages:1, page:pg.page, limit:pg.size };
-    pgState['joblist-taex'] = { page: joblistTaexServerMeta.page, size: joblistTaexServerMeta.limit };
-    joblistTaexFiltered = result.data || [];
-
-    const matCount  = joblistTaexFiltered.filter(r => r.IsMaterial == 1).length;
-    const jasaCount = joblistTaexFiltered.filter(r => r.IsJasa     == 1).length;
-    document.getElementById('joblist-taex-total').textContent    = joblistTaexServerMeta.total.toLocaleString('id-ID');
-    document.getElementById('joblist-taex-material').textContent = matCount;
-    document.getElementById('joblist-taex-jasa').textContent     = jasaCount;
-    document.getElementById('joblist-taex-rowCount').textContent = joblistTaexServerMeta.total.toLocaleString('id-ID') + ' item';
-    document.getElementById('badge-joblist-taex').textContent    = joblistTaexServerMeta.total;
-
-    if (!_joblistTaexFiltersLoaded && joblistTaexServerMeta.total > 0) {
-      _populateJoblistTaexFilters();
-      _joblistTaexFiltersLoaded = true;
-    }
-
-    if (!joblistTaexFiltered.length) {
-      tbody.innerHTML = '<tr><td colspan="26" style="color:#9ca3af;text-align:center;padding:20px">Tidak ada data</td></tr>';
-      renderPagination('joblist-taex-pagination','joblist-taex',0,1,1,pg.size,fetchAndRenderJoblistTaex);
-      return;
-    }
-
-    const flag = v => (v == 1) ? '<span style="color:#16a34a">✅</span>' : '<span style="color:#d1d5db">—</span>';
-    tbody.innerHTML = joblistTaexFiltered.map(r => `<tr>
-      <td style="font-size:11px;font-weight:600;color:#7c2d12;white-space:nowrap">${D(r.NoJoblist)}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-          title="${r.JoblistDetailDescription||''}">${D(r.JoblistDetailDescription)}</td>
-      <td style="font-weight:600;color:#1a56db;white-space:nowrap">${D(r.EquipmentNo)}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"
-          title="${r.DescriptionofTechnicalObject||''}">${D(r.DescriptionofTechnicalObject)}</td>
-      <td style="font-size:11px">${D(r.AreaName)}</td>
-      <td style="font-size:11px">${D(r.UnitName)}</td>
-      <td><span class="badge badge-blue" style="font-size:10px">${D(r.Disiplin)}</span></td>
-      <td style="font-size:11px">${D(r.ProjectNumber)}</td>
-      <td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6">${D(r.ProjectStatus)}</span></td>
-      <td>${D(r.Revision)}</td>
-      <td><b>${D(r.Order)}</b></td>
-      <td style="font-size:10px">${D(r.JoblistDetailReasonName)}</td>
-      <td style="font-size:10px">${D(r.DocumentJoblistTypeName)}</td>
-      <td style="font-size:10px">${D(r.NoDocument)}</td>
-      <td>${D(r.NomorPM)}</td>
-      <td style="text-align:center">${flag(r.IsMechanicalIntegrity)}</td>
-      <td style="text-align:center">${flag(r.IsJasa)}</td>
-      <td style="text-align:center">${flag(r.IsMaterial)}</td>
-      <td style="text-align:center">${flag(r.IsLLDII)}</td>
-      <td style="font-size:10px">${D(r.PlanningJasaStatusName)}</td>
-      <td style="font-size:10px">${D(r.PlanningMaterialStatusName)}</td>
-      <td style="font-size:10px">${D(r.CodeName)}</td>
-      <td style="font-size:10px;white-space:nowrap">${D(r.NoPackage)}</td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px"
-          title="${r.PackageDescription||''}">${D(r.PackageDescription)}</td>
-      <td style="font-size:10px">${D(r.CreatorName)}</td>
-      <td>${D(r.Plant)}</td>
-    </tr>`).join('');
-
-    renderPagination('joblist-taex-pagination','joblist-taex',
-      joblistTaexServerMeta.total, joblistTaexServerMeta.page,
-      joblistTaexServerMeta.totalPages, joblistTaexServerMeta.limit,
-      fetchAndRenderJoblistTaex);
-
-  } catch(e) {
-    tbody.innerHTML = `<tr class="loading-row"><td colspan="26">❌ Gagal: ${e.message}</td></tr>`;
-  }
-}
-
-async function _populateJoblistTaexFilters() {
-  const fillSelect = async (selectId, kolom) => {
-    try {
-      const res = await apiFetch(`/distinct/joblist_taex/${kolom}`);
-      const el = document.getElementById(selectId);
-      if (!el) return;
-      el.innerHTML = '<option value="">Semua</option>' +
-        (res.values || []).map(v => `<option value="${v}">${v}</option>`).join('');
-    } catch(e) {}
-  };
-  await Promise.all([
-    fillSelect('joblist-taex-filter-area',     'area'),
-    fillSelect('joblist-taex-filter-disiplin', 'disiplin'),
-    fillSelect('joblist-taex-filter-project',  'project'),
-    fillSelect('joblist-taex-filter-package',  'package'),
-  ]);
-}
-
-function joblistTaexResetFilter() {
-  document.getElementById('joblist-taex-search').value = '';
-  ['joblist-taex-filter-area','joblist-taex-filter-disiplin',
-   'joblist-taex-filter-project','joblist-taex-filter-package']
-    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  joblistTaexServerMeta.total = 0;
-  resetPg('joblist-taex');
-  fetchAndRenderJoblistTaex();
-}
-
-async function deleteJoblistTaex() {
-  if (!confirm('Hapus semua data Joblist TAEX?')) return;
-  try {
-    await apiFetch('/joblist-taex', { method: 'DELETE' });
-    joblistTaexFiltered = [];
-    joblistTaexServerMeta = { total:0, totalPages:1, page:1, limit:100 };
-    _joblistTaexFiltersLoaded = false;
-    document.getElementById('badge-joblist-taex').textContent = 0;
-    document.getElementById('joblist-taex-total').textContent = '—';
-    document.getElementById('joblist-taex-tbody').innerHTML =
-      '<tr class="loading-row"><td colspan="26">Upload file Excel untuk memulai</td></tr>';
-    toast('Semua data Joblist TAEX dihapus', 'ok');
-  } catch(e) {
-    toast('Gagal hapus: ' + e.message, 'err');
-  }
-}
-
-function exportJoblistTaexExcel() {
-  if (!joblistTaexFiltered.length) return toast('Tidak ada data untuk diekspor', 'err');
-  const ws = XLSX.utils.json_to_sheet(joblistTaexFiltered);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'JoblistTAEX');
-  XLSX.writeFile(wb, `JoblistTAEX_${new Date().toISOString().slice(0,10)}.xlsx`);
-  toast('Export berhasil!', 'ok');
 }
 
 </script>
