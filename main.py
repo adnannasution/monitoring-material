@@ -485,7 +485,7 @@ TRKJL_DISTINCT = {
 
 
 @app.get("/api/joblist-taex")
-def get_joblist_taex(request: Request, ...):
+def get_joblist_taex(request: Request):
     # sama polanya seperti /api/vwjoblistwo
     
 
