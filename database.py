@@ -143,7 +143,7 @@ def migrate():
     print("🔄 Running PostgreSQL migration...")
 
 
-execute("""
+    execute("""
         CREATE TABLE IF NOT EXISTS joblist_taex (
             id                            SERIAL PRIMARY KEY,
             joblist_id                    TEXT,
