@@ -1510,8 +1510,8 @@ def sync_po_to_taex(request: Request):
             FROM sap_po sp
             WHERE sp.purchreq = t.pr
               AND sp.item     = t.item
-              AND t.pr   IS NOT NULL AND t.pr   != ""
-              AND t.item IS NOT NULL AND t.item != ""
+              AND t.pr   IS NOT NULL AND t.pr   != ''
+              AND t.item IS NOT NULL AND t.item != ''
             RETURNING t.id
         )
         SELECT COUNT(*) AS updated FROM updated
