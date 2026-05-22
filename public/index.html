@@ -4279,9 +4279,15 @@ async function createKertasKerja() {
       body: { wos: fullWOs, items: specificItems },
     });
     const code = res.code || '';
-    // Akumulasi data KK baru ke state yang ada (bukan replace)
-    state.kkData = [...(state.kkData || []), ...(res.data || [])];
-    state.kkCode = code;
+    // Reload data dari server (backend simpan di kk_current, tidak ada di response)
+    const kkState = await apiFetch('/state/kk_current');
+    if (kkState?.value) {
+      const newData = kkState.value.data || [];
+      state.kkData = [...(state.kkData || []), ...newData];
+      state.kkCode = kkState.value.code || code;
+    } else {
+      state.kkCode = code;
+    }
     hideLoading();
     closeModal('modal-kk');
     setSyncStatus('ok', `✅ Kertas Kerja ${code} dibuat · ${res.rows} baris · ${new Date().toLocaleTimeString('id-ID')}`);
