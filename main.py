@@ -32,6 +32,7 @@ from bulk_ops import (
     bulk_replace_equipment_taex,
     bulk_replace_job_area, bulk_replace_job_unit,
     bulk_replace_vw_joblist_wo, bulk_replace_vw_joblist_detail,
+    bulk_replace_joblist_taex,
 )
 from header_maps import normalize_taex, normalize_sap, normalize_order
 from dashboard import router as dashboard_router
@@ -484,14 +485,7 @@ TRKJL_DISTINCT = {
 }
 
 
-@app.get("/api/joblist-taex")
-def get_joblist_taex(request: Request):
-    # sama polanya seperti /api/vwjoblistwo
-    
 
-@app.post("/api/joblist-taex/upload")
-async def upload_joblist_taex(request: Request, file: UploadFile = File(...)):
-    # sama polanya seperti /api/vwjoblistwo/upload
     
 
 @app.get("/api/distinct/{tabel}/{kolom}")
@@ -602,7 +596,7 @@ async def upload_excel(upload_type: str, request: Request,
     check_api_key(request)
     if upload_type not in ("taex","prisma","pr","po","project","joblist","jobdetail",
                            "jobdetailworkorder","equipment","jobarea","jobunit",
-                           "vwjoblistwo","vwjoblistdetail"):
+                           "vwjoblistwo","vwjoblistdetail","joblisttaex"):
         raise HTTPException(400, "Type tidak valid")
 
     content = await file.read()
@@ -653,6 +647,8 @@ async def upload_excel(upload_type: str, request: Request,
                 cnt = bulk_replace_vw_joblist_wo(df)
             elif upload_type == "vwjoblistdetail":
                 cnt = bulk_replace_vw_joblist_detail(df)
+            elif upload_type == "joblisttaex":
+                cnt = bulk_replace_joblist_taex(df)
             else:
                 cnt = 0
 
@@ -743,6 +739,10 @@ def delete_taex(row_id: int, request: Request):
     check_api_key(request)
     execute("DELETE FROM taex_reservasi WHERE id=%s", (row_id,))
     return {"ok": True}
+
+
+
+
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2551,6 +2551,177 @@ def chatbot_schema(request: Request):
 # ═══════════════════════════════════════════════════════════════
 # SPA FALLBACK
 # ═══════════════════════════════════════════════════════════════
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOBLIST TAEX — tabel baru 75 kolom
+# ═══════════════════════════════════════════════════════════════
+
+def map_joblist_taex(r):
+    return {
+        "Id":                           r["id"],
+        "JoblistId":                    r["joblist_id"],
+        "JoblistDetailDescription":     r["joblist_detail_description"],
+        "JoblistDetailReasonId":        r["joblist_detail_reason_id"],
+        "JoblistDetailReasonName":      r["joblist_detail_reason_name"],
+        "DocumentJoblistTypeId":        r["document_joblist_type_id"],
+        "DocumentJoblistTypeName":      r["document_joblist_type_name"],
+        "NoDocument":                   r["no_document"],
+        "IsMechanicalIntegrity":        r["is_mechanical_integrity"],
+        "IsOptimization":               r["is_optimization"],
+        "JobDisciplineId":              r["job_discipline_id"],
+        "JobDisciplineName":            r["job_discipline_name"],
+        "NomorPM":                      r["nomor_pm"],
+        "MaintenancePlan":              r["maintenance_plan"],
+        "MaintenanceItem":              r["maintenance_item"],
+        "Notes":                        r["notes"],
+        "Plant":                        r["plant"],
+        "Created":                      r["created"],
+        "CreatorName":                  r["creator_name"],
+        "CreatorJobTitle":              r["creator_job_title"],
+        "IsDeleted":                    r["is_deleted"],
+        "ProjectId":                    r["project_id"],
+        "EquipmentId":                  r["equipment_id"],
+        "JoblistDescription":           r["joblist_description"],
+        "NoJoblist":                    r["no_joblist"],
+        "ProjectNumber":                r["project_number"],
+        "ProjectTypeId":                r["project_type_id"],
+        "ProjectTypeCode":              r["project_type_code"],
+        "ProjectTypeName":              r["project_type_name"],
+        "StartDate":                    r["start_date"],
+        "FinishDate":                   r["finish_date"],
+        "Revision":                     r["revision"],
+        "Description":                  r["description"],
+        "DurationTaBrickId":            r["duration_ta_brick_id"],
+        "DurationTaBrickValue":         r["duration_ta_brick_value"],
+        "DurationTaBrickText":          r["duration_ta_brick_text"],
+        "ProjectStatus":                r["project_status"],
+        "EquipmentNo":                  r["equipment_no"],
+        "UnitId":                       r["unit_id"],
+        "AreaName":                     r["area_name"],
+        "AreaAliasName":                r["area_alias_name"],
+        "UnitName":                     r["unit_name"],
+        "UnitAliasName":                r["unit_alias_name"],
+        "PlanningPlant":                r["planning_plant"],
+        "FunctionalLocation":           r["functional_location"],
+        "Location":                     r["location"],
+        "DescriptionofTechnicalObject": r["description_of_tech_object"],
+        "EquipmentCategory":            r["equipment_category"],
+        "Disiplin":                     r["disiplin"],
+        "CatalogProfile":               r["catalog_profile"],
+        "CatalogProfileText":           r["catalog_profile_text"],
+        "GroupAsset":                   r["group_asset"],
+        "Criticallity":                 r["criticallity"],
+        "CriticallityText":             r["criticallity_text"],
+        "MaintenancePlant":             r["maintenance_plant"],
+        "MainWorkCenter":               r["main_work_center"],
+        "ManufacturerOfAsset":          r["manufacturer_of_asset"],
+        "ModelType":                    r["model_type"],
+        "IsAllIn":                      r["is_all_in"],
+        "IsAspekDurasi":                r["is_aspek_durasi"],
+        "IsAspekQuality":               r["is_aspek_quality"],
+        "IsAspekSafety":                r["is_aspek_safety"],
+        "IsJasa":                       r["is_jasa"],
+        "IsLLDII":                      r["is_lldii"],
+        "IsMaterial":                   r["is_material"],
+        "StatusId":                     r["status_id"],
+        "Code":                         r["code"],
+        "CodeName":                     r["code_name"],
+        "PlanningJasaStatusId":         r["planning_jasa_status_id"],
+        "PlanningMaterialStatusId":     r["planning_material_status_id"],
+        "PlanningJasaStatusName":       r["planning_jasa_status_name"],
+        "PlanningMaterialStatusName":   r["planning_material_status_name"],
+        "Order":                        r["order"],
+        "NoPackage":                    r["no_package"],
+        "PackageDescription":           r["package_description"],
+    }
+
+
+@app.get("/api/joblist-taex")
+def get_joblist_taex(
+    request: Request,
+    page: int = 1,
+    limit: int = 100,
+    q: str = "",
+    area: str = "",
+    disiplin: str = "",
+    project: str = "",
+    package: str = "",
+    known_total: int = 0,
+):
+    check_api_key(request)
+    user = get_current_user(request)
+    limit  = min(5000, max(1, limit))
+    offset = (page - 1) * limit
+
+    conds, params = [], []
+    pc, pp = plant_clause(user, "plant")
+    conds.append(pc); params.extend(pp)
+
+    if q:
+        conds.append("""(
+            equipment_no ILIKE %s OR no_joblist ILIKE %s OR
+            joblist_detail_description ILIKE %s OR project_number ILIKE %s OR
+            area_name ILIKE %s OR unit_name ILIKE %s OR
+            description_of_tech_object ILIKE %s OR
+            no_package ILIKE %s OR package_description ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 9)
+    if area:
+        conds.append("area_name = %s"); params.append(area)
+    if disiplin:
+        conds.append("disiplin = %s"); params.append(disiplin)
+    if project:
+        conds.append("project_number = %s"); params.append(project)
+    if package:
+        conds.append("no_package = %s"); params.append(package)
+
+    where = " AND ".join(conds) if conds else "1=1"
+
+    total = known_total
+    if not total:
+        total = int(query(
+            f"SELECT COUNT(*) AS c FROM joblist_taex WHERE {where}", params
+        )[0]["c"])
+
+    rows = query(
+        f"SELECT * FROM joblist_taex WHERE {where} ORDER BY id LIMIT %s OFFSET %s",
+        params + [limit, offset]
+    )
+
+    return jsonify({
+        "data": [map_joblist_taex(r) for r in rows],
+        "pagination": {
+            "page": page, "limit": limit, "total": total,
+            "totalPages": max(1, -(-total // limit)),
+            "hasMore": offset + limit < total,
+        },
+    })
+
+
+@app.delete("/api/joblist-taex")
+def delete_all_joblist_taex(request: Request):
+    check_api_key(request)
+    execute("DELETE FROM joblist_taex")
+    return {"ok": True}
+
+
+@app.get("/api/distinct/joblist_taex/{kolom}")
+def distinct_joblist_taex(kolom: str, request: Request):
+    check_api_key(request)
+    allowed = {"area": "area_name", "disiplin": "disiplin",
+               "project": "project_number", "package": "no_package"}
+    col = allowed.get(kolom)
+    if not col:
+        raise HTTPException(400, "kolom tidak dikenali")
+    rows = query(
+        f"SELECT DISTINCT {col} AS v FROM joblist_taex "
+        f"WHERE {col} IS NOT NULL AND {col} <> '' ORDER BY {col}"
+    )
+    return {"values": [r["v"] for r in rows]}
+
+
 
 
 # ═══════════════════════════════════════════════════════════════

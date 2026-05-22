@@ -743,6 +743,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
   <div class="tab" id="tab-kk-create" style="display:none">📝 Buat KK</div>
 
+
+  <div class="tab" id="tab-joblist-taex" onclick="switchApp('joblist-taex')">📁 Joblist TAEX<span class="tab-badge" id="badge-joblist-taex">0</span></div>
+
   <div class="tab" id="tab-vw-joblist-wo" onclick="switchApp('vw-joblist-wo')">📊 VW Joblist WO<span class="tab-badge" id="badge-vwjlwo">0</span></div>
   <div class="tab" id="tab-vw-joblist-detail" onclick="switchApp('vw-joblist-detail')">📋 VW Joblist Detail<span class="tab-badge" id="badge-vwjld">0</span></div>
   <div class="tab" id="tab-tracking-joblist2" onclick="switchApp('tracking-joblist2')">🔗 Tracking Joblist<span class="tab-badge" id="badge-trk-jl2">0</span></div>
@@ -2181,8 +2184,135 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div></div>
 </div>
 
+
+
+
+
+<!-- PAGE: JOBLIST TAEX -->
+<div class="page" id="page-joblist-taex">
+  <div class="info-bar">
+    <span>Total: <b id="joblist-taex-total">—</b></span>
+    <div class="info-divider"></div>
+    <span>Material: <b id="joblist-taex-material">—</b></span>
+    <div class="info-divider"></div>
+    <span>Jasa: <b id="joblist-taex-jasa">—</b></span>
+    <div class="info-divider"></div>
+    <button class="btn btn-teal" onclick="openJoblistTaexUploadModal()">📥 Upload Excel</button>
+    <button class="btn" onclick="deleteJoblistTaex()" style="background:#dc2626;color:white;margin-left:4px">🗑 Hapus Semua</button>
+  </div>
+  <div class="filter-bar">
+    <label>Cari:</label>
+    <span class="search-wrap">
+      <input type="text" id="joblist-taex-search"
+             placeholder="Equipment, project, area, package..."
+             oninput="debounceRender('joblist-taex')">
+      <span class="search-clear" onclick="clearSearch('joblist-taex-search','joblist-taex')">✕</span>
+    </span>
+    <label>Area:</label>
+    <select id="joblist-taex-filter-area" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
+    <label>Disiplin:</label>
+    <select id="joblist-taex-filter-disiplin" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
+    <label>Project:</label>
+    <select id="joblist-taex-filter-project" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
+    <label>Package:</label>
+    <select id="joblist-taex-filter-package" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
+    <button class="btn btn-search" onclick="fetchAndRenderJoblistTaex()">Cari</button>
+    <button class="btn btn-reset" onclick="joblistTaexResetFilter()">Reset</button>
+    <button class="btn btn-export" onclick="exportJoblistTaexExcel()" style="margin-left:8px">📤 Export</button>
+    <span class="filter-right" id="joblist-taex-rowCount"></span>
+  </div>
+  <div class="table-container">
+    <div class="table-wrap">
+      <table id="joblist-taex-table">
+        <thead><tr>
+          <th>No Joblist</th>
+          <th>Job Detail Desc</th>
+          <th>Equipment No</th>
+          <th>Deskripsi Equipment</th>
+          <th>Area</th>
+          <th>Unit</th>
+          <th>Disiplin</th>
+          <th>Project Number</th>
+          <th>Project Status</th>
+          <th>Revision</th>
+          <th>Order</th>
+          <th>Reason</th>
+          <th>Doc Type</th>
+          <th>No Document</th>
+          <th>Nomor PM</th>
+          <th>MI</th>
+          <th>Is Jasa</th>
+          <th>Is Material</th>
+          <th>LLDII</th>
+          <th>Planning Jasa</th>
+          <th>Planning Material</th>
+          <th>Code Name</th>
+          <th>No Package</th>
+          <th>Package Desc</th>
+          <th>Creator</th>
+          <th>Plant</th>
+        </tr></thead>
+        <tbody id="joblist-taex-tbody">
+          <tr class="loading-row"><td colspan="26">Upload file Excel untuk memulai</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="joblist-taex-pagination"></div>
+  </div>
+</div>
+
+
+
 </div><!-- /pages -->
 </div><!-- /body -->
+
+
+
+
+<!-- MODAL: JOBLIST TAEX UPLOAD -->
+<div class="modal-overlay" id="modal-joblist-taex-upload">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header" style="background:#1e40af;">
+      <h3>📥 Upload Excel Joblist TAEX</h3>
+      <button class="modal-close" onclick="closeModal('modal-joblist-taex-upload')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e40af;">
+        <b>Format file:</b> 75 kolom — Id, JoblistId, JoblistDetailDescription, ..., NoPackage, PackageDescription<br>
+        <span style="color:#6b7280;margin-top:4px;display:block">Upload akan mengganti semua data (replace all)</span>
+      </div>
+      <div class="upload-zone" id="joblist-taex-upload-zone"
+           onclick="document.getElementById('joblist-taex-file-input').click()"
+           ondragover="handleDrag(event,'joblist-taex-upload-zone')"
+           ondragleave="handleDragLeave(event,'joblist-taex-upload-zone')"
+           ondrop="handleDropNew(event,'joblist-taex')">
+        <input type="file" id="joblist-taex-file-input" accept=".xlsx,.xls,.csv"
+               onchange="handleFileSelectNew(event,'joblist-taex')">
+        <div class="upload-icon">📁</div>
+        <p>Klik atau seret file Excel / CSV ke sini</p>
+        <span>.xlsx, .xls, .csv</span>
+      </div>
+      <div id="joblist-taex-upload-preview" style="display:none">
+        <span id="joblist-taex-preview-info" style="font-size:12px;font-weight:600;display:block;margin-top:10px;"></span>
+      </div>
+      <div id="joblist-taex-progress-panel" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="joblist-taex-progress-msg" style="font-size:12px;color:#374151;font-weight:600;"></span>
+          <span id="joblist-taex-progress-pct" style="font-size:13px;font-weight:700;color:#1e40af;"></span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden;">
+          <div id="joblist-taex-progress-bar"
+               style="height:100%;width:0%;background:linear-gradient(90deg,#1e40af,#60a5fa);border-radius:99px;transition:width 0.4s;"></div>
+        </div>
+        <span id="joblist-taex-progress-eta" style="font-size:11px;color:#6b7280;display:block;margin-top:4px;"></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" id="joblist-taex-cancel-btn"
+              onclick="closeModal('modal-joblist-taex-upload')">Batal</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: UPLOAD PO -->
 <div class="modal-overlay" id="modal-po-upload">
@@ -8766,6 +8896,197 @@ async function confirmClearWorkflow() {
     hideLoading();
     toast('Gagal hapus: ' + e.message, 'err');
   }
+}
+
+
+
+
+// ============================================================
+// JOBLIST TAEX
+// ============================================================
+let joblistTaexFiltered = [];
+let joblistTaexServerMeta = { total: 0, totalPages: 1, page: 1, limit: 100 };
+let _joblistTaexFiltersLoaded = false;
+
+// Daftarkan ke NEW_UPLOAD_META agar handleFileSelectNew() bisa handle
+NEW_UPLOAD_META['joblist-taex'] = {
+  backendType: 'joblisttaex',
+  reloadFn:    fetchAndRenderJoblistTaex,
+  modalId:     'modal-joblist-taex-upload'
+};
+
+// Daftarkan ke HEADER_TITLES
+HEADER_TITLES['joblist-taex'] = ['Joblist TAEX', 'Data Lengkap 75 Kolom'];
+
+// Hook ke switchApp — override renderPage untuk app baru ini
+const _renderPageOrig = renderPage;
+function renderPage(app) {
+  if (app === 'joblist-taex') {
+    fetchAndRenderJoblistTaex();
+    return;
+  }
+  _renderPageOrig(app);
+}
+
+// Hook ke debounceRender
+const _debounceRenderOrig = debounceRender;
+function debounceRender(app) {
+  if (app === 'joblist-taex') {
+    clearTimeout(_debounceTimers['joblist-taex']);
+    _debounceTimers['joblist-taex'] = setTimeout(() => {
+      joblistTaexServerMeta.total = 0;
+      resetPg('joblist-taex');
+      fetchAndRenderJoblistTaex();
+    }, 350);
+    return;
+  }
+  _debounceRenderOrig(app);
+}
+
+function openJoblistTaexUploadModal() {
+  document.getElementById('joblist-taex-file-input').value = '';
+  document.getElementById('joblist-taex-upload-preview').style.display = 'none';
+  document.getElementById('joblist-taex-progress-panel').style.display = 'none';
+  openModal('modal-joblist-taex-upload');
+}
+
+async function fetchAndRenderJoblistTaex() {
+  const q      = (document.getElementById('joblist-taex-search')?.value || '');
+  const fArea  = document.getElementById('joblist-taex-filter-area')?.value  || '';
+  const fDis   = document.getElementById('joblist-taex-filter-disiplin')?.value || '';
+  const fProj  = document.getElementById('joblist-taex-filter-project')?.value || '';
+  const fPkg   = document.getElementById('joblist-taex-filter-package')?.value || '';
+  const pg     = getPg('joblist-taex');
+
+  const params = new URLSearchParams({
+    page: pg.page, limit: pg.size,
+    q, area: fArea, disiplin: fDis, project: fProj, package: fPkg,
+    known_total: joblistTaexServerMeta.total || 0,
+  });
+
+  const tbody = document.getElementById('joblist-taex-tbody');
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="26">⏳ Memuat data...</td></tr>';
+
+  try {
+    const result = await apiFetch('/joblist-taex?' + params.toString());
+    joblistTaexServerMeta = result.pagination || { total:0, totalPages:1, page:pg.page, limit:pg.size };
+    pgState['joblist-taex'] = { page: joblistTaexServerMeta.page, size: joblistTaexServerMeta.limit };
+    joblistTaexFiltered = result.data || [];
+
+    const matCount  = joblistTaexFiltered.filter(r => r.IsMaterial == 1).length;
+    const jasaCount = joblistTaexFiltered.filter(r => r.IsJasa     == 1).length;
+    document.getElementById('joblist-taex-total').textContent    = joblistTaexServerMeta.total.toLocaleString('id-ID');
+    document.getElementById('joblist-taex-material').textContent = matCount;
+    document.getElementById('joblist-taex-jasa').textContent     = jasaCount;
+    document.getElementById('joblist-taex-rowCount').textContent = joblistTaexServerMeta.total.toLocaleString('id-ID') + ' item';
+    document.getElementById('badge-joblist-taex').textContent    = joblistTaexServerMeta.total;
+
+    if (!_joblistTaexFiltersLoaded && joblistTaexServerMeta.total > 0) {
+      _populateJoblistTaexFilters();
+      _joblistTaexFiltersLoaded = true;
+    }
+
+    if (!joblistTaexFiltered.length) {
+      tbody.innerHTML = '<tr><td colspan="26" style="color:#9ca3af;text-align:center;padding:20px">Tidak ada data</td></tr>';
+      renderPagination('joblist-taex-pagination','joblist-taex',0,1,1,pg.size,fetchAndRenderJoblistTaex);
+      return;
+    }
+
+    const flag = v => (v == 1) ? '<span style="color:#16a34a">✅</span>' : '<span style="color:#d1d5db">—</span>';
+    tbody.innerHTML = joblistTaexFiltered.map(r => `<tr>
+      <td style="font-size:11px;font-weight:600;color:#7c2d12;white-space:nowrap">${D(r.NoJoblist)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${r.JoblistDetailDescription||''}">${D(r.JoblistDetailDescription)}</td>
+      <td style="font-weight:600;color:#1a56db;white-space:nowrap">${D(r.EquipmentNo)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"
+          title="${r.DescriptionofTechnicalObject||''}">${D(r.DescriptionofTechnicalObject)}</td>
+      <td style="font-size:11px">${D(r.AreaName)}</td>
+      <td style="font-size:11px">${D(r.UnitName)}</td>
+      <td><span class="badge badge-blue" style="font-size:10px">${D(r.Disiplin)}</span></td>
+      <td style="font-size:11px">${D(r.ProjectNumber)}</td>
+      <td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6">${D(r.ProjectStatus)}</span></td>
+      <td>${D(r.Revision)}</td>
+      <td><b>${D(r.Order)}</b></td>
+      <td style="font-size:10px">${D(r.JoblistDetailReasonName)}</td>
+      <td style="font-size:10px">${D(r.DocumentJoblistTypeName)}</td>
+      <td style="font-size:10px">${D(r.NoDocument)}</td>
+      <td>${D(r.NomorPM)}</td>
+      <td style="text-align:center">${flag(r.IsMechanicalIntegrity)}</td>
+      <td style="text-align:center">${flag(r.IsJasa)}</td>
+      <td style="text-align:center">${flag(r.IsMaterial)}</td>
+      <td style="text-align:center">${flag(r.IsLLDII)}</td>
+      <td style="font-size:10px">${D(r.PlanningJasaStatusName)}</td>
+      <td style="font-size:10px">${D(r.PlanningMaterialStatusName)}</td>
+      <td style="font-size:10px">${D(r.CodeName)}</td>
+      <td style="font-size:10px;white-space:nowrap">${D(r.NoPackage)}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px"
+          title="${r.PackageDescription||''}">${D(r.PackageDescription)}</td>
+      <td style="font-size:10px">${D(r.CreatorName)}</td>
+      <td>${D(r.Plant)}</td>
+    </tr>`).join('');
+
+    renderPagination('joblist-taex-pagination','joblist-taex',
+      joblistTaexServerMeta.total, joblistTaexServerMeta.page,
+      joblistTaexServerMeta.totalPages, joblistTaexServerMeta.limit,
+      fetchAndRenderJoblistTaex);
+
+  } catch(e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="26">❌ Gagal: ${e.message}</td></tr>`;
+  }
+}
+
+async function _populateJoblistTaexFilters() {
+  const fillSelect = async (selectId, kolom) => {
+    try {
+      const res = await apiFetch(`/distinct/joblist_taex/${kolom}`);
+      const el = document.getElementById(selectId);
+      if (!el) return;
+      el.innerHTML = '<option value="">Semua</option>' +
+        (res.values || []).map(v => `<option value="${v}">${v}</option>`).join('');
+    } catch(e) {}
+  };
+  await Promise.all([
+    fillSelect('joblist-taex-filter-area',     'area'),
+    fillSelect('joblist-taex-filter-disiplin', 'disiplin'),
+    fillSelect('joblist-taex-filter-project',  'project'),
+    fillSelect('joblist-taex-filter-package',  'package'),
+  ]);
+}
+
+function joblistTaexResetFilter() {
+  document.getElementById('joblist-taex-search').value = '';
+  ['joblist-taex-filter-area','joblist-taex-filter-disiplin',
+   'joblist-taex-filter-project','joblist-taex-filter-package']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  joblistTaexServerMeta.total = 0;
+  resetPg('joblist-taex');
+  fetchAndRenderJoblistTaex();
+}
+
+async function deleteJoblistTaex() {
+  if (!confirm('Hapus semua data Joblist TAEX?')) return;
+  try {
+    await apiFetch('/joblist-taex', { method: 'DELETE' });
+    joblistTaexFiltered = [];
+    joblistTaexServerMeta = { total:0, totalPages:1, page:1, limit:100 };
+    _joblistTaexFiltersLoaded = false;
+    document.getElementById('badge-joblist-taex').textContent = 0;
+    document.getElementById('joblist-taex-total').textContent = '—';
+    document.getElementById('joblist-taex-tbody').innerHTML =
+      '<tr class="loading-row"><td colspan="26">Upload file Excel untuk memulai</td></tr>';
+    toast('Semua data Joblist TAEX dihapus', 'ok');
+  } catch(e) {
+    toast('Gagal hapus: ' + e.message, 'err');
+  }
+}
+
+function exportJoblistTaexExcel() {
+  if (!joblistTaexFiltered.length) return toast('Tidak ada data untuk diekspor', 'err');
+  const ws = XLSX.utils.json_to_sheet(joblistTaexFiltered);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'JoblistTAEX');
+  XLSX.writeFile(wb, `JoblistTAEX_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Export berhasil!', 'ok');
 }
 
 </script>
