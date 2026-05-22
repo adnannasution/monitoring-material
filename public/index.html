@@ -741,6 +741,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-po" onclick="switchApp('po')">🛒 PO<span class="tab-badge" id="badge-po">0</span></div>
   <div class="tab" id="tab-tracking" onclick="switchApp('tracking')">🔍 Tracking<span class="tab-badge" id="badge-tracking">0</span></div>
   <div class="tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
+  <div class="tab" id="tab-kk-create" style="display:none">📝 Buat KK</div>
 
   <div class="tab" id="tab-vw-joblist-wo" onclick="switchApp('vw-joblist-wo')">📊 VW Joblist WO<span class="tab-badge" id="badge-vwjlwo">0</span></div>
   <div class="tab" id="tab-vw-joblist-detail" onclick="switchApp('vw-joblist-detail')">📋 VW Joblist Detail<span class="tab-badge" id="badge-vwjld">0</span></div>
@@ -2715,6 +2716,49 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   </div>
 </div>
 
+<!-- FULL PAGE: BUAT KERTAS KERJA -->
+<div class="page" id="page-kk-create">
+  <div style="max-width:1100px;margin:0 auto;padding:20px 24px">
+    <div class="filter-bar" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:flex-end;gap:12px;flex:1;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Kode Kertas Kerja</label>
+          <input type="text" id="kk-input-code" readonly style="font-weight:700;color:#7c3aed;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-size:13px;background:#f9fafb;min-width:160px">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Planner Group</label>
+          <select id="kk-pg-type" onchange="kkOnPGTypeChange()" style="border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-size:13px;min-width:200px;background:#fff">
+            <option value="">-- Pilih Planner Group --</option>
+            <option value="TA">TA</option>
+            <option value="OH">OH</option>
+            <option value="Rutin">Rutin</option>
+            <option value="All">All &nbsp;(Semua PG)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <button class="btn btn-reset" onclick="switchApp('prisma-reservasi')">← Batal</button>
+        <button class="btn btn-success" onclick="createKertasKerja()">✅ Buat Kertas Kerja</button>
+      </div>
+    </div>
+
+    <div id="kk-wo-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:13px;font-weight:600;color:#374151;margin:0">
+          Daftar Work Order <span id="kk-wo-count" style="color:#6b7280;font-weight:400"></span>
+        </label>
+        <div style="display:flex;gap:6px">
+          <button type="button" onclick="kkSelectAllWO()" style="font-size:11px;padding:4px 12px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Pilih Semua</button>
+          <button type="button" onclick="kkDeselectAllWO()" style="font-size:11px;padding:4px 12px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Hapus Semua</button>
+        </div>
+      </div>
+      <div id="kk-wo-list" style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 6px;background:#fafafa;min-height:200px;max-height:calc(100vh - 280px);overflow-y:auto"></div>
+    </div>
+
+    <p style="font-size:12px;color:#9ca3af;margin-top:12px;margin-bottom:0">WO yang sudah pernah dipakai tidak ditampilkan. Setiap sesi baru dimulai dengan daftar fresh.</p>
+  </div>
+</div>
+
 <!-- MODAL: BUAT KERTAS KERJA -->
 <div class="modal-overlay" id="modal-kk">
   <div class="modal" style="width:1140px;max-width:95vw">
@@ -3192,6 +3236,7 @@ const SIDEBAR_MENUS = {
   'taex':              [{icon:'📦', label:'Material Stock', active:true}],
   'prisma-reservasi':  [{icon:'📋', label:'Reservasi', active:true},{icon:'📤', label:'Generate PR'}],
   'kertas-kerja':      [{icon:'📋', label:'Reservasi'},{icon:'📝', label:'Kertas Kerja', active:true}],
+  'kk-create':         [{icon:'📋', label:'Reservasi'},{icon:'📝', label:'Buat Kertas Kerja', active:true}],
   'summary':           [{icon:'📋', label:'Reservasi'},{icon:'📊', label:'Summary', active:true}],
   'kumpulan':          [{icon:'📊', label:'Summary'},{icon:'🗂', label:'Kumpulan Summary', active:true}],
   'pr':                [{icon:'🗂', label:'Kumpulan Summary'},{icon:'🧾', label:'SAP PR', active:true}],
@@ -3214,6 +3259,7 @@ const HEADER_TITLES = {
   'taex':             ['TA-ex', 'Material Reservation'],
   'prisma-reservasi': ['Prisma', 'Reservasi Material'],
   'kertas-kerja':     ['Prisma', 'Kertas Kerja'],
+  'kk-create':        ['Prisma', 'Buat Kertas Kerja'],
   'summary':          ['Prisma', 'Summary Material'],
   'kumpulan':         ['Prisma', 'Generate PR · Kumpulan Summary'],
   'pr':               ['SAP · PR', 'Purchase Request'],
@@ -3254,6 +3300,7 @@ function renderPage(app) {
   if (app==='taex') renderTaex();
   else if (app==='prisma-reservasi') { if (!prFiltered.length) fetchAndRenderPrisma(); }
   else if (app==='kertas-kerja') renderKK();
+  else if (app==='kk-create') { /* form is ready, auto-load handled by openKertasKerjaPage */ }
   else if (app==='summary') renderSummary();
   else if (app==='kumpulan') { if (!ksFiltered.length) fetchAndRenderKumpulan(); }
   else if (app==='pr') { if (!sapFiltered.length) fetchAndRenderSAP(); }
@@ -4103,6 +4150,9 @@ async function openKertasKerjaModal() {
   let code = generateKKCode();
   while (existingCodes.has(code)) code = generateKKCode();
 
+  // Reset form & cache untuk sesi baru
+  Object.keys(_kkMatCache).forEach(k => delete _kkMatCache[k]);
+
   document.getElementById('kk-input-code').value = code;
   const pgSel = document.getElementById('kk-pg-type');
   const isAdminOrInventory = (_currentUser && _currentUser.is_admin) ||
@@ -4122,7 +4172,9 @@ async function openKertasKerjaModal() {
   }
   document.getElementById('kk-wo-section').style.display = 'none';
   document.getElementById('kk-wo-list').innerHTML        = '';
-  openModal('modal-kk');
+
+  // Navigasi ke halaman penuh, bukan buka modal
+  switchApp('kk-create');
 
   // Auto-load WO jika PG sudah ditentukan (non-admin)
   if (!isAdminOrInventory && _currentUser?.pg_role) {
@@ -4198,7 +4250,6 @@ async function createKertasKerja() {
       state.kkCode = kkState.value.code || code;
     }
     hideLoading();
-    closeModal('modal-kk');
     setSyncStatus('ok', `✅ Kertas Kerja ${code} dibuat · ${res.rows} baris · ${new Date().toLocaleTimeString('id-ID')}`);
     toast(`Kertas Kerja ${code} berhasil dibuat! (${res.rows} baris)`, 'ok');
     switchApp('kertas-kerja');
@@ -5581,34 +5632,95 @@ async function updateTrackingCards() {
   }
 }
 
-function exportTrackingExcel() {
-  const rows = buildTrackingData();
-  if (!rows.length) { toast('Tidak ada data untuk diekspor', 'err'); return; }
-  const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
-    Plant:                r.Plant||'',
-    Order:                r.Order||'',
-    Equipment:            r.Equipment||'',
-    Order_Description:    r.Description||'',
-    Material:             r.Material||'',
-    Material_Description: r.Material_Description||'',
-    Qty_Reqmts:           r.Qty_Reqmts??'',
-    PR:                   r.PR||'',
-    PR_Item:              r.PR_Item||'',
-    Qty_PR:               r.Qty_PR??'',
-    Req_Date:             r.Req_Date||'',
-    PO:                   r.PO||'',
-    PO_Item:              r.PO_Item||'',
-    PO_Quantity:          r.PO_Quantity??'',
-    Qty_Delivered:        r.Qty_Delivered??'',
-    Deliv_Date:           r.Deliv_Date||'',
-    Net_Price:            r.Net_Price??'',
-    Crcy:                 r.Crcy||'',
-    Status:               r._status||'',
-  })));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Tracking');
-  XLSX.writeFile(wb, `Tracking_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`);
-  toast('Export Tracking berhasil!', 'ok');
+async function exportTrackingExcel() {
+  const q      = (document.getElementById('trk-search').value || '');
+  const fStat  = document.getElementById('trk-filterStatus').value;
+  const fPlant = document.getElementById('trk-filterPlant').value;
+  const sort   = getSort('trk');
+
+  showLoading('Mengekspor data Tracking...');
+  try {
+    const params = new URLSearchParams({
+      page: 1, limit: 99999, q,
+      plant: fPlant, status: fStat || '',
+      order_by: sort.key || 't.id',
+      order_dir: sort.dir > 0 ? 'ASC' : 'DESC',
+    });
+    const result = await apiFetch(`/tracking?${params}`);
+    const statusText = { 'no-pr':'Belum PR','pr-created':'PR Created','po-created':'PO Created','partial':'Partial Delivery','complete':'Complete' };
+    const rows = (result.data || []).map(r => ({
+      Plant:                r.Plant||'',
+      Equipment:            r.Equipment||'',
+      Order:                r.Order||'',
+      Reserv_No:            r.Reservno||'',
+      Revision:             r.Revision||'',
+      Material:             r.Material||'',
+      Itm:                  r.Itm||'',
+      Material_Description: r.Material_Description||'',
+      Qty_Reqmts:           r.Qty_Reqmts??'',
+      Qty_Stock:            r.Qty_Stock??'',
+      PR:                   r.PR||'',
+      PR_Item:              r.PR_Item||r.Item||'',
+      Qty_PR:               r.Qty_PR??'',
+      Cost_Ctrs:            r.Cost_Ctrs||'',
+      SLoc:                 r.SLoc||'',
+      Del:                  r.Del||'',
+      FIs:                  r.FIs||'',
+      Ict:                  r.Ict||'',
+      PG:                   r.PG||'',
+      Recipient:            r.Recipient||'',
+      Unloading_Point:      r.Unloading_point||'',
+      Reqmts_Date:          r.Reqmts_Date||'',
+      Qty_f_avail_check:    r.Qty_f_avail_check??'',
+      Qty_Withdrawn:        r.Qty_Withdrawn??'',
+      UoM:                  r.UoM||'',
+      GL_Acct:              r.GL_Acct||'',
+      Res_Price:            r.Res_Price??'',
+      Res_per:              r.Res_per??'',
+      Res_Curr:             r.Res_Curr||'',
+      WO_Description:       r.WO_Description||'',
+      Superior_Order:       r.Superior_Order||'',
+      Notification:         r.WO_Notification||'',
+      Created_On:           r.Created_On||'',
+      System_Status:        r.WO_System_Status||'',
+      User_Status:          r.WO_User_Status||'',
+      Funct_Location:       r.WO_Funct_Location||'',
+      Location:             r.Location||'',
+      WBS_Ord_header:       r.WBS_Ord_header||'',
+      CostCenter:           r.CostCenter||'',
+      Total_Plan_Cost:      r.Total_Plan_Cost??'',
+      Total_Act_Cost:       r.Total_Act_Cost??'',
+      Planner_Group:        r.WO_Planner_Group||'',
+      MainWorkCtr:          r.WO_Main_Work_Ctr||'',
+      Entry_by:             r.Entry_by||'',
+      Changed_by:           r.Changed_by||'',
+      Basic_Start_Date:     r.WO_Basic_Start||'',
+      Basic_Finish_Date:    r.WO_Basic_Finish||'',
+      Actual_Release:       r.WO_Actual_Release||'',
+      Req_Date:             r.Req_Date||'',
+      PO:                   r.PO||r.PO_PO||'',
+      PO_Item:              r.PO_PO_Item||'',
+      PO_Quantity:          r.PO_Quantity??'',
+      Qty_Delivered:        r.PO_Qty_Delivered??'',
+      Deliv_Date:           r.PO_Deliv_Date||'',
+      Net_Price:            r.PO_Net_Price??'',
+      Crcy:                 r.PO_Crcy||'',
+      Doc_Date:             r.PO_Doc_Date||'',
+      Status:               statusText[calcItemStatus({ PR:r.PR, PO:r.PO||r.PO_PO, PO_Quantity:r.PO_Quantity, Qty_Delivered:r.PO_Qty_Delivered })]||'',
+    }));
+
+    if (!rows.length) { hideLoading(); toast('Tidak ada data untuk diekspor', 'err'); return; }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tracking');
+    XLSX.writeFile(wb, `Tracking_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`);
+    hideLoading();
+    toast(`Export Tracking berhasil! (${rows.length.toLocaleString('id-ID')} baris)`, 'ok');
+  } catch(e) {
+    hideLoading();
+    toast('Gagal export: ' + e.message, 'err');
+  }
 }
 
 // ============================================================
@@ -8348,7 +8460,7 @@ function _kkRenderMaterials(order, mats) {
         const descShort = desc.length > 35 ? desc.substring(0,35) + '...' : desc;
         return `<tr style="border-bottom:1px solid #f3f4f6">
           <td style="padding:3px 6px">
-            <input type="checkbox" class="kk-mat-check" checked
+            <input type="checkbox" class="kk-mat-check"
                    data-order="${order}" data-itm="${m.itm}"
                    style="cursor:pointer;accent-color:#7c3aed"
                    onchange="kkMatCheckChange('${order}')">
