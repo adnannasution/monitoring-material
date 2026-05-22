@@ -8532,7 +8532,9 @@ function kkMatCheckChange(order) {
   if (!woCb) return;
   if (checked === 0) {
     woCb.checked = false; woCb.indeterminate = false;
-  } else if (checked === total) {
+  } else if (checked === total && _kkSearchMode !== 'mat') {
+    // Di mode By Material, material yang di-render hanya yang cocok search,
+    // bukan semua material WO → jangan pernah set WO sebagai full-checked
     woCb.checked = true;  woCb.indeterminate = false;
   } else {
     woCb.checked = false; woCb.indeterminate = true;
@@ -8546,9 +8548,20 @@ function kkCollectSelection() {
 
   document.querySelectorAll('.kk-wo-check').forEach(woCb => {
     const order = woCb.value;
+    const matChecks = document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`);
+
+    // Mode By Material: selalu ambil per-material spesifik, jangan pernah fullWO.
+    // Di mode ini hanya material yang cocok search yang di-render,
+    // sehingga tidak bisa dianggap mewakili semua material WO.
+    if (_kkSearchMode === 'mat') {
+      [...matChecks].filter(cb => cb.checked).forEach(cb => {
+        specificItems.push({ order, itm: cb.dataset.itm });
+      });
+      return;
+    }
+
     const matDiv = document.getElementById('kkmat-' + order);
     const isExpanded = matDiv && matDiv.style.display !== 'none';
-    const matChecks = document.querySelectorAll(`.kk-mat-check[data-order="${order}"]`);
 
     if (!isExpanded || !matChecks.length) {
       // Tidak di-expand atau belum load → kalau WO tercentang, ambil semua
@@ -8560,7 +8573,7 @@ function kkCollectSelection() {
         // Semua material tercentang → treat sebagai full WO
         fullWOs.push(order);
       } else {
-        // Partial atau tidak ada → ambil yang tercentang saja
+        // Partial → ambil yang tercentang saja
         checkedMats.forEach(cb => {
           specificItems.push({ order, itm: cb.dataset.itm });
         });
