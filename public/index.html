@@ -2724,14 +2724,16 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="modal" style="width:80vw;max-width:80vw;height:87vh;max-height:87vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
 
     <!-- HEADER -->
-    <div class="modal-header" style="flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="modal-header" style="flex-shrink:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px">
       <div style="flex:1;min-width:0">
-        <h3 style="margin:0">📝 Buat Kertas Kerja</h3>
-        <div style="font-size:11px;color:#9ca3af;margin-top:2px">Pilih Work Order — kode KK di-generate otomatis dari kolom PG data</div>
+        <h3 style="margin:0;font-size:14px">📝 Buat Kertas Kerja</h3>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px">Kode KK di-generate otomatis dari kolom PG data</div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-        <label style="font-size:11px;font-weight:600;color:#6b7280">Planner Group:</label>
-        <select id="kk-pg-type" onchange="kkOnPGTypeChange()" class="filter-input" style="min-width:150px;font-size:12px">
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:5px 10px">
+        <label style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap">Planner Group:</label>
+        <select id="kk-pg-type" onchange="kkOnPGTypeChange()"
+                style="border:1px solid #d1d5db;border-radius:3px;padding:4px 8px;font-size:12px;outline:none;background:#fff;color:#1e293b;cursor:pointer;min-width:140px"
+                onfocus="this.style.borderColor='#1a56db'" onblur="this.style.borderColor='#d1d5db'">
           <option value="">-- Pilih PG --</option>
           <option value="TA">TA</option>
           <option value="OH">OH</option>
@@ -2739,7 +2741,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
           <option value="All">All (Semua PG)</option>
         </select>
       </div>
-      <button class="modal-close" onclick="closeModal('modal-kk')">✕</button>
+      <button class="modal-close" onclick="closeModal('modal-kk')" style="flex-shrink:0">✕</button>
     </div>
 
     <!-- BODY -->
@@ -2786,9 +2788,9 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
           <div style="position:relative;flex:1;min-width:160px;max-width:300px">
             <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none;font-size:12px">🔍</span>
             <input type="text" id="kk-wo-search" placeholder="Cari nomor Work Order..."
-                   oninput="kkHandleSearch()" class="filter-input"
-                   style="width:100%;padding:5px 8px 5px 28px;font-size:12px;box-sizing:border-box"
-                   onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor=''">
+                   oninput="kkHandleSearch()"
+                   style="width:100%;padding:5px 8px 5px 28px;font-size:12px;box-sizing:border-box;border:1px solid #d1d5db;border-radius:3px;outline:none;background:#fff"
+                   onfocus="this.style.borderColor='#1a56db'" onblur="this.style.borderColor='#d1d5db'">
           </div>
           <span id="kk-wo-count" style="font-size:11px;color:#6b7280;white-space:nowrap"></span>
           <div style="display:flex;gap:4px;margin-left:auto">
