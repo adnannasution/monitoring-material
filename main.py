@@ -910,18 +910,16 @@ async def create_kertas_kerja(request: Request):
     """
     Buat Kertas Kerja dari WO terpilih:
     - Ambil baris PRISMA untuk WO tersebut (Del≠X, FIs≠X)
+    - Generate kode KK otomatis dari kolom PG pada data
     - Simpan ke app_state kk_current
     """
     check_api_key(request)
     user = get_current_user(request)
     body = await request.json()
 
-    code  = body.get("code", "").strip()
     wos   = body.get("wos", [])    # WO penuh (semua material)
     items = body.get("items", [])  # [{order, itm}] material spesifik
 
-    if not code:
-        raise HTTPException(400, "Kode Kertas Kerja wajib diisi")
     if not wos and not items:
         raise HTTPException(400, "Pilih minimal satu Work Order atau Material")
 
@@ -966,12 +964,29 @@ async def create_kertas_kerja(request: Request):
     if not rows:
         raise HTTPException(404, "Tidak ada data PRISMA untuk WO yang dipilih")
 
+    # Auto-generate kode KK dari kolom PG pada baris terpilih
+    # PG format: "3MR/TA", "3MR/OH", "3MR/R" → ambil bagian setelah "/"
+    pg_prefix_map = {"TA": "TA", "OH": "OH", "R": "RT", "RUTIN": "RT"}
+    pg_suffixes = set()
+    for r in rows:
+        pg_val = (r.get("pg") or "").strip()
+        if "/" in pg_val:
+            suffix = pg_val.rsplit("/", 1)[-1].strip().upper()
+        else:
+            suffix = pg_val.upper()
+        pg_suffixes.add(suffix)
+    if len(pg_suffixes) == 1:
+        suffix = next(iter(pg_suffixes))
+        prefix = pg_prefix_map.get(suffix, "KK")
+    else:
+        prefix = "KK"
+    import random, string
+    digits = ''.join(random.choices(string.digits, k=8))
+    code = f"{prefix}{digits}"
+
     kk_data = []
     for r in rows:
         d = dict(r)
-        d["CodeKertasKerja"]  = code
-        d["Qty_StockOnhand"]  = d.get("qty_stock_onhand")
-        # Rename keys ke format frontend
         kk_data.append({
             "ID": d["id"], "Plant": d["plant"], "Equipment": d["equipment"],
             "Revision": d["revision"], "Order": d["order"], "Reservno": d["reservno"],
