@@ -4405,13 +4405,13 @@ async function createKertasKerja() {
     });
     const code = res.code || '';
     // Sync state dari server response
-    state.kkData = res.data || [];
-    state.kkCode = code;
-    // Reload kk_current dari server ke state
     const kkState = await apiFetch('/state/kk_current');
     if (kkState?.value) {
-      state.kkData = kkState.value.data || [];
+      const newData = kkState.value.data || [];
+      state.kkData = [...(state.kkData || []), ...newData];
       state.kkCode = kkState.value.code || code;
+    } else {
+      state.kkCode = code;
     }
     hideLoading();
     closeModal('modal-kk');
