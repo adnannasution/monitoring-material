@@ -2719,100 +2719,94 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 <!-- FULL PAGE: BUAT KERTAS KERJA (konten ada di modal-kk) -->
 <div class="page" id="page-kk-create" style="padding:0;gap:0;overflow:hidden"></div>
 
-<!-- MODAL: BUAT KERTAS KERJA (fullscreen) -->
+<!-- MODAL: BUAT KERTAS KERJA -->
 <div class="modal-overlay" id="modal-kk">
-  <div class="modal" style="width:98vw;max-width:98vw;height:95vh;max-height:95vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+  <div class="modal" style="width:80vw;max-width:80vw;height:87vh;max-height:87vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
 
     <!-- HEADER -->
-    <div class="modal-header" style="flex-shrink:0;padding:12px 20px;border-bottom:2px solid #e5e7eb;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div class="modal-header" style="flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:0">
-        <div style="font-size:15px;font-weight:700;color:#1e293b">📝 Buat Kertas Kerja</div>
-        <div style="font-size:11px;color:#9ca3af;margin-top:1px">Pilih Work Order — kode KK akan di-generate otomatis dari data</div>
+        <h3 style="margin:0">📝 Buat Kertas Kerja</h3>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px">Pilih Work Order — kode KK di-generate otomatis dari kolom PG data</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
-        <span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.07em">Planner Group</span>
-        <select id="kk-pg-type" onchange="kkOnPGTypeChange()"
-                style="border:2px solid #e5e7eb;border-radius:7px;padding:5px 12px;font-size:13px;min-width:175px;background:#fff;color:#1e293b;cursor:pointer;font-weight:500">
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <label style="font-size:11px;font-weight:600;color:#6b7280">Planner Group:</label>
+        <select id="kk-pg-type" onchange="kkOnPGTypeChange()" class="filter-input" style="min-width:150px;font-size:12px">
           <option value="">-- Pilih PG --</option>
           <option value="TA">TA</option>
           <option value="OH">OH</option>
           <option value="Rutin">Rutin</option>
-          <option value="All">All &nbsp;(Semua PG)</option>
+          <option value="All">All (Semua PG)</option>
         </select>
       </div>
-      <button class="modal-close" onclick="closeModal('modal-kk')" style="flex-shrink:0">✕</button>
+      <button class="modal-close" onclick="closeModal('modal-kk')">✕</button>
     </div>
 
-    <!-- BODY (flex:1, scroll sendiri) -->
-    <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:0">
+    <!-- BODY -->
+    <div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px;min-height:0">
 
       <!-- EMPTY STATE -->
-      <div id="kk-empty-state" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#9ca3af;padding:40px">
-        <div style="font-size:56px;line-height:1">📋</div>
-        <div style="font-size:15px;font-weight:600;color:#6b7280">Pilih Planner Group untuk memulai</div>
-        <div style="font-size:13px;text-align:center;max-width:340px;line-height:1.6">Setelah memilih Planner Group di atas, daftar Work Order yang tersedia akan tampil di sini</div>
+      <div id="kk-empty-state" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#9ca3af;padding:40px">
+        <div style="font-size:44px;line-height:1">📋</div>
+        <div style="font-size:13px;font-weight:600;color:#6b7280">Pilih Planner Group untuk memulai</div>
+        <div style="font-size:12px;text-align:center;max-width:320px;line-height:1.6">Setelah memilih Planner Group di atas, daftar Work Order yang tersedia akan tampil di sini</div>
       </div>
 
       <!-- WO SECTION -->
-      <div id="kk-wo-section" style="display:none;flex-direction:column;gap:12px">
+      <div id="kk-wo-section" style="display:none;flex-direction:column;gap:10px">
 
         <!-- INFO CARDS -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0">
-          <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:10px;padding:12px 18px;min-width:130px">
-            <div style="font-size:26px;font-weight:700;color:#1d4ed8;line-height:1" id="kk-card-total-wo">0</div>
-            <div style="font-size:11px;color:#3b82f6;font-weight:600;margin-top:4px">WO Tersedia</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0">
+          <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:8px;padding:8px 14px;min-width:110px">
+            <div style="font-size:20px;font-weight:700;color:#1d4ed8;line-height:1" id="kk-card-total-wo">0</div>
+            <div style="font-size:11px;color:#3b82f6;font-weight:600;margin-top:3px">WO Tersedia</div>
           </div>
-          <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;border-radius:10px;padding:12px 18px;min-width:130px">
-            <div style="font-size:26px;font-weight:700;color:#15803d;line-height:1" id="kk-card-selected-wo">0</div>
-            <div style="font-size:11px;color:#16a34a;font-weight:600;margin-top:4px">WO Dipilih</div>
+          <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;min-width:110px">
+            <div style="font-size:20px;font-weight:700;color:#15803d;line-height:1" id="kk-card-selected-wo">0</div>
+            <div style="font-size:11px;color:#16a34a;font-weight:600;margin-top:3px">WO Dipilih</div>
           </div>
-          <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 18px;flex:1;min-width:220px;display:flex;align-items:center;gap:8px">
-            <span style="font-size:20px;flex-shrink:0">💡</span>
-            <span style="font-size:12px;color:#6d28d9;line-height:1.5">WO yang sudah dipakai tidak ditampilkan. Expand WO untuk memilih material tertentu saja. Kode KK di-generate otomatis dari kolom PG data.</span>
+          <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px 14px;flex:1;min-width:200px;display:flex;align-items:center;gap:6px">
+            <span style="font-size:16px;flex-shrink:0">💡</span>
+            <span style="font-size:11px;color:#6d28d9;line-height:1.5">WO yang sudah dipakai tidak ditampilkan. Expand WO untuk memilih material tertentu saja.</span>
           </div>
         </div>
 
         <!-- SEARCH TOOLBAR -->
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0">
-          <div style="display:flex;border:1.5px solid #e5e7eb;border-radius:8px;overflow:hidden;flex-shrink:0">
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">
+          <div style="display:flex;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;flex-shrink:0">
             <button id="kk-mode-wo" onclick="kkSetSearchMode('wo')"
-                    style="padding:6px 14px;font-size:12px;border:none;border-right:1px solid #e5e7eb;cursor:pointer;font-weight:600;background:#7c3aed;color:#fff">
+                    style="padding:5px 12px;font-size:11px;border:none;border-right:1px solid #e5e7eb;cursor:pointer;font-weight:600;background:#7c3aed;color:#fff">
               🔢 By WO
             </button>
             <button id="kk-mode-mat" onclick="kkSetSearchMode('mat')"
-                    style="padding:6px 14px;font-size:12px;border:none;cursor:pointer;font-weight:500;background:#f9fafb;color:#6b7280">
+                    style="padding:5px 12px;font-size:11px;border:none;cursor:pointer;font-weight:500;background:#fff;color:#6b7280">
               🧩 By Material
             </button>
           </div>
-          <div style="position:relative;flex:1;min-width:180px;max-width:340px">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none;font-size:14px">🔍</span>
+          <div style="position:relative;flex:1;min-width:160px;max-width:300px">
+            <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none;font-size:12px">🔍</span>
             <input type="text" id="kk-wo-search" placeholder="Cari nomor Work Order..."
-                   oninput="kkHandleSearch()"
-                   style="width:100%;padding:7px 10px 7px 33px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;background:#f9fafb;box-sizing:border-box"
-                   onfocus="this.style.borderColor='#7c3aed';this.style.background='#fff'"
-                   onblur="this.style.borderColor='#e5e7eb';this.style.background='#f9fafb'">
+                   oninput="kkHandleSearch()" class="filter-input"
+                   style="width:100%;padding:5px 8px 5px 28px;font-size:12px;box-sizing:border-box"
+                   onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor=''">
           </div>
-          <span id="kk-wo-count" style="font-size:12px;color:#6b7280;white-space:nowrap"></span>
-          <div style="display:flex;gap:6px;margin-left:auto">
-            <button type="button" onclick="kkSelectAllWO()"
-                    style="font-size:12px;padding:6px 14px;border:1.5px solid #3b82f6;border-radius:7px;background:#eff6ff;color:#1d4ed8;cursor:pointer;font-weight:600"
-                    onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">☑ Pilih Semua</button>
-            <button type="button" onclick="kkDeselectAllWO()"
-                    style="font-size:12px;padding:6px 14px;border:1.5px solid #d1d5db;border-radius:7px;background:#f9fafb;color:#374151;cursor:pointer"
-                    onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f9fafb'">☐ Hapus Semua</button>
+          <span id="kk-wo-count" style="font-size:11px;color:#6b7280;white-space:nowrap"></span>
+          <div style="display:flex;gap:4px;margin-left:auto">
+            <button type="button" onclick="kkSelectAllWO()" class="btn btn-search" style="font-size:11px;padding:4px 10px">☑ Pilih Semua</button>
+            <button type="button" onclick="kkDeselectAllWO()" class="btn btn-reset" style="font-size:11px;padding:4px 10px">☐ Hapus Semua</button>
           </div>
         </div>
 
         <!-- WO LIST -->
-        <div id="kk-wo-list" style="border:1px solid #e5e7eb;border-radius:10px;background:#fff;overflow-y:auto;flex:1;min-height:300px"></div>
+        <div id="kk-wo-list" style="border:1px solid #e5e7eb;border-radius:8px;background:#fff;overflow-y:auto;flex:1;min-height:200px"></div>
       </div>
 
     </div>
 
     <!-- FOOTER -->
-    <div class="modal-footer" style="flex-shrink:0;border-top:1px solid #e5e7eb;padding:12px 20px;display:flex;justify-content:flex-end;gap:8px">
+    <div class="modal-footer">
       <button class="btn btn-reset" onclick="closeModal('modal-kk')">Batal</button>
-      <button class="btn btn-success" onclick="createKertasKerja()" style="padding:8px 22px;font-size:13px;font-weight:600">✅ Buat Kertas Kerja</button>
+      <button class="btn btn-success" onclick="createKertasKerja()">✅ Buat Kertas Kerja</button>
     </div>
   </div>
 </div>

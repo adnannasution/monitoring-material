@@ -964,20 +964,17 @@ async def create_kertas_kerja(request: Request):
     if not rows:
         raise HTTPException(404, "Tidak ada data PRISMA untuk WO yang dipilih")
 
-    # Auto-generate kode KK dari kolom PG pada baris terpilih
-    # PG format: "3MR/TA", "3MR/OH", "3MR/R" → ambil bagian setelah "/"
-    pg_prefix_map = {"TA": "TA", "OH": "OH", "R": "RT", "RUTIN": "RT"}
-    pg_suffixes = set()
+    # Auto-generate kode KK dari kolom PG pada baris terpilih.
+    # PG_SUFFIX_MAP = {"TA":"T","OH":"O","Rutin":"R"} → karakter terakhir PG menentukan group.
+    # Contoh: "3RO" → last char "O" → OH; "3MT" → "T" → TA; "3MR" → "R" → RT
+    last_char_to_prefix = {"T": "TA", "O": "OH", "R": "RT"}
+    pg_last_chars = set()
     for r in rows:
         pg_val = (r.get("pg") or "").strip()
-        if "/" in pg_val:
-            suffix = pg_val.rsplit("/", 1)[-1].strip().upper()
-        else:
-            suffix = pg_val.upper()
-        pg_suffixes.add(suffix)
-    if len(pg_suffixes) == 1:
-        suffix = next(iter(pg_suffixes))
-        prefix = pg_prefix_map.get(suffix, "KK")
+        last_char = pg_val[-1].upper() if pg_val else ""
+        pg_last_chars.add(last_char)
+    if len(pg_last_chars) == 1:
+        prefix = last_char_to_prefix.get(next(iter(pg_last_chars)), "KK")
     else:
         prefix = "KK"
     import random, string
