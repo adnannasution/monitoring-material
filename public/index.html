@@ -2718,44 +2718,77 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 
 <!-- FULL PAGE: BUAT KERTAS KERJA -->
 <div class="page" id="page-kk-create">
-  <div style="max-width:1100px;margin:0 auto;padding:20px 24px">
-    <div class="filter-bar" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div style="display:flex;align-items:flex-end;gap:12px;flex:1;flex-wrap:wrap">
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Kode Kertas Kerja</label>
-          <input type="text" id="kk-input-code" readonly style="font-weight:700;color:#7c3aed;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-size:13px;background:#f9fafb;min-width:160px">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Planner Group</label>
-          <select id="kk-pg-type" onchange="kkOnPGTypeChange()" style="border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-size:13px;min-width:200px;background:#fff">
-            <option value="">-- Pilih Planner Group --</option>
-            <option value="TA">TA</option>
-            <option value="OH">OH</option>
-            <option value="Rutin">Rutin</option>
-            <option value="All">All &nbsp;(Semua PG)</option>
-          </select>
-        </div>
+  <!-- HEADER CARD -->
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.04)">
+    <div style="flex:1;min-width:160px">
+      <div style="font-size:17px;font-weight:700;color:#1e293b;line-height:1.3">📝 Buat Kertas Kerja</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:2px">Pilih Work Order yang akan dimasukkan ke Kertas Kerja</div>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.07em">Kode KK</span>
+        <input type="text" id="kk-input-code" readonly
+               style="font-weight:700;color:#7c3aed;border:2px solid #ddd6fe;border-radius:8px;padding:6px 12px;font-size:14px;background:#faf5ff;width:148px;text-align:center;letter-spacing:.05em">
       </div>
-      <div style="display:flex;gap:8px;align-items:flex-end">
-        <button class="btn btn-reset" onclick="switchApp('prisma-reservasi')">← Batal</button>
-        <button class="btn btn-success" onclick="createKertasKerja()">✅ Buat Kertas Kerja</button>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.07em">Planner Group</span>
+        <select id="kk-pg-type" onchange="kkOnPGTypeChange()"
+                style="border:1.5px solid #e5e7eb;border-radius:8px;padding:6px 14px;font-size:13px;min-width:185px;background:#fff;color:#1e293b;cursor:pointer">
+          <option value="">-- Pilih Planner Group --</option>
+          <option value="TA">TA</option>
+          <option value="OH">OH</option>
+          <option value="Rutin">Rutin</option>
+          <option value="All">All &nbsp;(Semua PG)</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;padding-bottom:1px">
+        <button class="btn btn-reset" onclick="switchApp('prisma-reservasi')" style="padding:7px 16px;font-size:13px">← Batal</button>
+        <button class="btn btn-success" onclick="createKertasKerja()" style="padding:7px 18px;font-size:13px;font-weight:600">✅ Buat Kertas Kerja</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WO SECTION (muncul setelah PG dipilih) -->
+  <div id="kk-wo-section" style="display:none;flex-direction:column;gap:10px;flex:1;overflow:hidden;min-height:0">
+    <!-- INFO CARDS -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0">
+      <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:10px;padding:12px 18px;min-width:130px">
+        <div style="font-size:22px;font-weight:700;color:#1d4ed8;line-height:1" id="kk-card-total-wo">0</div>
+        <div style="font-size:11px;color:#3b82f6;font-weight:600;margin-top:3px">WO Tersedia</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;border-radius:10px;padding:12px 18px;min-width:130px">
+        <div style="font-size:22px;font-weight:700;color:#15803d;line-height:1" id="kk-card-selected-wo">0</div>
+        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-top:3px">WO Dipilih</div>
+      </div>
+      <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 18px;flex:1;min-width:220px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">💡</span>
+        <span style="font-size:12px;color:#6d28d9;line-height:1.4">WO yang sudah pernah dipakai tidak ditampilkan. Expand WO untuk memilih material tertentu saja.</span>
       </div>
     </div>
 
-    <div id="kk-wo-section" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <label style="font-size:13px;font-weight:600;color:#374151;margin:0">
-          Daftar Work Order <span id="kk-wo-count" style="color:#6b7280;font-weight:400"></span>
-        </label>
-        <div style="display:flex;gap:6px">
-          <button type="button" onclick="kkSelectAllWO()" style="font-size:11px;padding:4px 12px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Pilih Semua</button>
-          <button type="button" onclick="kkDeselectAllWO()" style="font-size:11px;padding:4px 12px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Hapus Semua</button>
-        </div>
+    <!-- SEARCH & ACTIONS TOOLBAR -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px">
+      <div style="position:relative;flex:1;min-width:200px;max-width:380px">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9ca3af;font-size:15px;pointer-events:none">🔍</span>
+        <input type="text" id="kk-wo-search" placeholder="Cari nomor Work Order..."
+               oninput="kkFilterWOList()"
+               style="width:100%;padding:8px 10px 8px 34px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;background:#f9fafb;box-sizing:border-box;transition:border-color .15s"
+               onfocus="this.style.borderColor='#7c3aed';this.style.background='#fff'"
+               onblur="this.style.borderColor='#e5e7eb';this.style.background='#f9fafb'">
       </div>
-      <div id="kk-wo-list" style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 6px;background:#fafafa;min-height:200px;max-height:calc(100vh - 280px);overflow-y:auto"></div>
+      <span id="kk-wo-count" style="font-size:12px;color:#6b7280;white-space:nowrap;min-width:90px"></span>
+      <div style="display:flex;gap:6px;margin-left:auto">
+        <button type="button" onclick="kkSelectAllWO()"
+                style="font-size:12px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:7px;background:#eff6ff;color:#1d4ed8;cursor:pointer;font-weight:600;transition:background .15s"
+                onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">☑ Pilih Semua</button>
+        <button type="button" onclick="kkDeselectAllWO()"
+                style="font-size:12px;padding:7px 14px;border:1.5px solid #d1d5db;border-radius:7px;background:#f9fafb;color:#374151;cursor:pointer;transition:background .15s"
+                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f9fafb'">☐ Hapus Semua</button>
+      </div>
     </div>
 
-    <p style="font-size:12px;color:#9ca3af;margin-top:12px;margin-bottom:0">WO yang sudah pernah dipakai tidak ditampilkan. Setiap sesi baru dimulai dengan daftar fresh.</p>
+    <!-- WO LIST -->
+    <div id="kk-wo-list" style="flex:1;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fff;min-height:0"></div>
   </div>
 </div>
 
@@ -2770,11 +2803,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
       <div class="form-row">
         <div class="form-group">
           <label>Kode Kertas Kerja (otomatis)</label>
-          <input type="text" id="kk-input-code" readonly style="font-weight:700; color:#7c3aed;">
+          <input type="text" id="kk-input-code-_m" readonly style="font-weight:700; color:#7c3aed;">
         </div>
         <div class="form-group">
           <label>Planner Group</label>
-          <select id="kk-pg-type" onchange="kkOnPGTypeChange()">
+          <select id="kk-pg-type-_m">
             <option value="">-- Pilih Planner Group --</option>
             <option value="TA">TA</option>
             <option value="OH">OH</option>
@@ -2784,15 +2817,15 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
         </div>
       </div>
 
-      <div id="kk-wo-section" style="display:none;margin-top:10px">
+      <div id="kk-wo-section-_m" style="display:none;margin-top:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <label style="font-size:12px;font-weight:600;margin:0">Work Order <span id="kk-wo-count" style="color:#6b7280;font-weight:400"></span></label>
+          <label style="font-size:12px;font-weight:600;margin:0">Work Order <span id="kk-wo-count-_m" style="color:#6b7280;font-weight:400"></span></label>
           <div style="display:flex;gap:6px">
-            <button type="button" onclick="kkSelectAllWO()" style="font-size:11px;padding:2px 10px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Pilih Semua</button>
-            <button type="button" onclick="kkDeselectAllWO()" style="font-size:11px;padding:2px 10px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Hapus Semua</button>
+            <button type="button" style="font-size:11px;padding:2px 10px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Pilih Semua</button>
+            <button type="button" style="font-size:11px;padding:2px 10px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer">Hapus Semua</button>
           </div>
         </div>
-        <div id="kk-wo-list" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;padding:6px 4px;background:#fafafa"></div>
+        <div id="kk-wo-list-_m" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;padding:6px 4px;background:#fafafa"></div>
       </div>
 
       <p style="font-size:12px;color:#6b7280;margin-top:10px;margin-bottom:0">Kertas kerja dibuat dari PRISMA Reservasi sesuai WO yang dipilih. WO yang sudah pernah dipakai tidak ditampilkan.</p>
@@ -4152,6 +4185,12 @@ async function openKertasKerjaModal() {
 
   // Reset form & cache untuk sesi baru
   Object.keys(_kkMatCache).forEach(k => delete _kkMatCache[k]);
+  const _kkSearch = document.getElementById('kk-wo-search');
+  if (_kkSearch) _kkSearch.value = '';
+  const _kkCardT = document.getElementById('kk-card-total-wo');
+  if (_kkCardT) _kkCardT.textContent = '0';
+  const _kkCardS = document.getElementById('kk-card-selected-wo');
+  if (_kkCardS) _kkCardS.textContent = '0';
 
   document.getElementById('kk-input-code').value = code;
   const pgSel = document.getElementById('kk-pg-type');
@@ -4188,40 +4227,53 @@ async function kkOnPGTypeChange() {
   if (!pgType) { section.style.display = 'none'; return; }
 
   const list = document.getElementById('kk-wo-list');
-  list.innerHTML = '<p style="font-size:12px;color:#6b7280;padding:8px;margin:0">⏳ Memuat daftar WO...</p>';
-  section.style.display = 'block';
+  const searchEl = document.getElementById('kk-wo-search');
+  if (searchEl) searchEl.value = '';
+
+  list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px">⏳ Memuat daftar Work Order...</div>';
+  section.style.display = 'flex';
   document.getElementById('kk-wo-count').textContent = '';
+  document.getElementById('kk-card-total-wo').textContent = '0';
+  document.getElementById('kk-card-selected-wo').textContent = '0';
 
   try {
     const wos = await apiFetch(`/prisma/workorders?pg=${pgType}`);
     if (!wos.length) {
-      list.innerHTML = '<p style="font-size:12px;color:#9ca3af;padding:6px 8px;margin:0">Tidak ada WO tersedia untuk Planner Group ini</p>';
-      document.getElementById('kk-wo-count').textContent = '(0 tersedia)';
+      list.innerHTML = '<div style="padding:32px;text-align:center;color:#9ca3af;font-size:13px">Tidak ada WO tersedia untuk Planner Group ini</div>';
+      document.getElementById('kk-wo-count').textContent = '0 tersedia';
+      document.getElementById('kk-card-total-wo').textContent = '0';
       return;
     }
-    document.getElementById('kk-wo-count').textContent = `(${wos.length} tersedia)`;
+    document.getElementById('kk-wo-count').textContent = `${wos.length} tersedia`;
+    document.getElementById('kk-card-total-wo').textContent = wos.length.toLocaleString('id-ID');
     list.innerHTML = wos.map(w => `
-      <div class="kk-wo-item" id="kkwo-${w.order}">
-        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;transition:background .1s"
-             onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background=''">
+      <div class="kk-wo-item" id="kkwo-${w.order}" data-order="${w.order}"
+           style="border-bottom:1px solid #f1f5f9">
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;transition:background .12s;cursor:default"
+             onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
           <input type="checkbox" class="kk-wo-check" id="kkwocb-${w.order}"
-                 value="${w.order}" style="cursor:pointer;accent-color:#7c3aed;flex-shrink:0"
+                 value="${w.order}"
+                 style="cursor:pointer;accent-color:#7c3aed;width:16px;height:16px;flex-shrink:0"
                  onchange="kkWOCheckChange('${w.order}', this.checked)">
-          <span style="font-weight:600;color:#1a56db;font-size:12px;flex:1;cursor:pointer"
-                onclick="kkToggleExpand('${w.order}', '${document.getElementById('kk-pg-type').value}')">${w.order}</span>
-          <span style="color:#6b7280;font-size:11px">${w.total_mat} mat · Qty: ${parseFloat(w.total_qty).toLocaleString('id-ID',{maximumFractionDigits:1})}</span>
-          <button onclick="kkToggleExpand('${w.order}', '${document.getElementById('kk-pg-type').value}')"
+          <span style="font-family:monospace;font-weight:700;color:#1a56db;font-size:13px;flex-shrink:0;min-width:110px;letter-spacing:.02em">${w.order}</span>
+          <div style="flex:1;display:flex;gap:6px;flex-wrap:wrap">
+            <span style="background:#eff6ff;color:#1d4ed8;font-size:11px;padding:2px 9px;border-radius:12px;font-weight:600">${w.total_mat} material</span>
+            <span style="background:#f0fdf4;color:#15803d;font-size:11px;padding:2px 9px;border-radius:12px;font-weight:600">Qty: ${parseFloat(w.total_qty).toLocaleString('id-ID',{maximumFractionDigits:1})}</span>
+          </div>
+          <button onclick="kkToggleExpand('${w.order}','${pgType}')"
                   id="kkbtn-${w.order}"
-                  style="border:none;background:none;cursor:pointer;font-size:11px;color:#6b7280;padding:2px 4px;border-radius:3px;line-height:1"
-                  title="Lihat/sembunyikan material">▶</button>
+                  style="border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:11px;color:#475569;padding:4px 10px;border-radius:6px;flex-shrink:0;transition:background .12s"
+                  onmouseover="this.style.background='#e0e7ff';this.style.borderColor='#a5b4fc'"
+                  onmouseout="this.style.background='#f8fafc';this.style.borderColor='#e2e8f0'"
+                  title="Lihat/sembunyikan material">▶ Detail</button>
         </div>
-        <div id="kkmat-${w.order}" style="display:none;padding:2px 8px 6px 28px;border-left:2px solid #e0e7ff;margin-left:14px">
-          <div class="kk-mat-loading" style="font-size:11px;color:#9ca3af;padding:4px">⏳ Memuat...</div>
+        <div id="kkmat-${w.order}" style="display:none;padding:4px 16px 10px 44px;border-left:3px solid #ddd6fe;margin:0 16px 8px 16px;border-radius:0 0 6px 6px;background:#fafbff">
+          <div class="kk-mat-loading" style="font-size:11px;color:#9ca3af;padding:6px">⏳ Memuat material...</div>
         </div>
       </div>
     `).join('');
   } catch(e) {
-    list.innerHTML = `<p style="font-size:12px;color:red;padding:8px;margin:0">❌ Gagal memuat: ${e.message}</p>`;
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">❌ Gagal memuat: ${e.message}</div>`;
   }
 }
 
@@ -8477,6 +8529,7 @@ function _kkRenderMaterials(order, mats) {
 // WO checkbox berubah → update semua material di bawahnya
 function kkWOCheckChange(order, checked) {
   _kkSetAllMats(order, checked);
+  kkUpdateSelectedCount();
 }
 
 function _kkSetAllMats(order, checked) {
@@ -8535,21 +8588,47 @@ function kkCollectSelection() {
   return { fullWOs, specificItems };
 }
 
-// Override Pilih Semua & Hapus Semua
+// Pilih Semua & Hapus Semua (hanya WO yang tampil/tidak tersembunyi oleh search)
 function kkSelectAllWO() {
-  document.querySelectorAll('.kk-wo-check').forEach(cb => {
+  document.querySelectorAll('.kk-wo-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('.kk-wo-check');
+    if (!cb) return;
     cb.checked = true; cb.indeterminate = false;
-    const order = cb.value;
-    _kkSetAllMats(order, true);
+    _kkSetAllMats(cb.value, true);
   });
+  kkUpdateSelectedCount();
 }
 
 function kkDeselectAllWO() {
-  document.querySelectorAll('.kk-wo-check').forEach(cb => {
+  document.querySelectorAll('.kk-wo-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('.kk-wo-check');
+    if (!cb) return;
     cb.checked = false; cb.indeterminate = false;
-    const order = cb.value;
-    _kkSetAllMats(order, false);
+    _kkSetAllMats(cb.value, false);
   });
+  kkUpdateSelectedCount();
+}
+
+function kkUpdateSelectedCount() {
+  const total = document.querySelectorAll('.kk-wo-check:checked').length;
+  const el = document.getElementById('kk-card-selected-wo');
+  if (el) el.textContent = total.toLocaleString('id-ID');
+}
+
+function kkFilterWOList() {
+  const q = (document.getElementById('kk-wo-search')?.value || '').toLowerCase().trim();
+  let visible = 0;
+  const items = document.querySelectorAll('.kk-wo-item');
+  items.forEach(item => {
+    const order = (item.dataset.order || '').toLowerCase();
+    const show = !q || order.includes(q);
+    item.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const el = document.getElementById('kk-wo-count');
+  if (el) el.textContent = q ? `${visible} dari ${items.length} tersedia` : `${items.length} tersedia`;
 }
 
 
