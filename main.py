@@ -483,6 +483,17 @@ TRKJL_DISTINCT = {
     "collective": "SELECT DISTINCT disiplin AS v FROM vw_joblist_detail WHERE disiplin IS NOT NULL AND disiplin <> '' ORDER BY v",
 }
 
+
+@app.get("/api/joblist-taex")
+def get_joblist_taex(request: Request, ...):
+    # sama polanya seperti /api/vwjoblistwo
+    
+
+@app.post("/api/joblist-taex/upload")
+async def upload_joblist_taex(request: Request, file: UploadFile = File(...)):
+    # sama polanya seperti /api/vwjoblistwo/upload
+    
+
 @app.get("/api/distinct/{tabel}/{kolom}")
 def get_distinct(tabel: str, kolom: str, request: Request):
     check_api_key(request)

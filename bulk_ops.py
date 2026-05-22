@@ -96,6 +96,78 @@ def bulk_replace_taex(df: pd.DataFrame) -> int:
 
 
 # ─── PRISMA RESERVASI ─────────────────────────────────────────
+
+def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
+    _s = lambda v: None if (v is None or str(v).strip() in ("","nan","None","NULL")) else str(v).strip()
+    _i = lambda v: None if (v is None or str(v).strip() in ("","nan","None","NULL")) else (
+        1 if str(v).strip() in ("1","True","true","TRUE","YES","yes") else 0)
+
+    COLS = [
+        "JoblistId","JoblistDetailDescription","JoblistDetailReasonId",
+        "JoblistDetailReasonName","DocumentJoblistTypeId","DocumentJoblistTypeName",
+        "NoDocument","IsMechanicalIntegrity","IsOptimization","JobDisciplineId",
+        "JobDisciplineName","NomorPM","MaintenancePlan","Maintenanceitem","Notes",
+        "Plant","Created","CreatorName","CreatorJobTitle","IsDeleted","ProjectId",
+        "EquipmentId","JoblistDescription","NoJoblist","ProjectNumber","ProjectTypeId",
+        "ProjectTypeCode","ProjectTypeName","StartDate","FinishDate","Revision",
+        "Description","DurationTaBrickId","DurationTaBrickValue","DurationTaBrickText",
+        "ProjectStatus","EquipmentNo","UnitId","AreaName","AreaAliasName","UnitName",
+        "UnitAliasName","PlanningPlant","FunctionalLocation","Location",
+        "DescriptionofTechnicalObject","EquipmentCategory","Disiplin","CatalogProfile",
+        "CatalogProfileText","GroupAsset","Criticallity","CriticallityText",
+        "MaintenancePlant","MainWorkCenter","ManufacturerOfAsset","ModelType",
+        "IsAllIn","IsAspekDurasi","IsAspekQuality","IsAspekSafety","IsJasa",
+        "IsLLDII","IsMaterial","StatusId","Code","CodeName","PlanningJasaStatusId",
+        "PlanningMaterialStatusId","PlanningJasaStatusName","PlanningMaterialStatusName",
+        "Order","NoPackage","PackageDescription"
+    ]
+
+    bool_cols = {"IsMechanicalIntegrity","IsOptimization","IsDeleted","IsAllIn",
+                 "IsAspekDurasi","IsAspekQuality","IsAspekSafety","IsJasa","IsLLDII","IsMaterial"}
+
+    from psycopg2.extras import execute_values
+    from database import get_conn, release_conn
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM joblist_taex")
+            CHUNK = 500
+            for start in range(0, len(df), CHUNK):
+                chunk = df.iloc[start:start+CHUNK]
+                vals = []
+                for _, row in chunk.iterrows():
+                    r = []
+                    for c in COLS:
+                        v = row.get(c)
+                        r.append(_i(v) if c in bool_cols else _s(v))
+                    vals.append(tuple(r))
+                execute_values(cur, f"""
+                    INSERT INTO joblist_taex (
+                        {', '.join(['joblist_id','joblist_detail_description','joblist_detail_reason_id',
+                        'joblist_detail_reason_name','document_joblist_type_id','document_joblist_type_name',
+                        'no_document','is_mechanical_integrity','is_optimization','job_discipline_id',
+                        'job_discipline_name','nomor_pm','maintenance_plan','maintenance_item','notes',
+                        'plant','created','creator_name','creator_job_title','is_deleted','project_id',
+                        'equipment_id','joblist_description','no_joblist','project_number','project_type_id',
+                        'project_type_code','project_type_name','start_date','finish_date','revision',
+                        'description','duration_ta_brick_id','duration_ta_brick_value','duration_ta_brick_text',
+                        'project_status','equipment_no','unit_id','area_name','area_alias_name','unit_name',
+                        'unit_alias_name','planning_plant','functional_location','location',
+                        'description_of_tech_object','equipment_category','disiplin','catalog_profile',
+                        'catalog_profile_text','group_asset','criticallity','criticallity_text',
+                        'maintenance_plant','main_work_center','manufacturer_of_asset','model_type',
+                        'is_all_in','is_aspek_durasi','is_aspek_quality','is_aspek_safety','is_jasa',
+                        'is_lldii','is_material','status_id','code','code_name','planning_jasa_status_id',
+                        'planning_material_status_id','planning_jasa_status_name',
+                        'planning_material_status_name','"order"','no_package','package_description'])}
+                    ) VALUES %s
+                """, vals)
+        conn.commit()
+    finally:
+        release_conn(conn)
+    return len(df)
+
+
 def bulk_replace_prisma(df: pd.DataFrame) -> int:
     """Selalu upsert — update baris yang sama (order, itm, material), insert baris baru."""
     conn = get_conn()
