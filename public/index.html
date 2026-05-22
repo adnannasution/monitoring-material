@@ -8698,7 +8698,7 @@ async function kkSearchByMaterial() {
               const hiQ = q.toLowerCase();
               const matHi = m.material.toLowerCase().includes(hiQ) ? `<mark style="background:#fef08a;border-radius:2px">${m.material}</mark>` : m.material;
               return `<tr style="border-bottom:1px solid #f3f4f6">
-                <td style="padding:3px 8px"><input type="checkbox" class="kk-mat-check" checked data-order="${r.order}" data-itm="${m.itm}" style="accent-color:#7c3aed;cursor:pointer" onchange="kkMatCheckChange('${r.order}')"></td>
+                <td style="padding:3px 8px"><input type="checkbox" class="kk-mat-check" data-order="${r.order}" data-itm="${m.itm}" style="accent-color:#7c3aed;cursor:pointer" onchange="kkMatCheckChange('${r.order}')"></td>
                 <td style="padding:3px 8px;font-weight:600;color:#1a56db;white-space:nowrap">${matHi}</td>
                 <td style="padding:3px 8px;text-align:right;white-space:nowrap">${parseFloat(m.qty||0).toLocaleString('id-ID',{maximumFractionDigits:2})} ${m.uom||''}</td>
                 <td style="padding:3px 8px;color:#6b7280;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${desc.replace(/"/g,'&quot;')}">${shortDesc||'—'}</td>
