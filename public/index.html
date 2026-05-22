@@ -8944,15 +8944,22 @@ NEW_UPLOAD_META['joblist-taex'] = {
 HEADER_TITLES['joblist-taex'] = ['Joblist TAEX', 'Data Lengkap 75 Kolom'];
 
 // Hook ke switchApp — override renderPage untuk app baru ini
-const _renderPageOrig = renderPage;
-function renderPage(app) {
-  if (app === 'joblist-taex') {
-    fetchAndRenderJoblistTaex();
-    return;
-  }
-  _renderPageOrig(app);
-}
+if (!window._joblistTaexRenderHooked) {
+  window._joblistTaexRenderHooked = true;
 
+  const _renderPageOrig = window.renderPage;
+
+  window.renderPage = function(app) {
+    if (app === 'joblist-taex') {
+      fetchAndRenderJoblistTaex();
+      return;
+    }
+
+    if (typeof _renderPageOrig === 'function') {
+      _renderPageOrig(app);
+    }
+  };
+}
 // Hook ke debounceRender
 const _debounceRenderOrig = debounceRender;
 function debounceRender(app) {
