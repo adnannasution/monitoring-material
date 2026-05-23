@@ -473,6 +473,12 @@ DISTINCT_CONFIG = {
         "material":    ("vw_joblist_detail", "planning_material_status"),
         "proj_status": ("vw_joblist_detail", "project_status"),
     },
+    "joblist_taex": {
+        "area":      ("joblist_taex", "area_name"),
+        "disiplin":  ("joblist_taex", "disiplin"),
+        "project":   ("joblist_taex", "project_number"),
+        "package":   ("joblist_taex", "no_package"),
+    },
 }
 
 # Query khusus untuk trkjl karena merupakan join beberapa tabel
