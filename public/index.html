@@ -3451,6 +3451,11 @@ function renderPage(app) {
   else if (app==='vw-joblist-wo')   { if (!vwJlWoFiltered.length) fetchAndRenderVwJlWo(); else _renderCachedVwJlWo(); }
   else if (app==='vw-joblist-detail') { if (!vwJldFiltered.length) fetchAndRenderVwJld(); else _renderCachedVwJld(); }
   else if (app==='tracking-joblist2') { if (!trkJl2Filtered.length) fetchAndRenderTrkJl2(); else _renderCachedTrkJl2(); }
+ else if (app==='joblist-taex') { 
+    if (!joblistTaexFiltered.length) fetchAndRenderJoblistTaex(); 
+    else renderJoblistTaexTable(); 
+}
+    
 }
 
 function populateFilters() {
