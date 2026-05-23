@@ -8612,24 +8612,24 @@ function _kkRenderMaterials(order, mats) {
   }
   matDiv.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px">'
     + '<thead><tr style="background:#f1f5f9">'
-    + '<th style="padding:3px 6px;text-align:left;width:20px"></th>'
-    + '<th style="padding:3px 6px;text-align:left">Material</th>'
-    + '<th style="padding:3px 6px;text-align:right;white-space:nowrap">Qty</th>'
-    + '<th style="padding:3px 6px;text-align:left">Deskripsi</th>'
+    + '<th style="padding:7px 10px;text-align:left;width:20px"></th>'
+    + '<th style="padding:7px 10px;text-align:left">Material</th>'
+    + '<th style="padding:7px 10px;text-align:right;white-space:nowrap">Qty</th>'
+    + '<th style="padding:7px 10px;text-align:left">Deskripsi</th>'
     + '</tr></thead><tbody>'
     + mats.map(m => {
         const desc = m.description || '';
         const descShort = desc.length > 35 ? desc.substring(0,35) + '...' : desc;
         return `<tr style="border-bottom:1px solid #f3f4f6">
-          <td style="padding:3px 6px">
+          <td style="padding:7px 10px;text-align:center">
             <input type="checkbox" class="kk-mat-check"
                    data-order="${order}" data-itm="${m.itm}"
                    style="cursor:pointer;accent-color:#7c3aed"
                    onchange="kkMatCheckChange('${order}')">
           </td>
-          <td style="padding:3px 6px;font-weight:600;color:#1a56db;white-space:nowrap">${m.material}</td>
-          <td style="padding:3px 6px;text-align:right;white-space:nowrap;color:#374151">${parseFloat(m.qty||0).toLocaleString('id-ID',{maximumFractionDigits:2})} ${m.uom||''}</td>
-          <td style="padding:3px 6px;color:#6b7280;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          <td style="padding:7px 10px;font-weight:600;color:#1a56db;white-space:nowrap">${m.material}</td>
+          <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#374151">${parseFloat(m.qty||0).toLocaleString('id-ID',{maximumFractionDigits:2})} ${m.uom||''}</td>
+          <td style="padding:7px 10px;color:#6b7280;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
               title="${desc.replace(/"/g,'&quot;')}">${descShort || '—'}</td>
         </tr>`;
       }).join('')
