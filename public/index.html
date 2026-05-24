@@ -4350,15 +4350,31 @@ async function kkOnPGTypeChange() {
 
   try {
     const wos = await apiFetch(`/prisma/workorders?pg=${pgType}`);
-    if (!wos.length) {
+
+    // ✅ Bangun set material yang sudah masuk kkData aktif
+    _kkExcludedMaterials = new Set((state.kkData || []).map(r => r.Material));
+
+    // Hitung berapa material per order yang sudah masuk KK
+    const kkOrderMatCount = {};
+    (state.kkData || []).forEach(r => {
+      kkOrderMatCount[r.Order] = (kkOrderMatCount[r.Order] || 0) + 1;
+    });
+
+    // Filter: sembunyikan WO yang SEMUA materialnya sudah masuk KK
+    const filteredWOs = wos.filter(w => {
+      const inKK = kkOrderMatCount[w.order] || 0;
+      return inKK < w.total_mat;
+    });
+
+    if (!filteredWOs.length) {
       list.innerHTML = '<div style="padding:32px;text-align:center;color:#9ca3af;font-size:13px">Tidak ada WO tersedia untuk Planner Group ini</div>';
       document.getElementById('kk-wo-count').textContent = '0 tersedia';
       document.getElementById('kk-card-total-wo').textContent = '0';
       return;
     }
-    document.getElementById('kk-wo-count').textContent = `${wos.length} tersedia`;
-    document.getElementById('kk-card-total-wo').textContent = wos.length.toLocaleString('id-ID');
-    list.innerHTML = wos.map(w => `
+    document.getElementById('kk-wo-count').textContent = `${filteredWOs.length} tersedia`;
+    document.getElementById('kk-card-total-wo').textContent = filteredWOs.length.toLocaleString('id-ID');
+    list.innerHTML = filteredWOs.map(w => `
       <div class="kk-wo-item" id="kkwo-${w.order}" data-order="${w.order}"
            style="border-bottom:1px solid #f1f5f9">
         <div style="display:flex;align-items:center;gap:12px;padding:7px 10px;transition:background .12s;cursor:default"
@@ -4384,8 +4400,7 @@ async function kkOnPGTypeChange() {
         </div>
       </div>
     `).join('');
-    // Simpan snapshot HTML awal dan reset seleksi karena PG baru
-    _kkWOListState = { html: list.innerHTML, count: wos.length };
+    _kkWOListState = { html: list.innerHTML, count: filteredWOs.length };
     _kkSelections = {};
   } catch(e) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">❌ Gagal memuat: ${e.message}</div>`;
@@ -8574,6 +8589,7 @@ document.getElementById('login-page').style.display = 'none';
 const _kkMatCache = {}; // cache material per WO
 let _kkSelections = {}; // { [order]: 'full' | Set<itm> }  — persists across re-renders
 let _kkWOListState = { html: '', count: 0 }; // snapshot HTML list WO awal untuk restore
+let _kkExcludedMaterials = new Set(); // material yang sudah ada di KK aktif
 
 async function kkToggleExpand(order, pg) {
   const matDiv = document.getElementById('kkmat-' + order);
@@ -8612,8 +8628,13 @@ async function kkToggleExpand(order, pg) {
 function _kkRenderMaterials(order, mats) {
   const matDiv = document.getElementById('kkmat-' + order);
   if (!matDiv) return;
-  if (!mats.length) {
-    matDiv.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:4px">Tidak ada material tersedia</div>';
+
+  // ✅ Filter material yang sudah ada di KK aktif
+  const excluded = _kkExcludedMaterials || new Set();
+  const filteredMats = mats.filter(m => !excluded.has(m.material));
+
+  if (!filteredMats.length) {
+    matDiv.innerHTML = '<div style="font-size:11px;color:#f59e0b;padding:8px">⚠️ Semua material WO ini sudah ada di Kertas Kerja aktif.</div>';
     return;
   }
   matDiv.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:11px">'
@@ -8623,7 +8644,7 @@ function _kkRenderMaterials(order, mats) {
     + '<th style="padding:7px 10px;text-align:right;white-space:nowrap">Qty</th>'
     + '<th style="padding:7px 10px;text-align:left">Deskripsi</th>'
     + '</tr></thead><tbody>'
-    + mats.map(m => {
+    + filteredMats.map(m => {
         const desc = m.description || '';
         const descShort = desc.length > 35 ? desc.substring(0,35) + '...' : desc;
         return `<tr style="border-bottom:1px solid #f3f4f6">
@@ -8825,7 +8846,6 @@ async function kkSearchByMaterial() {
   const list = document.getElementById('kk-wo-list');
   const countEl = document.getElementById('kk-wo-count');
   if (q.length < 2) {
-    // Restore list WO awal beserta seleksi yang sudah ada
     if (_kkWOListState.html) {
       list.innerHTML = _kkWOListState.html;
       if (countEl) countEl.textContent = `${_kkWOListState.count} tersedia`;
@@ -8839,14 +8859,21 @@ async function kkSearchByMaterial() {
   if (countEl) countEl.textContent = 'mencari...';
   try {
     const results = await apiFetch(`/prisma/search-materials?pg=${encodeURIComponent(pg)}&q=${encodeURIComponent(q)}`);
-    if (!results.length) {
+
+    // ✅ Filter material yang sudah ada di KK aktif
+    const excluded = _kkExcludedMaterials || new Set();
+    const filteredResults = results
+      .map(r => ({ ...r, materials: r.materials.filter(m => !excluded.has(m.material)) }))
+      .filter(r => r.materials.length > 0);
+
+    if (!filteredResults.length) {
       list.innerHTML = '<div style="padding:32px;text-align:center;color:#9ca3af;font-size:13px">Tidak ada material yang cocok</div>';
       if (countEl) countEl.textContent = '0 hasil';
       return;
     }
-    const totalMat = results.reduce((s, r) => s + r.materials.length, 0);
-    if (countEl) countEl.textContent = `${results.length} WO · ${totalMat} material`;
-    list.innerHTML = results.map(r => `
+    const totalMat = filteredResults.reduce((s, r) => s + r.materials.length, 0);
+    if (countEl) countEl.textContent = `${filteredResults.length} WO · ${totalMat} material`;
+    list.innerHTML = filteredResults.map(r => `
       <div class="kk-wo-item" id="kkwo-${r.order}" data-order="${r.order}" style="border-bottom:1px solid #f1f5f9">
         <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f8faff">
           <input type="checkbox" class="kk-wo-check" id="kkwocb-${r.order}"
@@ -8882,11 +8909,9 @@ async function kkSearchByMaterial() {
         </div>
       </div>
     `).join('');
-    // Cache hasil search ke _kkMatCache
-    results.forEach(r => {
+    filteredResults.forEach(r => {
       if (!_kkMatCache[r.order]) _kkMatCache[r.order] = r.materials;
     });
-    // Terapkan seleksi yang sudah ada ke hasil search yang baru di-render
     kkRestoreSelections();
   } catch(e) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">❌ Gagal: ${e.message}</div>`;
