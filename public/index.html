@@ -740,10 +740,10 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
   <div class="tab" id="tab-order" onclick="switchApp('order')">📋 Order<span class="tab-badge" id="badge-order">0</span></div>
   <div class="tab" id="tab-po" onclick="switchApp('po')">🛒 PO<span class="tab-badge" id="badge-po">0</span></div>
   <div class="tab" id="tab-tracking" onclick="switchApp('tracking')">🔍 Tracking<span class="tab-badge" id="badge-tracking">0</span></div>
-  <div class="tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
+  <div class="tab admin-only-tab" id="tab-audit" onclick="switchApp('audit')">🔎 Audit<span class="tab-badge" id="badge-audit" style="background:rgba(220,38,38,0.7)">0</span></div>
   <div class="tab" id="tab-kk-create" style="display:none">📝 Buat KK</div>
 
-  <div class="tab" id="tab-joblist-taex" onclick="switchApp('joblist-taex')">📁 Joblist TAEX<span class="tab-badge" id="badge-joblist-taex">0</span></div>
+  <div class="tab admin-only-tab" id="tab-joblist-taex" onclick="switchApp('joblist-taex')">📁 Joblist TAEX<span class="tab-badge" id="badge-joblist-taex">0</span></div>
 
   <!-- <div class="tab" id="tab-vw-joblist-wo" onclick="switchApp('vw-joblist-wo')">📊 VW Joblist WO<span class="tab-badge" id="badge-vwjlwo">0</span></div>
   <div class="tab" id="tab-vw-joblist-detail" onclick="switchApp('vw-joblist-detail')">📋 VW Joblist Detail<span class="tab-badge" id="badge-vwjld">0</span></div>
@@ -794,8 +794,8 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <select id="joblist-taex-filter-disiplin" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
     <label>Project:</label>
     <select id="joblist-taex-filter-project" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
-    <label>Package:</label>
-    <select id="joblist-taex-filter-package" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select>
+    <!-- <label>Package:</label>
+    <select id="joblist-taex-filter-package" onchange="fetchAndRenderJoblistTaex()"><option value="">Semua</option></select> -->
     <button class="btn btn-search" onclick="fetchAndRenderJoblistTaex()">Cari</button>
     <button class="btn btn-reset" onclick="joblistTaexResetFilter()">Reset</button>
     <button class="btn btn-export" onclick="exportJoblistTaexExcel()" style="margin-left:8px">📤 Export</button>
