@@ -6,6 +6,7 @@ Akses: admin only via token
 PERUBAHAN:
 - vw_joblist_wo + vw_joblist_detail → joblist_taex (satu tabel, 75 kolom)
 - qty_deliv tetap dari taex_reservasi (diisi via Sinkron PO ke Tracking)
+- Hapus system_status & planner_group (tidak ada di tabel joblist_taex)
 """
 
 from fastapi import APIRouter, Request, HTTPException
@@ -89,13 +90,13 @@ def _drilldown_query(level, plant="", project_id="", area_id="", unit_id="",
                      eq_id="", jl_id="", jd_id=""):
     extra_conds = []
     params = []
-    if plant:      extra_conds.append("jt.plant = %s");              params.append(plant)
-    if project_id: extra_conds.append("jt.project_number = %s");    params.append(project_id)
-    if area_id:    extra_conds.append("jt.area_name = %s");          params.append(area_id)
-    if unit_id:    extra_conds.append("jt.unit_name = %s");          params.append(unit_id)
-    if eq_id:      extra_conds.append("jt.equipment_no = %s");       params.append(eq_id)
-    if jl_id:      extra_conds.append("jt.no_joblist = %s");         params.append(jl_id)
-    if jd_id:      extra_conds.append("jt.no_document = %s");        params.append(jd_id)
+    if plant:      extra_conds.append("jt.plant = %s");           params.append(plant)
+    if project_id: extra_conds.append("jt.project_number = %s"); params.append(project_id)
+    if area_id:    extra_conds.append("jt.area_name = %s");       params.append(area_id)
+    if unit_id:    extra_conds.append("jt.unit_name = %s");       params.append(unit_id)
+    if eq_id:      extra_conds.append("jt.equipment_no = %s");    params.append(eq_id)
+    if jl_id:      extra_conds.append("jt.no_joblist = %s");      params.append(jl_id)
+    if jd_id:      extra_conds.append("jt.no_document = %s");     params.append(jd_id)
 
     extra_where = ("AND " + " AND ".join(extra_conds)) if extra_conds else ""
     base = DRILLDOWN_BASE.format(extra_where=extra_where)
@@ -470,7 +471,8 @@ def drilldown(
 
 
 # ═══════════════════════════════════════════════════════════════
-# DETAIL PANEL
+# DETAIL PANEL — system_status & planner_group DIHAPUS
+# karena kolom tersebut tidak ada di tabel joblist_taex
 # ═══════════════════════════════════════════════════════════════
 @router.get("/drilldown/detail")
 def drilldown_detail(request: Request, level: str = "equipment",
@@ -512,8 +514,6 @@ def drilldown_detail(request: Request, level: str = "equipment",
             jt.is_material,
             jt.planning_jasa_status_name    AS planning_jasa_status,
             jt."order",
-            jt.system_status,
-            jt.planner_group,
             COUNT(t.id) AS total_mat,
             SUM(CASE WHEN COALESCE(t.qty_deliv, 0) >= COALESCE(t.qty_reqmts, 0)
                           AND COALESCE(t.qty_reqmts, 0) > 0
@@ -530,7 +530,7 @@ def drilldown_detail(request: Request, level: str = "equipment",
             jt.joblist_detail_description, jt.no_document,
             jt.is_jasa, jt.is_material,
             jt.planning_jasa_status_name,
-            jt."order", jt.system_status, jt.planner_group
+            jt."order"
         ORDER BY jt.equipment_no, jt.no_joblist, jt.joblist_detail_description, jt."order"
     """, params)
 
@@ -563,8 +563,6 @@ def drilldown_detail(request: Request, level: str = "equipment",
             "no_joblist_detail": r["no_joblist_detail"],
             "jd_desc":           r["jd_desc"],
             "order":             r["order"],
-            "system_status":     r["system_status"],
-            "planner_group":     r["planner_group"],
             "is_jasa":           bool(r["is_jasa"]),
             "is_material":       bool(r["is_material"]),
             "planning_jasa_status": r["planning_jasa_status"],
@@ -993,23 +991,23 @@ def project_material_detail(
     return J({
         "total": len(rows),
         "rows": [{
-            "order":        r["order"]               or "—",
-            "itm":          r["itm"]                 or "—",
-            "material":     r["material"]             or "—",
-            "description":  r["material_description"] or "—",
-            "equipment":    r["equipment"]            or "—",
-            "qty_reqmts":   float(r["qty_reqmts"]    or 0),
-            "qty_stock":    float(r["qty_stock"]      or 0),
-            "qty_deliv":    float(r["qty_deliv"]      or 0),
-            "pr":           r["pr"]                   or "—",
-            "pr_item":      r["pr_item"]              or "—",
-            "po":           r["po"]                   or "—",
-            "delivery_date": str(r["delivery_date"]   or "—"),
-            "reqmts_date":  str(r["reqmts_date"]      or "—"),
-            "uom":          r["uom"]                  or "—",
-            "sloc":         r["sloc"]                 or "—",
-            "cost_ctrs":    r["cost_ctrs"]            or "—",
-            "status_label": r["status_label"]         or "—",
+            "order":         r["order"]               or "—",
+            "itm":           r["itm"]                 or "—",
+            "material":      r["material"]             or "—",
+            "description":   r["material_description"] or "—",
+            "equipment":     r["equipment"]            or "—",
+            "qty_reqmts":    float(r["qty_reqmts"]    or 0),
+            "qty_stock":     float(r["qty_stock"]      or 0),
+            "qty_deliv":     float(r["qty_deliv"]      or 0),
+            "pr":            r["pr"]                   or "—",
+            "pr_item":       r["pr_item"]              or "—",
+            "po":            r["po"]                   or "—",
+            "delivery_date": str(r["delivery_date"]    or "—"),
+            "reqmts_date":   str(r["reqmts_date"]      or "—"),
+            "uom":           r["uom"]                  or "—",
+            "sloc":          r["sloc"]                 or "—",
+            "cost_ctrs":     r["cost_ctrs"]            or "—",
+            "status_label":  r["status_label"]         or "—",
         } for r in rows]
     })
 
