@@ -4351,14 +4351,20 @@ async function kkOnPGTypeChange() {
   try {
     const wos = await apiFetch(`/prisma/workorders?pg=${pgType}`);
 
-    // ✅ Bangun set material yang sudah masuk kkData aktif
-    _kkExcludedMaterials = new Set((state.kkData || []).map(r => r.Material));
+  
+// ✅ Bangun set material dari semua tahap workflow (KK aktif + Summary + Kumpulan)
+const allActiveRows = [
+  ...(state.kkData       || []),
+  ...(state.summaryData  || []),
+  ...(state.kumpulanData || []),
+];
+_kkExcludedMaterials = new Set(allActiveRows.map(r => r.Material));
 
-    // Hitung berapa material per order yang sudah masuk KK
-    const kkOrderMatCount = {};
-    (state.kkData || []).forEach(r => {
-      kkOrderMatCount[r.Order] = (kkOrderMatCount[r.Order] || 0) + 1;
-    });
+// Hitung berapa material per order yang sudah masuk (dari semua tahap)
+const kkOrderMatCount = {};
+allActiveRows.forEach(r => {
+  if (r.Order) kkOrderMatCount[r.Order] = (kkOrderMatCount[r.Order] || 0) + 1;
+});
 
     // Filter: sembunyikan WO yang SEMUA materialnya sudah masuk KK
     const filteredWOs = wos.filter(w => {
