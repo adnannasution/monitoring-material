@@ -1065,9 +1065,13 @@ function closeDetailPanel() {
   document.getElementById('p4-detail-panel').style.display = 'none';
   _detailRows = [];
   // Reset highlight chart
+  ['p4-donut-actual','p4-donut-prognosa'].forEach(cid => {
+    const store = window['_p4donut_' + cid];
+    const c = charts[cid];
+    if (c && store) { c.data.datasets[0].backgroundColor = [...store.usedColors]; c.update(); }
+    window['_p4active_' + cid] = -1;
+  });
   clearChartHighlight('p4-donut-eq');
-  clearChartHighlight('p4-donut-actual');
-  clearChartHighlight('p4-donut-prognosa');
   clearRowHighlight();
 }
 
@@ -1369,10 +1373,12 @@ function renderP4Material(d) {
 
 function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   destroyChart(canvasId);
+  window['_p4active_' + canvasId] = -1; // track segment aktif, -1 = tidak ada
   document.getElementById(totalId).textContent = fmt(data.total);
   const ctx = document.getElementById(canvasId).getContext('2d');
   const statusType = canvasId.includes('prognosa') ? 'prognosa' : 'actual';
   const usedColors = colors.slice(0, data.items.length);
+  window['_p4donut_' + canvasId] = { data, statusType, usedColors };
 
   charts[canvasId] = new Chart(ctx, {
     type: 'doughnut',
@@ -1385,27 +1391,8 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
       cutout: '70%',
       onClick: (evt, els) => {
         if (!els.length) return;
-        const idx    = els[0].index;
-        const status = data.items[idx].status;
-        // Highlight segment
-        const ds = charts[canvasId].data.datasets[0];
-        ds.backgroundColor = usedColors.map((c, i) => i === idx ? c : c + '55');
-        charts[canvasId].update();
-        // Reset donut lawan
-        const otherId = statusType === 'actual' ? 'p4-donut-prognosa' : 'p4-donut-actual';
-        if (charts[otherId]) {
-          const otherColors = statusType === 'actual'
-            ? ['#3b82f6','#22c55e','#f59e0b','#f97316','#dc2626','#8b5cf6','#64748b','#0891b2']
-            : ['#3b82f6','#f59e0b','#10b981','#ef4444','#6b7280'];
-          charts[otherId].data.datasets[0].backgroundColor = otherColors.slice(0, charts[otherId].data.datasets[0].data.length);
-          charts[otherId].update();
-        }
-        clearRowHighlight();
-        _updateEqByMatStatus(status, statusType);
-        const typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
-        fetchMaterialDetail(status, statusType,
-          'Detail Material — ' + status,
-          typeLabel + ' | Project: ' + document.getElementById('p4-project-select').value);
+        const idx = els[0].index;
+        _donutToggle(canvasId, idx);
       },
       plugins: { legend: { display: false }, tooltip: { callbacks: {
         label: c => ' ' + c.label + ': ' + fmt(c.raw) + ' (' + pct(data.total ? c.raw/data.total*100 : 0) + ')'
@@ -1414,19 +1401,17 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   });
   document.getElementById(canvasId).classList.add('chart-clickable');
 
-
-  // Legend — clickable (pakai data-index, hindari escaping di onclick)
-  window['_p4donut_' + canvasId] = { data, statusType, usedColors };
+  // Legend — clickable
   document.getElementById(legendId).innerHTML = data.items.map((item, i) =>
     `<div class="legend-item" style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
-      onclick="var s=window['_p4donut_'+this.dataset.cid];_donutLegendClick(this.dataset.cid,+this.dataset.idx)">` +
+      onclick="_donutToggle(this.dataset.cid,+this.dataset.idx)">` +
     `<div class="legend-dot" style="background:${usedColors[i%usedColors.length]}"></div>${item.status}</div>`
   ).join('');
 
-  // Tabel row — clickable (pakai data-index)
+  // Tabel row — clickable
   document.getElementById(tbodyId).innerHTML = data.items.map((item, i) =>
     `<tr style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
-      onclick="_donutLegendClick(this.dataset.cid,+this.dataset.idx)">` +
+      onclick="_donutToggle(this.dataset.cid,+this.dataset.idx)">` +
     `<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${usedColors[i%usedColors.length]};margin-right:6px"></span>${item.status}</td>` +
     `<td style="text-align:right;font-weight:700">${fmt(item.jumlah)}</td>` +
     `<td style="text-align:right">${item.pct.toFixed(2)}%</td></tr>`
@@ -1436,24 +1421,39 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   `<td style="text-align:right">100%</td></tr>`;
 }
 
-function _donutLegendClick(canvasId, idx) {
+// ── TOGGLE: klik sama → reset, klik beda → filter ────────────
+function _donutToggle(canvasId, idx) {
   var store = window['_p4donut_' + canvasId];
   if (!store) return;
-  var data = store.data, statusType = store.statusType, usedColors = store.usedColors;
-  var status = data.items[idx].status;
-  var c = charts[canvasId];
-  if (c) {
-    c.data.datasets[0].backgroundColor = usedColors.map(function(col,i){ return i===idx ? col : col+'55'; });
-    c.update();
-  }
+  var activeKey = '_p4active_' + canvasId;
+  var activeIdx = window[activeKey];
+  var statusType = store.statusType;
+  var usedColors = store.usedColors;
   var otherId = statusType === 'actual' ? 'p4-donut-prognosa' : 'p4-donut-actual';
   var otherStore = window['_p4donut_' + otherId];
   var otherC = charts[otherId];
-  if (otherC && otherStore) {
-    otherC.data.datasets[0].backgroundColor = otherStore.usedColors.slice();
-    otherC.update();
+
+  if (activeIdx === idx) {
+    // ── RESET: klik segment yang sama ──
+    window[activeKey] = -1;
+    var c = charts[canvasId];
+    if (c) { c.data.datasets[0].backgroundColor = [...usedColors]; c.update(); }
+    if (otherC && otherStore) { otherC.data.datasets[0].backgroundColor = [...otherStore.usedColors]; otherC.update(); }
+    window['_p4active_' + otherId] = -1;
+    document.getElementById('p4-mat-filter-card').style.display = 'none';
+    destroyChart('p4-mini-donut');
+    closeDetailPanel();
+    return;
   }
-  clearRowHighlight();
+
+  // ── FILTER: klik segment baru ──
+  window[activeKey] = idx;
+  var status = store.data.items[idx].status;
+  var c2 = charts[canvasId];
+  if (c2) { c2.data.datasets[0].backgroundColor = usedColors.map(function(col, i) { return i === idx ? col : col + '55'; }); c2.update(); }
+  if (otherC && otherStore) { otherC.data.datasets[0].backgroundColor = [...otherStore.usedColors]; otherC.update(); }
+  window['_p4active_' + otherId] = -1;
+  document.querySelectorAll('#p4-eq-tbody tr').forEach(r => r.classList.remove('row-active'));
   _updateEqByMatStatus(status, statusType);
   var typeLabel = statusType === 'actual' ? 'Actual' : 'Prognosa';
   fetchMaterialDetail(status, statusType,
@@ -1638,7 +1638,8 @@ function renderMaterialTablePaged(rows) {
     'Create PR':'background:#fef2f2;color:#dc2626',
   };
 
-  let tableHtml = `<div style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  let tableHtml = `<div style="display:flex;flex-direction:column;max-height:520px;overflow:hidden">
+  <div style="flex-shrink:0;padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <input id="p4-mat-search" type="text" placeholder="🔍 Cari Order, Material, Equipment, Status..."
       value="${_matSearch.replace(/"/g,'&quot;')}"
       oninput="_matSearch=this.value;_matPage=1;renderMaterialTablePaged(_detailRows)"
@@ -1648,9 +1649,9 @@ function renderMaterialTablePaged(rows) {
       ${q ? '(difilter dari ' + fmt(rows.length) + ')' : ''}
     </span>
   </div>
-  <div style="overflow-x:auto;overflow-y:visible">
+  <div style="flex:1;overflow-y:auto;overflow-x:auto">
   <table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead><tr style="background:#1a56db;color:#fff;position:sticky;top:0">
+    <thead><tr style="background:#1a56db;color:#fff;position:sticky;top:0;z-index:5">
       <th style="padding:8px 12px;white-space:nowrap">Order</th>
       <th style="padding:8px 12px;white-space:nowrap">Itm</th>
       <th style="padding:8px 12px;white-space:nowrap">Material</th>
@@ -1684,9 +1685,9 @@ function renderMaterialTablePaged(rows) {
 
   tableHtml += `</tbody></table></div>`;
 
-  // Pagination bar
+  // Pagination bar — sticky bottom
   if (totalPages > 1) {
-    let pgHtml = '<div style="padding:10px 12px;background:#f8fafc;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:6px">';
+    let pgHtml = '<div style="flex-shrink:0;padding:10px 12px;background:#f8fafc;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:6px">';
     pgHtml += `<button onclick="_matPage=Math.max(1,_matPage-1);renderMaterialTablePaged(_detailRows)"
       style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_matPage===1?';opacity:.4;cursor:default':''}">‹ Prev</button>`;
     const start_p = Math.max(1, _matPage-2);
@@ -1700,6 +1701,8 @@ function renderMaterialTablePaged(rows) {
     pgHtml += `<span style="font-size:11px;color:var(--text-sm);margin-left:8px">Hal ${_matPage}/${totalPages}</span></div>`;
     tableHtml += pgHtml;
   }
+
+  tableHtml += `</div>`; // tutup flex container utama
 
   wrap.innerHTML = tableHtml;
   // Fokus ke search kalau ada
@@ -1882,7 +1885,7 @@ function renderMaterialTablePaged(rows) {
 
 
 <!-- ══ DETAIL PANEL (drill-through) ══ -->
-<div id="p4-detail-panel" style="display:none;margin:0 0 32px 0">
+<div id="p4-detail-panel" style="display:none;margin:0">
   <div class="content">
     <div class="card" style="padding:0;overflow:hidden">
       <!-- Header panel -->
