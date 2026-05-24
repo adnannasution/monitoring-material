@@ -495,6 +495,8 @@ function switchPage(id) {
   if (rl) rl.style.display = hideRU ? 'none' : '';
   if (rb) rb.style.display = hideRU ? 'none' : '';
   if (rd) rd.style.display = hideRU ? 'none' : '';
+  // Tutup detail panel saat pindah tab
+  document.getElementById('p4-detail-panel').style.display = 'none';
   if (id === 'p1') loadP1();
   else if (id === 'p2') loadP2();
   else if (id === 'p3') loadP3();
@@ -1342,9 +1344,26 @@ function renderP4Equipment(d) {
   document.getElementById('p4-eq-tbody').innerHTML = html;
 }
 
+const STATUS_COLORS = {
+  'PR-Proses Pengadaan':        '#3b82f6',
+  'PO-Material Belum Tiba':     '#f97316',
+  'Belum PR':                   '#dc2626',
+  'PO-Material Telah Tiba':     '#16a34a',
+  'Stock On Hand':              '#16a34a',
+  'PO-DT Sebelum MD':           '#16a34a',
+  'PO-DT MD':                   '#3b82f6',
+  'PO-DT Melebihi MD':          '#f97316',
+  'PR-Prognosa DT sebelum MD':  '#3b82f6',
+  'PR-Prognosa DT Melebihi MD': '#f97316',
+  'Create PR':                  '#dc2626',
+};
+function getStatusColor(status, idx) {
+  return STATUS_COLORS[status] || ['#3b82f6','#f97316','#dc2626','#16a34a','#6b7280'][idx % 5];
+}
+
 function renderP4Material(d) {
-  const CA = ['#3b82f6','#f59e0b','#10b981','#ef4444','#6b7280'];
-  const CP = ['#3b82f6','#22c55e','#f59e0b','#f97316','#dc2626','#8b5cf6','#64748b','#0891b2'];
+  const CA = d.actual.items.map((item, i)   => getStatusColor(item.status, i));
+  const CP = d.prognosa.items.map((item, i) => getStatusColor(item.status, i));
   _renderP4Donut('p4-donut-actual',   'p4-donut-actual-total',   'p4-legend-actual',   'p4-tbody-actual',   d.actual,   CA);
   _renderP4Donut('p4-donut-prognosa', 'p4-donut-prognosa-total', 'p4-legend-prognosa', 'p4-tbody-prognosa', d.prognosa, CP);
 }
