@@ -9025,10 +9025,15 @@ if (!window._joblistTaexRenderHooked) {
 
   const _renderPageOrig = window.renderPage;
 
-  window.renderPage = function(app) {
+window.renderPage = function(app) {
     if (app === 'joblist-taex') {
-      fetchAndRenderJoblistTaex();
-      return;
+        // Kalau sudah ada data di cache → render langsung tanpa fetch ulang
+        if (joblistTaexFiltered.length > 0) {
+            renderJoblistTaexTable();
+        } else {
+            fetchAndRenderJoblistTaex();
+        }
+        return;
     }
 
     if (typeof _renderPageOrig === 'function') {
@@ -9234,6 +9239,60 @@ async function submitChangePassword() {
     errEl.textContent = e.message || 'Gagal mengubah password';
     errEl.style.display = 'block';
   }
+}
+
+
+
+function renderJoblistTaexTable() {
+  // Render dari cache tanpa fetch ke server
+  const flag = v => (v == 1) ? '<span style="color:#16a34a">✅</span>' : '<span style="color:#d1d5db">—</span>';
+  const tbody = document.getElementById('joblist-taex-tbody');
+
+  if (!joblistTaexFiltered.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="26">Upload file Excel untuk memulai</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = joblistTaexFiltered.map(r => `<tr>
+    <td style="font-size:11px;font-weight:600;color:#7c2d12;white-space:nowrap">${D(r.NoJoblist)}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        title="${r.JoblistDetailDescription||''}">${D(r.JoblistDetailDescription)}</td>
+    <td style="font-weight:600;color:#1a56db;white-space:nowrap">${D(r.EquipmentNo)}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"
+        title="${r.DescriptionofTechnicalObject||''}">${D(r.DescriptionofTechnicalObject)}</td>
+    <td style="font-size:11px">${D(r.AreaName)}</td>
+    <td style="font-size:11px">${D(r.UnitName)}</td>
+    <td><span class="badge badge-blue" style="font-size:10px">${D(r.Disiplin)}</span></td>
+    <td style="font-size:11px">${D(r.ProjectNumber)}</td>
+    <td><span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6">${D(r.ProjectStatus)}</span></td>
+    <td>${D(r.Revision)}</td>
+    <td><b>${D(r.Order)}</b></td>
+    <td style="font-size:10px">${D(r.JoblistDetailReasonName)}</td>
+    <td style="font-size:10px">${D(r.DocumentJoblistTypeName)}</td>
+    <td style="font-size:10px">${D(r.NoDocument)}</td>
+    <td>${D(r.NomorPM)}</td>
+    <td style="text-align:center">${flag(r.IsMechanicalIntegrity)}</td>
+    <td style="text-align:center">${flag(r.IsJasa)}</td>
+    <td style="text-align:center">${flag(r.IsMaterial)}</td>
+    <td style="text-align:center">${flag(r.IsLLDII)}</td>
+    <td style="font-size:10px">${D(r.PlanningJasaStatusName)}</td>
+    <td style="font-size:10px">${D(r.PlanningMaterialStatusName)}</td>
+    <td style="font-size:10px">${D(r.CodeName)}</td>
+    <td style="font-size:10px;white-space:nowrap">${D(r.NoPackage)}</td>
+    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px"
+        title="${r.PackageDescription||''}">${D(r.PackageDescription)}</td>
+    <td style="font-size:10px">${D(r.CreatorName)}</td>
+    <td>${D(r.Plant)}</td>
+  </tr>`).join('');
+
+  // Update info bar dari cache meta
+  document.getElementById('joblist-taex-total').textContent    = joblistTaexServerMeta.total.toLocaleString('id-ID');
+  document.getElementById('joblist-taex-rowCount').textContent = joblistTaexServerMeta.total.toLocaleString('id-ID') + ' item';
+
+  renderPagination('joblist-taex-pagination', 'joblist-taex',
+    joblistTaexServerMeta.total, joblistTaexServerMeta.page,
+    joblistTaexServerMeta.totalPages, joblistTaexServerMeta.limit,
+    fetchAndRenderJoblistTaex);
 }
 
 </script>
