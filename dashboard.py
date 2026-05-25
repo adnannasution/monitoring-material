@@ -1118,3 +1118,68 @@ def project_equipment_by_mat_status(
         } for r in rows],
         "filter_label": mat_status,
     })
+
+
+    @router.get("/project-jobdetail-planning")
+def project_jobdetail_planning(request: Request, project_number: str = ""):
+    """Summary planning status jobdetail per project dari joblist_taex."""
+    if not project_number:
+        return J({"total": 0, "planning_complete": 0, "not_planned": 0, "others": 0, "items": []})
+
+    rows = query("""
+        SELECT
+            COUNT(*)                                                        AS total,
+            SUM(CASE
+                WHEN COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
+                  OR COALESCE(planning_material_status_name,'') = 'Planning Complete'
+                THEN 1 ELSE 0 END)                                         AS planning_complete,
+            SUM(CASE
+                WHEN COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+                 AND COALESCE(planning_material_status_name,'Not Planned') = 'Not Planned'
+                THEN 1 ELSE 0 END)                                         AS not_planned,
+            SUM(CASE
+                WHEN COALESCE(planning_jasa_status_name,'') != 'Planning Complete'
+                 AND COALESCE(planning_material_status_name,'') != 'Planning Complete'
+                 AND NOT (
+                    COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+                    AND COALESCE(planning_material_status_name,'Not Planned') = 'Not Planned'
+                 )
+                THEN 1 ELSE 0 END)                                         AS others
+        FROM joblist_taex
+        WHERE project_number = %s
+          AND COALESCE(is_deleted, 0) = 0
+    """, [project_number])
+
+    # Per area breakdown
+    area_rows = query("""
+        SELECT
+            COALESCE(area_name, '(Tanpa Area)') AS area,
+            COUNT(*)                             AS total,
+            SUM(CASE
+                WHEN COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
+                  OR COALESCE(planning_material_status_name,'') = 'Planning Complete'
+                THEN 1 ELSE 0 END)               AS planning_complete,
+            SUM(CASE
+                WHEN COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+                 AND COALESCE(planning_material_status_name,'Not Planned') = 'Not Planned'
+                THEN 1 ELSE 0 END)               AS not_planned
+        FROM joblist_taex
+        WHERE project_number = %s
+          AND COALESCE(is_deleted, 0) = 0
+        GROUP BY area_name
+        ORDER BY planning_complete DESC
+    """, [project_number])
+
+    s = rows[0]
+    return J({
+        "total":             int(s["total"] or 0),
+        "planning_complete": int(s["planning_complete"] or 0),
+        "not_planned":       int(s["not_planned"] or 0),
+        "others":            int(s["others"] or 0),
+        "by_area": [{
+            "area":             r["area"],
+            "total":            int(r["total"] or 0),
+            "planning_complete":int(r["planning_complete"] or 0),
+            "not_planned":      int(r["not_planned"] or 0),
+        } for r in area_rows],
+    })
