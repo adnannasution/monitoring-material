@@ -1120,7 +1120,7 @@ def project_equipment_by_mat_status(
     })
 
 
-    @router.get("/project-jobdetail-planning")
+@router.get("/project-jobdetail-planning")
 def project_jobdetail_planning(request: Request, project_number: str = ""):
     """Summary planning status jobdetail per project dari joblist_taex."""
     if not project_number:
