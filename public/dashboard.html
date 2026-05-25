@@ -352,59 +352,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </div>
   </div>
 
-</div>
-</div>
-
-<!-- ══ PAGE 3: DRILL-DOWN READINESS ══ -->
-<div class="page-content" id="page-p3">
-<div class="content">
-
-  <!-- Breadcrumb -->
-  <div style="background:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-    <div id="breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px"></div>
-    <div style="display:flex;gap:8px">
-      <button onclick="ddReset()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:#f8fafc;font-size:12px;cursor:pointer;font-weight:600">🔄 Reset</button>
-    </div>
-  </div>
-
-  <!-- Summary mini cards -->
-  <div id="dd-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
-
-  <!-- Bar chart horizontal -->
-  <div class="card" style="padding:20px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div class="card-title" id="dd-chart-title" style="margin-bottom:0">Project</div>
-      <div style="font-size:11px;color:var(--text-sm)">Klik → drill-down &nbsp;|&nbsp; Klik 2x → lihat detail 👁</div>
-    </div>
-    <div id="dd-chart-wrap" style="overflow-y:auto;max-height:520px">
-      <canvas id="dd-chart"></canvas>
-    </div>
-  </div>
-
-  <!-- Table daftar item dengan tombol mata -->
-  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
-      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
-    </div>
-    <div id="dd-list-wrap" style="overflow-x:auto">
-      <table class="mini-table" id="dd-list-table">
-        <thead>
-          <tr>
-            <th>Nama</th>
-            <th style="text-align:right">WO Ready</th>
-            <th style="text-align:right">Total WO</th>
-            <th style="text-align:right">% Ready</th>
-            <th style="text-align:center">Detail</th>
-          </tr>
-        </thead>
-        <tbody id="dd-list-tbody">
-          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
 
 
 
@@ -471,6 +418,62 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </div>
   </div>
 </div>
+
+</div>
+</div>
+
+<!-- ══ PAGE 3: DRILL-DOWN READINESS ══ -->
+<div class="page-content" id="page-p3">
+<div class="content">
+
+  <!-- Breadcrumb -->
+  <div style="background:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div id="breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="ddReset()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:#f8fafc;font-size:12px;cursor:pointer;font-weight:600">🔄 Reset</button>
+    </div>
+  </div>
+
+  <!-- Summary mini cards -->
+  <div id="dd-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
+
+  <!-- Bar chart horizontal -->
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="card-title" id="dd-chart-title" style="margin-bottom:0">Project</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik → drill-down &nbsp;|&nbsp; Klik 2x → lihat detail 👁</div>
+    </div>
+    <div id="dd-chart-wrap" style="overflow-y:auto;max-height:520px">
+      <canvas id="dd-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Table daftar item dengan tombol mata -->
+  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik 👁 untuk lihat detail WO</div>
+    </div>
+    <div id="dd-list-wrap" style="overflow-x:auto">
+      <table class="mini-table" id="dd-list-table">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th style="text-align:right">WO Ready</th>
+            <th style="text-align:right">Total WO</th>
+            <th style="text-align:right">% Ready</th>
+            <th style="text-align:center">Detail</th>
+          </tr>
+        </thead>
+        <tbody id="dd-list-tbody">
+          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+
 
 </div>
 </div>
