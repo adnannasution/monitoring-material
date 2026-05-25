@@ -1,6 +1,6 @@
 """
 bulk_ops.py — Operasi bulk INSERT/UPDATE ke PostgreSQL menggunakan psycopg2 execute_values
-Langsung kirim semua baris sekaligus — tidak perlu chunking, tetap cepat.
+Semua operasi menggunakan UPSERT (ON CONFLICT DO UPDATE) — tidak ada DELETE saat upload.
 execute_values otomatis handle ribuan bahkan ratusan ribu baris dalam satu round-trip ke DB.
 """
 import pandas as pd
@@ -29,9 +29,20 @@ def _s(v):
     return s if s else None
 
 
+def _i(v):
+    """Konversi ke int atau None."""
+    try:
+        return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
+    except:
+        return None
+
+
 # ─── TAEX RESERVASI ──────────────────────────────────────────
-def bulk_replace_taex(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (order+material+itm), insert baris baru."""
+def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
+    """
+    Upsert — update baris yang sama (order+material+itm), insert baris baru.
+    Kolom PR/PO tidak ditimpa saat upload TA-ex (diisi via Sinkron PR/PO).
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -69,21 +80,33 @@ def bulk_replace_taex(df: pd.DataFrame) -> int:
                  uom, gl_acct, res_price, res_per, res_curr, reservno)
                 VALUES %s
                 ON CONFLICT ("order", material, itm) DO UPDATE SET
-                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
-                    revision=EXCLUDED.revision, material_description=EXCLUDED.material_description,
-                    qty_reqmts=EXCLUDED.qty_reqmts, qty_stock=EXCLUDED.qty_stock,
-                    cost_ctrs=EXCLUDED.cost_ctrs, sloc=EXCLUDED.sloc,
-                    del=EXCLUDED.del, fis=EXCLUDED.fis, ict=EXCLUDED.ict, pg=EXCLUDED.pg,
-                    recipient=EXCLUDED.recipient, unloading_point=EXCLUDED.unloading_point,
-                    reqmts_date=EXCLUDED.reqmts_date,
-                    qty_f_avail_check=EXCLUDED.qty_f_avail_check,
-                    qty_withdrawn=EXCLUDED.qty_withdrawn,
-                    uom=EXCLUDED.uom, gl_acct=EXCLUDED.gl_acct,
-                    res_price=EXCLUDED.res_price, res_per=EXCLUDED.res_per,
-                    res_curr=EXCLUDED.res_curr, reservno=EXCLUDED.reservno,
-                    updated_at=NOW()
+                    plant                = EXCLUDED.plant,
+                    equipment            = EXCLUDED.equipment,
+                    revision             = EXCLUDED.revision,
+                    material_description = EXCLUDED.material_description,
+                    qty_reqmts           = EXCLUDED.qty_reqmts,
+                    qty_stock            = EXCLUDED.qty_stock,
+                    cost_ctrs            = EXCLUDED.cost_ctrs,
+                    sloc                 = EXCLUDED.sloc,
+                    del                  = EXCLUDED.del,
+                    fis                  = EXCLUDED.fis,
+                    ict                  = EXCLUDED.ict,
+                    pg                   = EXCLUDED.pg,
+                    recipient            = EXCLUDED.recipient,
+                    unloading_point      = EXCLUDED.unloading_point,
+                    reqmts_date          = EXCLUDED.reqmts_date,
+                    qty_f_avail_check    = EXCLUDED.qty_f_avail_check,
+                    qty_withdrawn        = EXCLUDED.qty_withdrawn,
+                    uom                  = EXCLUDED.uom,
+                    gl_acct              = EXCLUDED.gl_acct,
+                    res_price            = EXCLUDED.res_price,
+                    res_per              = EXCLUDED.res_per,
+                    res_curr             = EXCLUDED.res_curr,
+                    reservno             = EXCLUDED.reservno,
+                    updated_at           = NOW()
+                    -- TIDAK di-update: pr, item, qty_pr, po, po_date, qty_deliv, delivery_date
+                    -- (diisi via Sinkron PR dan Sinkron PO, bukan dari upload TA-ex)
             """
-
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -95,21 +118,15 @@ def bulk_replace_taex(df: pd.DataFrame) -> int:
         release_conn(conn)
 
 
-
 # ─── JOBLIST TAEX ────────────────────────────────────────────
 def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
-    """DELETE semua lalu INSERT — replace penuh setiap upload."""
+    """
+    Upsert berdasarkan (joblist_id, "order") — tidak ada DELETE saat upload.
+    Data lama yang tidak ada di file upload tetap tersimpan.
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM joblist_taex")
-
-            def _i(v):
-                try:
-                    return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
-                except:
-                    return None
-
             CHUNK = 500
             total = len(df)
             for start in range(0, total, CHUNK):
@@ -219,6 +236,29 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
                         planning_jasa_status_name, planning_material_status_name,
                         "order", no_package, package_description
                     ) VALUES %s
+                    ON CONFLICT (joblist_id, "order") DO UPDATE SET
+                        joblist_detail_description   = EXCLUDED.joblist_detail_description,
+                        joblist_detail_reason_name   = EXCLUDED.joblist_detail_reason_name,
+                        document_joblist_type_name   = EXCLUDED.document_joblist_type_name,
+                        no_document                  = EXCLUDED.no_document,
+                        is_mechanical_integrity      = EXCLUDED.is_mechanical_integrity,
+                        job_discipline_name          = EXCLUDED.job_discipline_name,
+                        nomor_pm                     = EXCLUDED.nomor_pm,
+                        notes                        = EXCLUDED.notes,
+                        project_status               = EXCLUDED.project_status,
+                        planning_jasa_status_name    = EXCLUDED.planning_jasa_status_name,
+                        planning_material_status_name= EXCLUDED.planning_material_status_name,
+                        planning_jasa_status_id      = EXCLUDED.planning_jasa_status_id,
+                        planning_material_status_id  = EXCLUDED.planning_material_status_id,
+                        is_jasa                      = EXCLUDED.is_jasa,
+                        is_material                  = EXCLUDED.is_material,
+                        is_lldii                     = EXCLUDED.is_lldii,
+                        code_name                    = EXCLUDED.code_name,
+                        no_package                   = EXCLUDED.no_package,
+                        package_description          = EXCLUDED.package_description,
+                        is_deleted                   = EXCLUDED.is_deleted
+                        -- TIDAK di-update: joblist_id, order, project_id, equipment_id,
+                        -- equipment_no, project_number, area_name, unit_name (dari master data)
                 """, vals)
         conn.commit()
         return total
@@ -230,12 +270,8 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
 
 
 # ─── PRISMA RESERVASI ─────────────────────────────────────────
-
-
-
-
 def bulk_replace_prisma(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (order, itm, material), insert baris baru."""
+    """Upsert — update baris yang sama (order, itm, material), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -257,20 +293,30 @@ def bulk_replace_prisma(df: pd.DataFrame) -> int:
                 INSERT INTO prisma_reservasi
                 (plant, equipment, revision, "order", reservno, itm, material, material_description,
                  del, fis, ict, pg, recipient, unloading_point, reqmts_date,
-                 qty_reqmts, uom, pr_prisma, item_prisma, qty_pr_prisma, qty_stock_onhand, code_kertas_kerja)
+                 qty_reqmts, uom, pr_prisma, item_prisma, qty_pr_prisma,
+                 qty_stock_onhand, code_kertas_kerja)
                 VALUES %s
                 ON CONFLICT ("order", itm, material) DO UPDATE SET
-                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
-                    revision=EXCLUDED.revision, reservno=EXCLUDED.reservno,
-                    material_description=EXCLUDED.material_description,
-                    del=EXCLUDED.del, fis=EXCLUDED.fis, ict=EXCLUDED.ict, pg=EXCLUDED.pg,
-                    recipient=EXCLUDED.recipient, unloading_point=EXCLUDED.unloading_point,
-                    reqmts_date=EXCLUDED.reqmts_date, qty_reqmts=EXCLUDED.qty_reqmts,
-                    uom=EXCLUDED.uom, pr_prisma=EXCLUDED.pr_prisma,
-                    item_prisma=EXCLUDED.item_prisma, qty_pr_prisma=EXCLUDED.qty_pr_prisma,
-                    qty_stock_onhand=EXCLUDED.qty_stock_onhand,
-                    code_kertas_kerja=EXCLUDED.code_kertas_kerja,
-                    updated_at=NOW()
+                    plant                = EXCLUDED.plant,
+                    equipment            = EXCLUDED.equipment,
+                    revision             = EXCLUDED.revision,
+                    reservno             = EXCLUDED.reservno,
+                    material_description = EXCLUDED.material_description,
+                    del                  = EXCLUDED.del,
+                    fis                  = EXCLUDED.fis,
+                    ict                  = EXCLUDED.ict,
+                    pg                   = EXCLUDED.pg,
+                    recipient            = EXCLUDED.recipient,
+                    unloading_point      = EXCLUDED.unloading_point,
+                    reqmts_date          = EXCLUDED.reqmts_date,
+                    qty_reqmts           = EXCLUDED.qty_reqmts,
+                    uom                  = EXCLUDED.uom,
+                    pr_prisma            = EXCLUDED.pr_prisma,
+                    item_prisma          = EXCLUDED.item_prisma,
+                    qty_pr_prisma        = EXCLUDED.qty_pr_prisma,
+                    qty_stock_onhand     = EXCLUDED.qty_stock_onhand,
+                    code_kertas_kerja    = EXCLUDED.code_kertas_kerja,
+                    updated_at           = NOW()
             """
             execute_values(cur, sql, rows)
 
@@ -285,7 +331,13 @@ def bulk_replace_prisma(df: pd.DataFrame) -> int:
 
 # ─── SAP PR ──────────────────────────────────────────────────
 def bulk_replace_pr(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (pr, item), insert baris baru."""
+    """
+    Upsert berdasarkan (pr, item) — tidak ada DELETE saat upload.
+
+    🔑 Key (tidak ditimpa): pr, item, plant, material, d, r, pgr, tracking_no, release_date
+    ✅ Boleh di-update: material_description, qty_pr, un, req_date,
+                        valn_price, pr_curr, pr_per, s, tracking
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -308,19 +360,19 @@ def bulk_replace_pr(df: pd.DataFrame) -> int:
                  qty_pr, un, req_date, valn_price, pr_curr, pr_per, release_date, tracking)
                 VALUES %s
                 ON CONFLICT (pr, item) DO UPDATE SET
-                    plant=EXCLUDED.plant,
-                    material=EXCLUDED.material,
-                    material_description=EXCLUDED.material_description,
-                    d=EXCLUDED.d, r=EXCLUDED.r, pgr=EXCLUDED.pgr, s=EXCLUDED.s,
-                    tracking_no=EXCLUDED.tracking_no,
-                    qty_pr=EXCLUDED.qty_pr, un=EXCLUDED.un,
-                    req_date=EXCLUDED.req_date,
-                    valn_price=EXCLUDED.valn_price, pr_curr=EXCLUDED.pr_curr,
-                    pr_per=EXCLUDED.pr_per, release_date=EXCLUDED.release_date,
-                    tracking=EXCLUDED.tracking,
-                    updated_at=NOW()
+                    -- ✅ Boleh di-update (bisa berubah dari revisi PR)
+                    material_description = EXCLUDED.material_description,
+                    qty_pr               = EXCLUDED.qty_pr,
+                    un                   = EXCLUDED.un,
+                    req_date             = EXCLUDED.req_date,
+                    valn_price           = EXCLUDED.valn_price,
+                    pr_curr              = EXCLUDED.pr_curr,
+                    pr_per               = EXCLUDED.pr_per,
+                    s                    = EXCLUDED.s,
+                    tracking             = EXCLUDED.tracking,
+                    updated_at           = NOW()
+                    -- 🚫 TIDAK di-update: plant, material, d, r, pgr, tracking_no, release_date
             """
-
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -334,7 +386,13 @@ def bulk_replace_pr(df: pd.DataFrame) -> int:
 
 # ─── SAP PO ──────────────────────────────────────────────────
 def bulk_replace_po(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (po, po_item), insert baris baru."""
+    """
+    Upsert berdasarkan (po, po_item) — tidak ada DELETE saat upload.
+
+    🔑 Key (tidak ditimpa): po, po_item, plnt, purchreq, item, d, dci, pgr, doc_date, crcy
+    ✅ Boleh di-update: material, short_text, po_quantity, qty_delivered,
+                        deliv_date, net_price, per, oun
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -344,15 +402,17 @@ def bulk_replace_po(df: pd.DataFrame) -> int:
                  doc_date, po_quantity, qty_delivered, deliv_date, oun, net_price, crcy, per)
                 VALUES %s
                 ON CONFLICT (po, po_item) DO UPDATE SET
-                    plnt=EXCLUDED.plnt, purchreq=EXCLUDED.purchreq,
-                    item=EXCLUDED.item, material=EXCLUDED.material,
-                    short_text=EXCLUDED.short_text,
-                    d=EXCLUDED.d, dci=EXCLUDED.dci, pgr=EXCLUDED.pgr,
-                    doc_date=EXCLUDED.doc_date,
-                    po_quantity=EXCLUDED.po_quantity, qty_delivered=EXCLUDED.qty_delivered,
-                    deliv_date=EXCLUDED.deliv_date, oun=EXCLUDED.oun,
-                    net_price=EXCLUDED.net_price, crcy=EXCLUDED.crcy, per=EXCLUDED.per,
-                    updated_at=NOW()
+                    -- ✅ Boleh di-update (amandemen PO / update delivery)
+                    material       = EXCLUDED.material,
+                    short_text     = EXCLUDED.short_text,
+                    po_quantity    = EXCLUDED.po_quantity,
+                    qty_delivered  = EXCLUDED.qty_delivered,
+                    deliv_date     = EXCLUDED.deliv_date,
+                    net_price      = EXCLUDED.net_price,
+                    per            = EXCLUDED.per,
+                    oun            = EXCLUDED.oun,
+                    updated_at     = NOW()
+                    -- 🚫 TIDAK di-update: plnt, purchreq, item, d, dci, pgr, doc_date, crcy
             """
             rows = []
             def _nk(k):
@@ -379,7 +439,6 @@ def bulk_replace_po(df: pd.DataFrame) -> int:
                     _s(r.get("crcy")),
                     _n(r.get("per")),
                 ))
-
             execute_values(cur, sql, rows)
 
         conn.commit()
@@ -393,7 +452,7 @@ def bulk_replace_po(df: pd.DataFrame) -> int:
 
 # ─── KUMPULAN SUMMARY ─────────────────────────────────────────
 def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (order, itm, material), insert baris baru."""
+    """Upsert — update baris yang sama (order, itm, material), insert baris baru."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -414,13 +473,17 @@ def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
                  qty_req, qty_stock, qty_pr, qty_to_pr, code_tracking)
                 VALUES %s
                 ON CONFLICT ("order", itm, material) DO UPDATE SET
-                    plant=EXCLUDED.plant, equipment=EXCLUDED.equipment,
-                    revision=EXCLUDED.revision, reservno=EXCLUDED.reservno,
-                    material_description=EXCLUDED.material_description,
-                    qty_req=EXCLUDED.qty_req, qty_stock=EXCLUDED.qty_stock,
-                    qty_pr=EXCLUDED.qty_pr, qty_to_pr=EXCLUDED.qty_to_pr,
-                    code_tracking=EXCLUDED.code_tracking,
-                    updated_at=NOW()
+                    plant                = EXCLUDED.plant,
+                    equipment            = EXCLUDED.equipment,
+                    revision             = EXCLUDED.revision,
+                    reservno             = EXCLUDED.reservno,
+                    material_description = EXCLUDED.material_description,
+                    qty_req              = EXCLUDED.qty_req,
+                    qty_stock            = EXCLUDED.qty_stock,
+                    qty_pr               = EXCLUDED.qty_pr,
+                    qty_to_pr            = EXCLUDED.qty_to_pr,
+                    code_tracking        = EXCLUDED.code_tracking,
+                    updated_at           = NOW()
             """
             execute_values(cur, sql, rows)
 
@@ -435,7 +498,16 @@ def bulk_replace_kumpulan(df: pd.DataFrame) -> int:
 
 # ─── WORK ORDER ──────────────────────────────────────────────
 def bulk_replace_order(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (order), insert baris baru."""
+    """
+    Upsert berdasarkan ("order") — tidak ada DELETE saat upload.
+
+    🔑 Key (tidak ditimpa): order, plant, superior_order, notification,
+                             created_on, system_status, actual_release,
+                             wbs_ord_header, total_plan_cost, total_act_cost
+    ✅ Boleh di-update: description, equipment, user_status, funct_location,
+                        location, cost_center, planner_group, main_work_ctr,
+                        changed_by, basic_start_date, basic_finish_date
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -465,21 +537,22 @@ def bulk_replace_order(df: pd.DataFrame) -> int:
                  entry_by, changed_by, basic_start_date, basic_finish_date, actual_release)
                 VALUES %s
                 ON CONFLICT ("order") DO UPDATE SET
-                    plant=EXCLUDED.plant, superior_order=EXCLUDED.superior_order,
-                    notification=EXCLUDED.notification, created_on=EXCLUDED.created_on,
-                    description=EXCLUDED.description, revision=EXCLUDED.revision,
-                    equipment=EXCLUDED.equipment, system_status=EXCLUDED.system_status,
-                    user_status=EXCLUDED.user_status, funct_location=EXCLUDED.funct_location,
-                    location=EXCLUDED.location, wbs_ord_header=EXCLUDED.wbs_ord_header,
-                    cost_center=EXCLUDED.cost_center,
-                    total_plan_cost=EXCLUDED.total_plan_cost,
-                    total_act_cost=EXCLUDED.total_act_cost,
-                    planner_group=EXCLUDED.planner_group, main_work_ctr=EXCLUDED.main_work_ctr,
-                    entry_by=EXCLUDED.entry_by, changed_by=EXCLUDED.changed_by,
-                    basic_start_date=EXCLUDED.basic_start_date,
-                    basic_finish_date=EXCLUDED.basic_finish_date,
-                    actual_release=EXCLUDED.actual_release,
-                    updated_at=NOW()
+                    -- ✅ Boleh di-update
+                    description      = EXCLUDED.description,
+                    equipment        = EXCLUDED.equipment,
+                    user_status      = EXCLUDED.user_status,
+                    funct_location   = EXCLUDED.funct_location,
+                    location         = EXCLUDED.location,
+                    cost_center      = EXCLUDED.cost_center,
+                    planner_group    = EXCLUDED.planner_group,
+                    main_work_ctr    = EXCLUDED.main_work_ctr,
+                    changed_by       = EXCLUDED.changed_by,
+                    basic_start_date = EXCLUDED.basic_start_date,
+                    basic_finish_date= EXCLUDED.basic_finish_date,
+                    updated_at       = NOW()
+                    -- 🚫 TIDAK di-update: plant, superior_order, notification, created_on,
+                    --    system_status, actual_release, wbs_ord_header,
+                    --    total_plan_cost, total_act_cost, revision, entry_by
             """
             execute_values(cur, sql, rows)
 
@@ -504,20 +577,20 @@ def bulk_replace_project(df: pd.DataFrame) -> int:
                  created, created_by, is_deleted, modified, modified_by, duration_ta_brick_id)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    project_number=EXCLUDED.project_number,
-                    project_type_id=EXCLUDED.project_type_id,
-                    start_date=EXCLUDED.start_date,
-                    finish_date=EXCLUDED.finish_date,
-                    revision=EXCLUDED.revision,
-                    description=EXCLUDED.description,
-                    project_status=EXCLUDED.project_status,
-                    plant=EXCLUDED.plant,
-                    created=EXCLUDED.created,
-                    created_by=EXCLUDED.created_by,
-                    is_deleted=EXCLUDED.is_deleted,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    duration_ta_brick_id=EXCLUDED.duration_ta_brick_id
+                    project_number     = EXCLUDED.project_number,
+                    project_type_id    = EXCLUDED.project_type_id,
+                    start_date         = EXCLUDED.start_date,
+                    finish_date        = EXCLUDED.finish_date,
+                    revision           = EXCLUDED.revision,
+                    description        = EXCLUDED.description,
+                    project_status     = EXCLUDED.project_status,
+                    plant              = EXCLUDED.plant,
+                    created            = EXCLUDED.created,
+                    created_by         = EXCLUDED.created_by,
+                    is_deleted         = EXCLUDED.is_deleted,
+                    modified           = EXCLUDED.modified,
+                    modified_by        = EXCLUDED.modified_by,
+                    duration_ta_brick_id = EXCLUDED.duration_ta_brick_id
             """
             rows = []
             for _, r in df.iterrows():
@@ -551,16 +624,16 @@ def bulk_replace_job_list(df: pd.DataFrame) -> int:
                  is_deleted, modified, modified_by, joblist_description, no_joblist)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    project_id=EXCLUDED.project_id,
-                    equipment_id=EXCLUDED.equipment_id,
-                    plant=EXCLUDED.plant,
-                    created=EXCLUDED.created,
-                    created_by=EXCLUDED.created_by,
-                    is_deleted=EXCLUDED.is_deleted,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    joblist_description=EXCLUDED.joblist_description,
-                    no_joblist=EXCLUDED.no_joblist
+                    project_id         = EXCLUDED.project_id,
+                    equipment_id       = EXCLUDED.equipment_id,
+                    plant              = EXCLUDED.plant,
+                    created            = EXCLUDED.created,
+                    created_by         = EXCLUDED.created_by,
+                    is_deleted         = EXCLUDED.is_deleted,
+                    modified           = EXCLUDED.modified,
+                    modified_by        = EXCLUDED.modified_by,
+                    joblist_description= EXCLUDED.joblist_description,
+                    no_joblist         = EXCLUDED.no_joblist
             """
             rows = []
             for _, r in df.iterrows():
@@ -607,26 +680,22 @@ def bulk_replace_job_detail(df: pd.DataFrame) -> int:
                  planning_jasa_status_id, planning_material_status_id)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    joblist_id=EXCLUDED.joblist_id,
-                    joblist_detail_description=EXCLUDED.joblist_detail_description,
-                    is_mechanical_integrity=EXCLUDED.is_mechanical_integrity,
-                    is_optimization=EXCLUDED.is_optimization,
-                    plant=EXCLUDED.plant,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    no_document=EXCLUDED.no_document,
-                    status_id=EXCLUDED.status_id,
-                    notes=EXCLUDED.notes,
-                    no_joblist_detail=EXCLUDED.no_joblist_detail,
-                    planning_status_id=EXCLUDED.planning_status_id,
-                    planning_material_status_id=EXCLUDED.planning_material_status_id,
-                    planning_jasa_status_id=EXCLUDED.planning_jasa_status_id,
-                    is_deleted=EXCLUDED.is_deleted
+                    joblist_id                   = EXCLUDED.joblist_id,
+                    joblist_detail_description   = EXCLUDED.joblist_detail_description,
+                    is_mechanical_integrity      = EXCLUDED.is_mechanical_integrity,
+                    is_optimization              = EXCLUDED.is_optimization,
+                    plant                        = EXCLUDED.plant,
+                    modified                     = EXCLUDED.modified,
+                    modified_by                  = EXCLUDED.modified_by,
+                    no_document                  = EXCLUDED.no_document,
+                    status_id                    = EXCLUDED.status_id,
+                    notes                        = EXCLUDED.notes,
+                    no_joblist_detail            = EXCLUDED.no_joblist_detail,
+                    planning_status_id           = EXCLUDED.planning_status_id,
+                    planning_material_status_id  = EXCLUDED.planning_material_status_id,
+                    planning_jasa_status_id      = EXCLUDED.planning_jasa_status_id,
+                    is_deleted                   = EXCLUDED.is_deleted
             """
-            def _i(v):
-                try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
-                except: return None
-
             rows = []
             for _, r in df.iterrows():
                 rows.append((
@@ -687,18 +756,18 @@ def bulk_replace_job_detail_work_order(df: pd.DataFrame) -> int:
                  is_deleted, modified, modified_by)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    joblist_detail_id=EXCLUDED.joblist_detail_id,
-                    notification=EXCLUDED.notification,
-                    "order"=EXCLUDED."order",
-                    description=EXCLUDED.description,
-                    equipment=EXCLUDED.equipment,
-                    system_status=EXCLUDED.system_status,
-                    user_status=EXCLUDED.user_status,
-                    total_plnnd_costs=EXCLUDED.total_plnnd_costs,
-                    totalact_costs=EXCLUDED.totalact_costs,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    is_deleted=EXCLUDED.is_deleted
+                    joblist_detail_id  = EXCLUDED.joblist_detail_id,
+                    notification       = EXCLUDED.notification,
+                    "order"            = EXCLUDED."order",
+                    description        = EXCLUDED.description,
+                    equipment          = EXCLUDED.equipment,
+                    system_status      = EXCLUDED.system_status,
+                    user_status        = EXCLUDED.user_status,
+                    total_plnnd_costs  = EXCLUDED.total_plnnd_costs,
+                    totalact_costs     = EXCLUDED.totalact_costs,
+                    modified           = EXCLUDED.modified,
+                    modified_by        = EXCLUDED.modified_by,
+                    is_deleted         = EXCLUDED.is_deleted
             """
             rows = []
             for _, r in df.iterrows():
@@ -744,26 +813,26 @@ def bulk_replace_equipment_taex(df: pd.DataFrame) -> int:
                  catalog_profile_text, manufacturer_of_asset)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    plant=EXCLUDED.plant,
-                    catalog_profile=EXCLUDED.catalog_profile,
-                    criticallity=EXCLUDED.criticallity,
-                    criticallity_text=EXCLUDED.criticallity_text,
-                    description_of_technical_object=EXCLUDED.description_of_technical_object,
-                    disiplin=EXCLUDED.disiplin,
-                    equipment_category=EXCLUDED.equipment_category,
-                    equipment_no=EXCLUDED.equipment_no,
-                    functional_location=EXCLUDED.functional_location,
-                    group_asset=EXCLUDED.group_asset,
-                    location=EXCLUDED.location,
-                    main_work_center=EXCLUDED.main_work_center,
-                    maintenance_plant=EXCLUDED.maintenance_plant,
-                    model_type=EXCLUDED.model_type,
-                    planning_plant=EXCLUDED.planning_plant,
-                    catalog_profile_text=EXCLUDED.catalog_profile_text,
-                    manufacturer_of_asset=EXCLUDED.manufacturer_of_asset,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    is_deleted=EXCLUDED.is_deleted
+                    plant                          = EXCLUDED.plant,
+                    catalog_profile                = EXCLUDED.catalog_profile,
+                    criticallity                   = EXCLUDED.criticallity,
+                    criticallity_text              = EXCLUDED.criticallity_text,
+                    description_of_technical_object= EXCLUDED.description_of_technical_object,
+                    disiplin                       = EXCLUDED.disiplin,
+                    equipment_category             = EXCLUDED.equipment_category,
+                    equipment_no                   = EXCLUDED.equipment_no,
+                    functional_location            = EXCLUDED.functional_location,
+                    group_asset                    = EXCLUDED.group_asset,
+                    location                       = EXCLUDED.location,
+                    main_work_center               = EXCLUDED.main_work_center,
+                    maintenance_plant              = EXCLUDED.maintenance_plant,
+                    model_type                     = EXCLUDED.model_type,
+                    planning_plant                 = EXCLUDED.planning_plant,
+                    catalog_profile_text           = EXCLUDED.catalog_profile_text,
+                    manufacturer_of_asset          = EXCLUDED.manufacturer_of_asset,
+                    modified                       = EXCLUDED.modified,
+                    modified_by                    = EXCLUDED.modified_by,
+                    is_deleted                     = EXCLUDED.is_deleted
             """
             rows = []
             for _, r in df.iterrows():
@@ -803,12 +872,12 @@ def bulk_replace_job_area(df) -> int:
                  modified, modified_by, area_alias_name)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    area_name=EXCLUDED.area_name,
-                    plant=EXCLUDED.plant,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    area_alias_name=EXCLUDED.area_alias_name,
-                    is_deleted=EXCLUDED.is_deleted
+                    area_name       = EXCLUDED.area_name,
+                    plant           = EXCLUDED.plant,
+                    modified        = EXCLUDED.modified,
+                    modified_by     = EXCLUDED.modified_by,
+                    area_alias_name = EXCLUDED.area_alias_name,
+                    is_deleted      = EXCLUDED.is_deleted
             """
             rows = []
             for _, r in df.iterrows():
@@ -839,13 +908,13 @@ def bulk_replace_job_unit(df) -> int:
                  modified, modified_by, unit_alias_name)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    area_id=EXCLUDED.area_id,
-                    unit_name=EXCLUDED.unit_name,
-                    plant=EXCLUDED.plant,
-                    modified=EXCLUDED.modified,
-                    modified_by=EXCLUDED.modified_by,
-                    unit_alias_name=EXCLUDED.unit_alias_name,
-                    is_deleted=EXCLUDED.is_deleted
+                    area_id         = EXCLUDED.area_id,
+                    unit_name       = EXCLUDED.unit_name,
+                    plant           = EXCLUDED.plant,
+                    modified        = EXCLUDED.modified,
+                    modified_by     = EXCLUDED.modified_by,
+                    unit_alias_name = EXCLUDED.unit_alias_name,
+                    is_deleted      = EXCLUDED.is_deleted
             """
             rows = []
             for _, r in df.iterrows():
@@ -864,9 +933,10 @@ def bulk_replace_job_unit(df) -> int:
     finally:
         release_conn(conn)
 
+
 # ─── VW JOBLIST WO ───────────────────────────────────────────
 def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama ("order"), insert baris baru."""
+    """Upsert berdasarkan ("order") — tidak ada DELETE saat upload."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -882,32 +952,35 @@ def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
                  cost_center, entered_by)
                 VALUES %s
                 ON CONFLICT ("order") DO UPDATE SET
-                    plant=EXCLUDED.plant, equipment_no=EXCLUDED.equipment_no,
-                    disiplin=EXCLUDED.disiplin,
-                    joblist_description=EXCLUDED.joblist_description,
-                    planning_jasa_status=EXCLUDED.planning_jasa_status,
-                    planning_material_status=EXCLUDED.planning_material_status,
-                    code_name=EXCLUDED.code_name, is_lldii=EXCLUDED.is_lldii,
-                    notification=EXCLUDED.notification, created_on=EXCLUDED.created_on,
-                    superior_order=EXCLUDED.superior_order,
-                    description=EXCLUDED.description,
-                    functional_loc=EXCLUDED.functional_loc, location=EXCLUDED.location,
-                    revision=EXCLUDED.revision, system_status=EXCLUDED.system_status,
-                    user_status=EXCLUDED.user_status,
-                    wbs_ord_header=EXCLUDED.wbs_ord_header,
-                    total_plnnd_costs=EXCLUDED.total_plnnd_costs,
-                    totalact_costs=EXCLUDED.totalact_costs,
-                    planner_group=EXCLUDED.planner_group,
-                    main_work_ctr=EXCLUDED.main_work_ctr, change_by=EXCLUDED.change_by,
-                    bas_start_date=EXCLUDED.bas_start_date,
-                    basic_fin_date=EXCLUDED.basic_fin_date,
-                    actual_release=EXCLUDED.actual_release,
-                    cost_center=EXCLUDED.cost_center, entered_by=EXCLUDED.entered_by
+                    plant                   = EXCLUDED.plant,
+                    equipment_no            = EXCLUDED.equipment_no,
+                    disiplin                = EXCLUDED.disiplin,
+                    joblist_description     = EXCLUDED.joblist_description,
+                    planning_jasa_status    = EXCLUDED.planning_jasa_status,
+                    planning_material_status= EXCLUDED.planning_material_status,
+                    code_name               = EXCLUDED.code_name,
+                    is_lldii                = EXCLUDED.is_lldii,
+                    notification            = EXCLUDED.notification,
+                    created_on              = EXCLUDED.created_on,
+                    superior_order          = EXCLUDED.superior_order,
+                    description             = EXCLUDED.description,
+                    functional_loc          = EXCLUDED.functional_loc,
+                    location                = EXCLUDED.location,
+                    revision                = EXCLUDED.revision,
+                    system_status           = EXCLUDED.system_status,
+                    user_status             = EXCLUDED.user_status,
+                    wbs_ord_header          = EXCLUDED.wbs_ord_header,
+                    total_plnnd_costs       = EXCLUDED.total_plnnd_costs,
+                    totalact_costs          = EXCLUDED.totalact_costs,
+                    planner_group           = EXCLUDED.planner_group,
+                    main_work_ctr           = EXCLUDED.main_work_ctr,
+                    change_by               = EXCLUDED.change_by,
+                    bas_start_date          = EXCLUDED.bas_start_date,
+                    basic_fin_date          = EXCLUDED.basic_fin_date,
+                    actual_release          = EXCLUDED.actual_release,
+                    cost_center             = EXCLUDED.cost_center,
+                    entered_by              = EXCLUDED.entered_by
             """
-            def _i(v):
-                try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
-                except: return None
-
             rows = []
             for _, r in df.iterrows():
                 rows.append((
@@ -936,7 +1009,7 @@ def bulk_replace_vw_joblist_wo(df: pd.DataFrame) -> int:
 
 # ─── VW JOBLIST DETAIL ───────────────────────────────────────
 def bulk_replace_vw_joblist_detail(df: pd.DataFrame) -> int:
-    """Selalu upsert — update baris yang sama (id), insert baris baru."""
+    """Upsert berdasarkan (id) — tidak ada DELETE saat upload."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -956,44 +1029,51 @@ def bulk_replace_vw_joblist_detail(df: pd.DataFrame) -> int:
                  lldi_status, is_freezing)
                 VALUES %s
                 ON CONFLICT (id) DO UPDATE SET
-                    joblist_id=EXCLUDED.joblist_id,
-                    joblist_detail_desc=EXCLUDED.joblist_detail_desc,
-                    reason_name=EXCLUDED.reason_name, doc_type_name=EXCLUDED.doc_type_name,
-                    no_document=EXCLUDED.no_document,
-                    is_mechanical_integrity=EXCLUDED.is_mechanical_integrity,
-                    job_discipline_name=EXCLUDED.job_discipline_name,
-                    nomor_pm=EXCLUDED.nomor_pm, notes=EXCLUDED.notes,
-                    plant=EXCLUDED.plant, created=EXCLUDED.created,
-                    creator_name=EXCLUDED.creator_name,
-                    creator_job_title=EXCLUDED.creator_job_title,
-                    is_deleted=EXCLUDED.is_deleted,
-                    joblist_description=EXCLUDED.joblist_description,
-                    no_joblist=EXCLUDED.no_joblist,
-                    project_number=EXCLUDED.project_number,
-                    project_type_code=EXCLUDED.project_type_code,
-                    project_type_name=EXCLUDED.project_type_name,
-                    start_date=EXCLUDED.start_date, finish_date=EXCLUDED.finish_date,
-                    revision=EXCLUDED.revision, description=EXCLUDED.description,
-                    project_status=EXCLUDED.project_status,
-                    equipment_no=EXCLUDED.equipment_no,
-                    area_name=EXCLUDED.area_name, area_alias_name=EXCLUDED.area_alias_name,
-                    unit_name=EXCLUDED.unit_name, unit_alias_name=EXCLUDED.unit_alias_name,
-                    functional_location=EXCLUDED.functional_location,
-                    location=EXCLUDED.location, disiplin=EXCLUDED.disiplin,
-                    criticallity=EXCLUDED.criticallity,
-                    criticallity_text=EXCLUDED.criticallity_text,
-                    main_work_center=EXCLUDED.main_work_center,
-                    is_all_in=EXCLUDED.is_all_in, is_jasa=EXCLUDED.is_jasa,
-                    is_lldii=EXCLUDED.is_lldii, is_material=EXCLUDED.is_material,
-                    code_name=EXCLUDED.code_name,
-                    planning_jasa_status=EXCLUDED.planning_jasa_status,
-                    planning_material_status=EXCLUDED.planning_material_status,
-                    lldi_status=EXCLUDED.lldi_status, is_freezing=EXCLUDED.is_freezing
+                    joblist_id               = EXCLUDED.joblist_id,
+                    joblist_detail_desc      = EXCLUDED.joblist_detail_desc,
+                    reason_name              = EXCLUDED.reason_name,
+                    doc_type_name            = EXCLUDED.doc_type_name,
+                    no_document              = EXCLUDED.no_document,
+                    is_mechanical_integrity  = EXCLUDED.is_mechanical_integrity,
+                    job_discipline_name      = EXCLUDED.job_discipline_name,
+                    nomor_pm                 = EXCLUDED.nomor_pm,
+                    notes                    = EXCLUDED.notes,
+                    plant                    = EXCLUDED.plant,
+                    created                  = EXCLUDED.created,
+                    creator_name             = EXCLUDED.creator_name,
+                    creator_job_title        = EXCLUDED.creator_job_title,
+                    is_deleted               = EXCLUDED.is_deleted,
+                    joblist_description      = EXCLUDED.joblist_description,
+                    no_joblist               = EXCLUDED.no_joblist,
+                    project_number           = EXCLUDED.project_number,
+                    project_type_code        = EXCLUDED.project_type_code,
+                    project_type_name        = EXCLUDED.project_type_name,
+                    start_date               = EXCLUDED.start_date,
+                    finish_date              = EXCLUDED.finish_date,
+                    revision                 = EXCLUDED.revision,
+                    description              = EXCLUDED.description,
+                    project_status           = EXCLUDED.project_status,
+                    equipment_no             = EXCLUDED.equipment_no,
+                    area_name                = EXCLUDED.area_name,
+                    area_alias_name          = EXCLUDED.area_alias_name,
+                    unit_name                = EXCLUDED.unit_name,
+                    unit_alias_name          = EXCLUDED.unit_alias_name,
+                    functional_location      = EXCLUDED.functional_location,
+                    location                 = EXCLUDED.location,
+                    disiplin                 = EXCLUDED.disiplin,
+                    criticallity             = EXCLUDED.criticallity,
+                    criticallity_text        = EXCLUDED.criticallity_text,
+                    main_work_center         = EXCLUDED.main_work_center,
+                    is_all_in                = EXCLUDED.is_all_in,
+                    is_jasa                  = EXCLUDED.is_jasa,
+                    is_lldii                 = EXCLUDED.is_lldii,
+                    is_material              = EXCLUDED.is_material,
+                    code_name                = EXCLUDED.code_name,
+                    planning_jasa_status     = EXCLUDED.planning_jasa_status,
+                    planning_material_status = EXCLUDED.planning_material_status,
+                    lldi_status              = EXCLUDED.lldi_status,
+                    is_freezing              = EXCLUDED.is_freezing
             """
-            def _i(v):
-                try: return int(float(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else None
-                except: return None
-
             rows = []
             for _, r in df.iterrows():
                 rows.append((
