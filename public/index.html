@@ -723,6 +723,11 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 
     <button onclick="confirmClearWorkflow()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;margin-right:4px;" onmouseover="this.style.background='rgba(217,119,6,0.7)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">🗑 Hapus KK+Summary</button>
 
+  <button onclick="openModal('modal-change-pw')" 
+  style="padding:4px 10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:white;font-size:11px;cursor:pointer">
+  🔑 Ganti Password
+</button>
+
     <!-- <button onclick="confirmResetAll()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;" onmouseover="this.style.background='rgba(220,38,38,0.7)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">🗑 Reset Data</button> -->
 
 
@@ -2260,6 +2265,40 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
 </div><!-- /pages -->
 </div><!-- /body -->
 
+
+
+<div class="modal-overlay" id="modal-change-pw">
+  <div class="modal" style="width:380px">
+    <div class="modal-header" style="background:#1a56db">
+      <h3>🔑 Ganti Password</h3>
+      <button class="modal-close" onclick="closeModal('modal-change-pw')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="change-pw-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px;font-size:12px;color:#dc2626;margin-bottom:12px"></div>
+      <div id="change-pw-ok" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px;font-size:12px;color:#16a34a;margin-bottom:12px"></div>
+      <div class="fg" style="margin-bottom:10px">
+        <label>Password Lama</label>
+        <input type="password" id="cp-old" placeholder="Masukkan password lama"
+          style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px">
+      </div>
+      <div class="fg" style="margin-bottom:10px">
+        <label>Password Baru</label>
+        <input type="password" id="cp-new" placeholder="Minimal 6 karakter"
+          style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px">
+      </div>
+      <div class="fg">
+        <label>Konfirmasi Password Baru</label>
+        <input type="password" id="cp-confirm" placeholder="Ulangi password baru"
+          style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px"
+          onkeydown="if(event.key==='Enter')submitChangePassword()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-reset" onclick="closeModal('modal-change-pw')">Batal</button>
+      <button class="btn btn-success" onclick="submitChangePassword()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
 
 
 <!-- MODAL: JOBLIST TAEX UPLOAD -->
@@ -9156,6 +9195,45 @@ function exportJoblistTaexExcel() {
   XLSX.utils.book_append_sheet(wb, ws, 'JoblistTAEX');
   XLSX.writeFile(wb, `JoblistTAEX_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('Export berhasil!', 'ok');
+}
+
+
+
+async function submitChangePassword() {
+  const oldPw    = document.getElementById('cp-old').value;
+  const newPw    = document.getElementById('cp-new').value;
+  const confirm  = document.getElementById('cp-confirm').value;
+  const errEl    = document.getElementById('change-pw-error');
+  const okEl     = document.getElementById('change-pw-ok');
+
+  errEl.style.display = 'none';
+  okEl.style.display  = 'none';
+
+  if (!oldPw || !newPw || !confirm) {
+    errEl.textContent = 'Semua field wajib diisi'; errEl.style.display = 'block'; return;
+  }
+  if (newPw !== confirm) {
+    errEl.textContent = 'Konfirmasi password tidak cocok'; errEl.style.display = 'block'; return;
+  }
+  if (newPw.length < 6) {
+    errEl.textContent = 'Password baru minimal 6 karakter'; errEl.style.display = 'block'; return;
+  }
+
+  try {
+    await apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: { old_password: oldPw, new_password: newPw }
+    });
+    okEl.textContent = '✅ Password berhasil diubah!';
+    okEl.style.display = 'block';
+    document.getElementById('cp-old').value    = '';
+    document.getElementById('cp-new').value    = '';
+    document.getElementById('cp-confirm').value = '';
+    setTimeout(() => closeModal('modal-change-pw'), 1500);
+  } catch(e) {
+    errEl.textContent = e.message || 'Gagal mengubah password';
+    errEl.style.display = 'block';
+  }
 }
 
 </script>

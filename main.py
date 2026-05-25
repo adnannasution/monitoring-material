@@ -415,6 +415,29 @@ def meta(request: Request):
     })
 
 
+
+@app.post("/api/auth/change-password")
+async def change_password(request: Request):
+    user = get_current_user(request)
+    body = await request.json()
+    old_pw = body.get("old_password", "")
+    new_pw = body.get("new_password", "")
+
+    if not old_pw or not new_pw:
+        raise HTTPException(400, "Password lama dan baru wajib diisi")
+    if len(new_pw) < 6:
+        raise HTTPException(400, "Password baru minimal 6 karakter")
+
+    # Cek password lama
+    row = query_one("SELECT password_hash FROM users WHERE id=%s", (user["id"],))
+    if not _verify_password(old_pw, row["password_hash"]):
+        raise HTTPException(400, "Password lama salah")
+
+    execute("UPDATE users SET password_hash=%s WHERE id=%s",
+            (_hash_password(new_pw), user["id"]))
+    return {"ok": True, "msg": "Password berhasil diubah"}
+
+
 # ═══════════════════════════════════════════════════════════════
 # DATA — paginated per tabel
 # ═══════════════════════════════════════════════════════════════
