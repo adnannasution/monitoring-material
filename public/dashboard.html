@@ -1788,6 +1788,68 @@ async function loadP4PlanningJobdetail(proj) {
   } catch(e) { console.error('loadP4PlanningJobdetail:', e); }
 }
 
+
+
+async function loadP4JasaPlanning(proj) {
+  document.getElementById('p4-jasa-section').style.display = proj ? '' : 'none';
+  if (!proj) return;
+
+  try {
+    const d = await apiFetch('/api/dashboard/project-jasa-planning?project_number=' + encodeURIComponent(proj));
+
+    document.getElementById('p4-jasa-total').textContent      = fmt(d.total);
+    document.getElementById('p4-jasa-complete').textContent   = fmt(d.planning_complete);
+    document.getElementById('p4-jasa-notplanned').textContent = fmt(d.not_planned);
+    document.getElementById('p4-jasa-others').textContent     = fmt(d.others);
+
+    // Donut
+    destroyChart('p4-donut-jasa');
+    charts['p4-donut-jasa'] = new Chart(
+      document.getElementById('p4-donut-jasa').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Planning Complete', 'Not Planned', 'Lainnya'],
+          datasets: [{
+            data: [d.planning_complete, d.not_planned, d.others],
+            backgroundColor: ['#16a34a', '#dc2626', '#f59e0b'],
+            borderWidth: 0, hoverOffset: 6
+          }]
+        },
+        options: {
+          cutout: '70%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              label: c => ` ${c.label}: ${fmt(c.raw)} (${d.total ? (c.raw/d.total*100).toFixed(1) : 0}%)`
+            }}
+          }
+        }
+      }
+    );
+
+    // Table per area
+    document.getElementById('p4-jasa-tbody').innerHTML = d.by_area.map(r => {
+      const pct   = r.total ? (r.planning_complete / r.total * 100) : 0;
+      const color = pct === 100 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626';
+      return `<tr>
+        <td>${r.area}</td>
+        <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
+        <td style="text-align:right;color:#16a34a;font-weight:700">${fmt(r.planning_complete)}</td>
+        <td style="text-align:right;color:#dc2626">${fmt(r.not_planned)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="flex:1;background:#e5e7eb;border-radius:99px;height:6px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${color};border-radius:99px"></div>
+            </div>
+            <span style="font-size:10px;font-weight:700;color:${color}">${pct.toFixed(0)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+  } catch(e) { console.error('loadP4JasaPlanning:', e); }
+}
+
 </script>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
@@ -1959,6 +2021,73 @@ async function loadP4PlanningJobdetail(proj) {
             </tr>
           </thead>
           <tbody id="p4-planning-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+
+
+<!-- Planning Jasa Section -->
+<div id="p4-jasa-section" style="display:none;margin-bottom:20px">
+  <div class="card">
+    <div class="card-title">Planning Status Jasa</div>
+    <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+
+      <!-- Donut -->
+      <div style="flex-shrink:0;text-align:center">
+        <div style="position:relative;width:160px;height:160px;margin:0 auto 12px">
+          <canvas id="p4-donut-jasa"></canvas>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+            <div id="p4-jasa-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
+            <div style="font-size:10px;color:var(--text-sm);font-weight:600">Total JD</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;font-weight:600">
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#16a34a"></div> Planning Complete
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#dc2626"></div> Not Planned
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div> Lainnya
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary cards -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+          <div id="p4-jasa-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
+          <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
+        </div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+          <div id="p4-jasa-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
+          <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+          <div id="p4-jasa-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
+          <div style="font-size:11px;color:#d97706;font-weight:600">Lainnya</div>
+        </div>
+      </div>
+
+      <!-- Table per area -->
+      <div style="flex:1;min-width:280px;max-height:200px;overflow-y:auto">
+        <table class="mini-table" style="font-size:11px">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th style="text-align:right">Total</th>
+              <th style="text-align:right">Complete</th>
+              <th style="text-align:right">Not Planned</th>
+              <th>Progress</th>
+            </tr>
+          </thead>
+          <tbody id="p4-jasa-tbody"></tbody>
         </table>
       </div>
 
