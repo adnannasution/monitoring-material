@@ -1295,7 +1295,9 @@ async function loadP4() {
   document.getElementById('p4-empty').style.display       = proj ? 'none' : '';
   document.getElementById('p4-eq-section').style.display  = proj ? '' : 'none';
   document.getElementById('p4-mat-section').style.display = proj ? '' : 'none';
-  document.getElementById('p4-planning-section').style.display = proj ? '' : 'none'; // ← tambah
+  document.getElementById('p4-planning-section').style.display = proj ? '' : 'none';
+  document.getElementById('p4-jasa-section').style.display     = proj ? '' : 'none'; // ← tambah di sini
+
   if (!proj) return;
 
   document.getElementById('p4-loading').style.display = '';
@@ -1309,7 +1311,8 @@ async function loadP4() {
     if (eq)  renderP4Equipment(eq);
     if (mat) renderP4Material(mat);
     if (mon) renderP4MonthlyChart(mon.monthly);
-    loadP4PlanningJobdetail(proj); // ← tambah (tidak perlu await, jalan paralel)
+    loadP4PlanningJobdetail(proj);
+    loadP4JasaPlanning(proj); // ← tambah di sini
   } catch(e) {
     console.error('loadP4 error:', e);
   } finally {
