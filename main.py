@@ -415,9 +415,7 @@ def meta(request: Request):
     })
 
 
-@app.get("/api/kertas-kerja/next-code")
-def kk_next_code(request, prefix=""):
-    # query MAX code, increment, return next
+
 
 @app.post("/api/auth/change-password")
 async def change_password(request: Request):
