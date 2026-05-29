@@ -1184,8 +1184,8 @@ async def create_kertas_kerja(request: Request):
     # code = f"{prefix}{digits}"
 
     # Tentukan prefix dari pg_role + plant_code user yang login
-    plant    = (user.get("plant_code") or "").strip()
-    ru_digit = plant[1] if len(plant) >= 2 else "2"  # '6201'[1]='2', '6301'[1]='3'
+    plant_from_data = (rows[0].get("plant") or "").strip() if rows else ""
+    ru_digit = plant_from_data[1] if len(plant_from_data) >= 2 else "2"
     pg_group = prefix
     kk_prefix = f"{pg_group}{ru_digit}01"
 
