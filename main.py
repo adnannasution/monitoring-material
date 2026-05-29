@@ -415,6 +415,9 @@ def meta(request: Request):
     })
 
 
+@app.get("/api/kertas-kerja/next-code")
+def kk_next_code(request, prefix=""):
+    # query MAX code, increment, return next
 
 @app.post("/api/auth/change-password")
 async def change_password(request: Request):
@@ -1178,9 +1181,48 @@ async def create_kertas_kerja(request: Request):
         prefix = last_char_to_prefix.get(next(iter(pg_last_chars)), "KK")
     else:
         prefix = "KK"
-    import random, string
-    digits = ''.join(random.choices(string.digits, k=8))
-    code = f"{prefix}{digits}"
+    # import random, string
+    # digits = ''.join(random.choices(string.digits, k=8))
+    # code = f"{prefix}{digits}"
+
+    # Tentukan prefix dari pg_role + plant_code user yang login
+    plant    = (user.get("plant_code") or "").strip()
+    ru_digit = plant[1] if len(plant) >= 2 else "2"  # '6201'[1]='2', '6301'[1]='3'
+    pg_group = "OH" if user.get("pg_role") == "OH" else "TA"
+    kk_prefix = f"{pg_group}{ru_digit}01"
+
+    # Cari nomor terakhir, increment
+    max_row = query("""
+        SELECT MAX(code_kertas_kerja) AS last_code
+        FROM prisma_reservasi
+        WHERE code_kertas_kerja LIKE %s
+        AND LENGTH(code_kertas_kerja) = 10
+    """, [kk_prefix + "%"])
+
+    last_code = max_row[0]["last_code"] if max_row else None
+    try:
+        last_num = int(last_code[-5:]) if last_code else 0
+    except (ValueError, TypeError):
+        last_num = 0
+
+    next_num = last_num + 1
+    if next_num > 99999:
+        # Overflow ke series 02
+        kk_prefix = f"{pg_group}{ru_digit}02"
+        max_row2 = query("""
+            SELECT MAX(code_kertas_kerja) AS last_code
+            FROM prisma_reservasi
+            WHERE code_kertas_kerja LIKE %s
+            AND LENGTH(code_kertas_kerja) = 10
+        """, [kk_prefix + "%"])
+        last_code2 = max_row2[0]["last_code"] if max_row2 else None
+        try:
+            last_num = int(last_code2[-5:]) if last_code2 else 0
+        except (ValueError, TypeError):
+            last_num = 0
+        next_num = last_num + 1
+
+    code = f"{kk_prefix}{next_num:05d}"
 
     kk_data = []
     for r in rows:
