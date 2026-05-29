@@ -2334,16 +2334,24 @@ def audit(request: Request, page: int = 1, limit: int = 100,
 # ═══════════════════════════════════════════════════════════════
 # APP STATE
 # ═══════════════════════════════════════════════════════════════
+
+
+_PER_USER_KEYS = {"kk_current", "summary_current"}
+
 @app.get("/api/state/{key}")
 def get_state_api(key: str, request: Request):
     check_api_key(request)
-    return {"key": key, "value": get_state(key)}
+    user = get_current_user(request)
+    actual_key = f"{key}_{user['id']}" if key in _PER_USER_KEYS else key
+    return {"key": key, "value": get_state(actual_key)}
 
 @app.post("/api/state/{key}")
 async def set_state_api(key: str, request: Request):
     check_api_key(request)
+    user = get_current_user(request)
     body = await request.json()
-    set_state(key, body.get("value"))
+    actual_key = f"{key}_{user['id']}" if key in _PER_USER_KEYS else key
+    set_state(actual_key, body.get("value"))
     return {"ok": True}
 
 
