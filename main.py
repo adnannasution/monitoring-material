@@ -1186,7 +1186,7 @@ async def create_kertas_kerja(request: Request):
     # Tentukan prefix dari pg_role + plant_code user yang login
     plant    = (user.get("plant_code") or "").strip()
     ru_digit = plant[1] if len(plant) >= 2 else "2"  # '6201'[1]='2', '6301'[1]='3'
-    pg_group = "OH" if user.get("pg_role") == "OH" else "TA"
+    pg_group = prefix
     kk_prefix = f"{pg_group}{ru_digit}01"
 
     # Cari nomor terakhir, increment
