@@ -4472,7 +4472,7 @@ async function createKertasKerja() {
     if (kkState?.value) {
       const newData = kkState.value.data || [];
       state.kkData = [...(state.kkData || []), ...newData];
-      state.kkCode = kkState.value.code || code;
+      state.kkCode = code;
     } else {
       state.kkCode = code;
     }
