@@ -1367,11 +1367,6 @@ def sync_prisma_from_taex(request: Request):
 # ═══════════════════════════════════════════════════════════════
 @app.post("/api/kumpulan/sync-pr")
 def sync_kumpulan_pr(request: Request):
-    """
-    Sinkron nomor PR dari SAP PR ke Kumpulan Summary.
-    Match by: material + (tracking_no atau tracking) = code_tracking
-    Return HANYA hasil sinkron — tidak return data taex agar tab TA-ex tidak terganggu.
-    """
     check_api_key(request)
 
     kumpulan_rows = query("SELECT * FROM kumpulan_summary")
@@ -1387,6 +1382,20 @@ def sync_kumpulan_pr(request: Request):
 
     try:
         with conn.cursor() as cur:
+
+            # ── Step 0: Isi qty_stock_onhand di prisma dari taex ──
+            cur.execute("""
+                UPDATE prisma_reservasi p
+                SET qty_stock_onhand = t.qty_stock,
+                    updated_at       = NOW()
+                FROM taex_reservasi t
+                WHERE p."order"  = t."order"
+                  AND p.material = t.material
+                  AND p.itm      = t.itm
+                  AND (p.qty_stock_onhand IS NULL OR p.qty_stock_onhand = 0)
+            """)
+
+            # ── Step 1: Loop sinkron PR ──
             for k in kumpulan_rows:
                 pr_item = next((
                     p for p in pr_rows
@@ -1411,7 +1420,6 @@ def sync_kumpulan_pr(request: Request):
                     WHERE id=%s
                 """, (pr_item["qty_pr"], qty_to_pr, k["id"]))
 
-                # ── Update PRISMA: pr_prisma, item_prisma, qty_pr_prisma ──
                 cur.execute("""
                     UPDATE prisma_reservasi
                     SET pr_prisma=%s, item_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
@@ -1419,19 +1427,17 @@ def sync_kumpulan_pr(request: Request):
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
 
-                # ── Update TAEX: PR, Item, Qty_PR + Qty_Stock dari qty_stock_onhand prisma ──
-                # qty_stock di taex diisi dari qty_stock_onhand di prisma (match by order+material+itm)
                 cur.execute("""
                     UPDATE taex_reservasi t
-                    SET pr       = %s,
-                        item     = %s,
-                        qty_pr   = %s,
+                    SET pr        = %s,
+                        item      = %s,
+                        qty_pr    = %s,
                         qty_stock = COALESCE(p.qty_stock_onhand, t.qty_stock),
                         updated_at = NOW()
                     FROM prisma_reservasi p
                     WHERE t.material = p.material
-                      AND t."order" = p."order"
-                      AND t.itm     = p.itm
+                      AND t."order"  = p."order"
+                      AND t.itm      = p.itm
                       AND p.material = %s
                       AND p.code_kertas_kerja = %s
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
@@ -1450,7 +1456,6 @@ def sync_kumpulan_pr(request: Request):
     finally:
         release_conn(conn)
 
-    # Return kumpulan yang terupdate — BUKAN semua data taex (tab TA-ex tidak reset)
     updated_kumpulan = query("SELECT * FROM kumpulan_summary ORDER BY id")
     return jsonify({
         "ok": True,
@@ -1459,7 +1464,6 @@ def sync_kumpulan_pr(request: Request):
         "kumpulanData": [map_kumpulan(r) for r in updated_kumpulan],
         "msg": f"✅ {matched_count} material PR tersinkron — kumpulan + prisma + taex diupdate"
     })
-
 
 # ═══════════════════════════════════════════════════════════════
 # KUMPULAN

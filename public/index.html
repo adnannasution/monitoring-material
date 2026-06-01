@@ -4396,6 +4396,8 @@ async function kkOnPGTypeChange() {
   document.getElementById('kk-wo-count').textContent = '';
   document.getElementById('kk-card-total-wo').textContent = '0';
   document.getElementById('kk-card-selected-wo').textContent = '0';
+  document.getElementById('kk-card-total-mat').textContent    = '0';
+  document.getElementById('kk-card-selected-mat').textContent = '0';
 
   try {
     const wos = await apiFetch(`/prisma/workorders?pg=${pgType}`);
