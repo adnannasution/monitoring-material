@@ -2929,9 +2929,19 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
             <div style="font-size:20px;font-weight:700;color:#15803d;line-height:1" id="kk-card-selected-wo">0</div>
             <div style="font-size:11px;color:#16a34a;font-weight:600;margin-top:3px">WO Dipilih</div>
           </div>
+
+          <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid #fed7aa;border-radius:8px;padding:8px 14px;min-width:110px">
+  <div style="font-size:20px;font-weight:700;color:#c2410c;line-height:1" id="kk-card-total-mat">0</div>
+  <div style="font-size:11px;color:#ea580c;font-weight:600;margin-top:3px">Material Tersedia</div>
+</div>
+<div style="background:linear-gradient(135deg,#fdf4ff,#fae8ff);border:1px solid #e9d5ff;border-radius:8px;padding:8px 14px;min-width:110px">
+  <div style="font-size:20px;font-weight:700;color:#7c3aed;line-height:1" id="kk-card-selected-mat">0</div>
+  <div style="font-size:11px;color:#7c3aed;font-weight:600;margin-top:3px">Material Dipilih</div>
+</div>
+
           <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px 14px;flex:1;min-width:200px;display:flex;align-items:center;gap:6px">
             <span style="font-size:16px;flex-shrink:0">💡</span>
-            <span style="font-size:11px;color:#6d28d9;line-height:1.5">WO yang sudah dipakai tidak ditampilkan. Expand WO untuk memilih material tertentu saja.</span>
+            <span style="font-size:11px;color:#6d28d9;line-height:1.5">Material yang sudah dipakai tidak ditampilkan. Expand WO untuk memilih material tertentu saja.</span>
           </div>
         </div>
 
@@ -4419,6 +4429,10 @@ allActiveRows.forEach(r => {
     }
     document.getElementById('kk-wo-count').textContent = `${filteredWOs.length} tersedia`;
     document.getElementById('kk-card-total-wo').textContent = filteredWOs.length.toLocaleString('id-ID');
+    const totalMat = filteredWOs.reduce((s, w) => s + (parseInt(w.total_mat) || 0), 0);
+document.getElementById('kk-card-total-mat').textContent = totalMat.toLocaleString('id-ID');
+document.getElementById('kk-card-selected-mat').textContent = '0';
+
     list.innerHTML = filteredWOs.map(w => `
       <div class="kk-wo-item" id="kkwo-${w.order}" data-order="${w.order}"
            style="border-bottom:1px solid #f1f5f9">
