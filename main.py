@@ -3923,19 +3923,31 @@ def admin_delete_user(user_id: int, request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
-# PUBLIC API — TRACKING & TRACKING JOBLIST
-# Akses dengan header: x-api-key: <PUBLIC_API_KEY>
-# atau query param:    ?api_key=<PUBLIC_API_KEY>
+# PUBLIC API — untuk Power BI
+# Akses via header: x-api-key: <PUBLIC_API_KEY>
+# Atau via URL:     ?api_key=<PUBLIC_API_KEY>
 # ═══════════════════════════════════════════════════════════════
+
+def check_public_api_key(request: Request):
+    import os
+    pub_key = os.environ.get("PUBLIC_API_KEY", "")
+    req_key = (
+        request.headers.get("x-api-key", "") or
+        request.query_params.get("api_key", "")
+    )
+    if not pub_key or req_key != pub_key:
+        raise HTTPException(403, "Invalid API Key")
+
+
 def _calc_status(r):
     has_pr  = bool(r.get("pr"))
     has_po  = bool(r.get("po"))
     qty_del = float(r.get("qty_deliv") or 0)
     qty_req = float(r.get("qty_reqmts") or 0)
-    if not has_pr:           return "no-pr"
-    if not has_po:           return "pr-created"
-    if qty_del <= 0:         return "po-created"
-    if qty_del < qty_req:    return "partial"
+    if not has_pr:                    return "no-pr"
+    if not has_po:                    return "pr-created"
+    if qty_del <= 0:                  return "po-created"
+    if qty_del < qty_req:             return "partial"
     return "complete"
 
 
@@ -3954,10 +3966,16 @@ def public_tracking(
     order_by: str = "t.id",
     order_dir: str = "ASC",
 ):
+    """
+    Public endpoint untuk Power BI.
+    Auth: header x-api-key=<PUBLIC_API_KEY> atau ?api_key=<PUBLIC_API_KEY>
+    """
     check_public_api_key(request)
 
-    clauses = ["1=1"]
-    params  = []
+    limit  = min(99999, max(1, limit))
+    offset = (page - 1) * limit
+
+    clauses, params = ["1=1"], []
 
     if plant:
         clauses.append("t.plant = %s"); params.append(plant)
@@ -3970,18 +3988,16 @@ def public_tracking(
     if po:
         clauses.append("t.po ILIKE %s"); params.append(f"%{po}%")
     if q:
-        clauses.append("""(t."order" ILIKE %s OR t.material ILIKE %s
-            OR t.material_description ILIKE %s OR t.equipment ILIKE %s)""")
-        params.extend([f"%{q}%"]*4)
-    if status == "with_pr":
-        clauses.append("t.pr IS NOT NULL AND t.pr != ''")
-    elif status == "without_pr":
-        clauses.append("(t.pr IS NULL OR t.pr = '')")
-    elif status == "with_po":
-        clauses.append("t.po IS NOT NULL AND t.po != ''")
-    elif status == "without_po":
-        clauses.append("(t.po IS NULL OR t.po = '')")
-    elif status == "no-pr":
+        clauses.append("""(
+            t."order"              ILIKE %s OR
+            t.material             ILIKE %s OR
+            t.material_description ILIKE %s OR
+            t.equipment            ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 4)
+
+    # Filter status
+    if status == "no-pr":
         clauses.append("(t.pr IS NULL OR t.pr = '')")
     elif status == "pr-created":
         clauses.append("t.pr IS NOT NULL AND t.pr != '' AND (t.po IS NULL OR t.po = '')")
@@ -3991,45 +4007,158 @@ def public_tracking(
         clauses.append("COALESCE(t.qty_deliv, 0) > 0 AND COALESCE(t.qty_deliv, 0) < COALESCE(t.qty_reqmts, 0)")
     elif status == "complete":
         clauses.append("COALESCE(t.qty_deliv, 0) >= COALESCE(t.qty_reqmts, 0) AND COALESCE(t.qty_reqmts, 0) > 0")
+    elif status == "with_pr":
+        clauses.append("t.pr IS NOT NULL AND t.pr != ''")
+    elif status == "without_pr":
+        clauses.append("(t.pr IS NULL OR t.pr = '')")
+    elif status == "with_po":
+        clauses.append("t.po IS NOT NULL AND t.po != ''")
+    elif status == "without_po":
+        clauses.append("(t.po IS NULL OR t.po = '')")
 
-    safe_cols = {"t.id","t.plant","t.equipment","t.order","t.material",
-                 "t.qty_reqmts","t.qty_stock","t.pr","t.po","t.qty_deliv"}
-    if order_by not in safe_cols:
-        order_by = "t.id"
-    order_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
+    # Kolom sortable yang aman
+    SAFE_COLS = {
+        "t.id", "t.plant", "t.equipment", 't."order"',
+        "t.material", "t.qty_reqmts", "t.qty_stock",
+        "t.pr", "t.po", "t.qty_deliv",
+    }
+    safe_ob  = order_by if order_by in SAFE_COLS else "t.id"
+    safe_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
 
-    where  = " AND ".join(clauses)
-    offset = (page - 1) * limit
-    total  = query(f'SELECT COUNT(*) AS n FROM taex_reservasi t WHERE {where}', params)[0]["n"]
-    rows   = query(f"""
+    where = " AND ".join(clauses)
+
+    # COUNT
+    total = int(query(
+        f"SELECT COUNT(*) AS n FROM taex_reservasi t WHERE {where}", params
+    )[0]["n"])
+
+    # DATA
+    rows = query(f"""
         SELECT
-            t.plant, t.equipment, t."order", t.material,
-            t.material_description, t.qty_reqmts, t.qty_stock,
-            t.pr, t.item, t.qty_pr, t.cost_ctrs,
+            -- ── TA-ex ──
+            t.plant, t.equipment, t."order",
+            t.revision, t.reservno, t.itm,
+            t.material, t.material_description,
+            t.qty_reqmts, t.qty_stock,
+            t.pr, t.item AS pr_item, t.qty_pr,
+            t.cost_ctrs, t.sloc,
             t.po, t.po_date, t.qty_deliv, t.delivery_date,
-            t.reqmts_date, t.uom, t.sloc, t.reservno,
-            sp.release_date AS pr_release_date, sp.req_date AS pr_req_date,
-            sp.tracking AS pr_tracking, sp.pgr AS pr_pgr,
-            spo.doc_date AS po_doc_date, spo.deliv_date AS po_deliv_date,
-            spo.net_price AS po_net_price, spo.crcy AS po_currency
+            t.reqmts_date, t.uom, t.pg,
+            t.del, t.fis, t.ict,
+            t.res_price, t.res_curr,
+            -- ── SAP PR ──
+            sp.tracking_no  AS pr_tracking_no,
+            sp.tracking     AS pr_tracking,
+            sp.req_date     AS pr_req_date,
+            sp.release_date AS pr_release_date,
+            sp.valn_price   AS pr_valn_price,
+            sp.pr_curr      AS pr_currency,
+            sp.pgr          AS pr_pgr,
+            -- ── SAP PO ──
+            spo.doc_date    AS po_doc_date,
+            spo.deliv_date  AS po_deliv_date,
+            spo.net_price   AS po_net_price,
+            spo.crcy        AS po_currency,
+            spo.po_quantity AS po_quantity,
+            -- ── Work Order ──
+            wo.description        AS wo_description,
+            wo.system_status      AS wo_system_status,
+            wo.user_status        AS wo_user_status,
+            wo.basic_start_date   AS wo_basic_start,
+            wo.basic_finish_date  AS wo_basic_finish,
+            wo.actual_release     AS wo_actual_release,
+            wo.planner_group      AS wo_planner_group,
+            wo.main_work_ctr      AS wo_main_work_ctr,
+            wo.total_plan_cost    AS wo_total_plan_cost,
+            wo.total_act_cost     AS wo_total_act_cost
         FROM taex_reservasi t
-        LEFT JOIN sap_pr  sp  ON sp.pr = t.pr  AND sp.item = t.item  AND sp.plant = t.plant
-        LEFT JOIN sap_po  spo ON spo.purchreq = t.pr AND spo.item = t.item
+        LEFT JOIN sap_pr sp
+            ON sp.pr = t.pr AND sp.material = t.material
+        LEFT JOIN sap_po spo
+            ON spo.po = t.po AND spo.material = t.material
+        LEFT JOIN LATERAL (
+            SELECT description, system_status, user_status,
+                   basic_start_date, basic_finish_date, actual_release,
+                   planner_group, main_work_ctr,
+                   total_plan_cost, total_act_cost
+            FROM work_order wo
+            WHERE wo."order" = t."order"
+            ORDER BY wo.id LIMIT 1
+        ) wo ON TRUE
         WHERE {where}
-        ORDER BY {order_by} {order_dir}
+        ORDER BY {safe_ob} {safe_dir}
         LIMIT %s OFFSET %s
     """, params + [limit, offset])
 
-    data = [{**dict(r), "status": _calc_status(r)} for r in rows]
+    data = [{
+        "Plant":                r["plant"],
+        "Equipment":            r["equipment"],
+        "Order":                r["order"],
+        "Revision":             r["revision"],
+        "Reservno":             r["reservno"],
+        "Itm":                  r["itm"],
+        "Material":             r["material"],
+        "Material_Description": r["material_description"],
+        "Qty_Reqmts":           _n(r["qty_reqmts"]),
+        "Qty_Stock":            _n(r["qty_stock"]),
+        "PR":                   r["pr"],
+        "PR_Item":              r["pr_item"],
+        "Qty_PR":               _n(r["qty_pr"]),
+        "Cost_Ctrs":            r["cost_ctrs"],
+        "SLoc":                 r["sloc"],
+        "PO":                   r["po"],
+        "PO_Date":              str(r["po_date"]        or ""),
+        "Qty_Deliv":            _n(r["qty_deliv"]),
+        "Delivery_Date":        str(r["delivery_date"]  or ""),
+        "Reqmts_Date":          str(r["reqmts_date"]    or ""),
+        "UoM":                  r["uom"],
+        "PG":                   r["pg"],
+        "Del":                  r["del"],
+        "FIs":                  r["fis"],
+        "Ict":                  r["ict"],
+        "Res_Price":            _n(r["res_price"]),
+        "Res_Curr":             r["res_curr"],
+        # SAP PR
+        "PR_TrackingNo":        r["pr_tracking_no"],
+        "PR_Tracking":          r["pr_tracking"],
+        "PR_Req_Date":          str(r["pr_req_date"]    or ""),
+        "PR_Release_Date":      str(r["pr_release_date"] or ""),
+        "PR_Valn_Price":        _n(r["pr_valn_price"]),
+        "PR_Currency":          r["pr_currency"],
+        "PR_PGr":               r["pr_pgr"],
+        # SAP PO
+        "PO_Doc_Date":          str(r["po_doc_date"]    or ""),
+        "PO_Deliv_Date":        str(r["po_deliv_date"]  or ""),
+        "PO_Net_Price":         _n(r["po_net_price"]),
+        "PO_Currency":          r["po_currency"],
+        "PO_Quantity":          _n(r["po_quantity"]),
+        # Work Order
+        "WO_Description":       r["wo_description"],
+        "WO_System_Status":     r["wo_system_status"],
+        "WO_User_Status":       r["wo_user_status"],
+        "WO_Basic_Start":       str(r["wo_basic_start"]    or ""),
+        "WO_Basic_Finish":      str(r["wo_basic_finish"]   or ""),
+        "WO_Actual_Release":    str(r["wo_actual_release"] or ""),
+        "WO_Planner_Group":     r["wo_planner_group"],
+        "WO_Main_Work_Ctr":     r["wo_main_work_ctr"],
+        "WO_Total_Plan_Cost":   _n(r["wo_total_plan_cost"]),
+        "WO_Total_Act_Cost":    _n(r["wo_total_act_cost"]),
+        # Status
+        "Status":               _calc_status(r),
+    } for r in rows]
+
     return jsonify({
-        "@odata.count": int(total),
+        "@odata.count": total,
         "meta": {
-            "total": int(total), "page": page, "limit": limit,
-            "total_pages": max(1, -(-int(total)//limit)),
+            "total":       total,
+            "page":        page,
+            "limit":       limit,
+            "total_pages": max(1, -(-total // limit)),
         },
         "value": data,
         "data":  data,
     })
+
 
 @app.get("/api/public/tracking-joblist")
 def public_tracking_joblist(
