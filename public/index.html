@@ -8833,10 +8833,22 @@ function kkDeselectAllWO() {
 }
 
 function kkUpdateSelectedCount() {
-  // Hitung dari _kkSelections agar akurat meski list di-render ulang
-  const total = Object.keys(_kkSelections).length;
-  const el = document.getElementById('kk-card-selected-wo');
-  if (el) el.textContent = total.toLocaleString('id-ID');
+  const totalWO = Object.keys(_kkSelections).length;
+  document.getElementById('kk-card-selected-wo').textContent = totalWO.toLocaleString('id-ID');
+
+  // Hitung material dipilih
+  let totalMat = 0;
+  Object.entries(_kkSelections).forEach(([order, sel]) => {
+    if (sel === 'full') {
+      // Ambil dari cache kalau ada
+      const cached = _kkMatCache[order];
+      if (cached) totalMat += cached.length;
+      else totalMat += 1; // fallback jika belum di-expand
+    } else {
+      totalMat += sel.size;
+    }
+  });
+  document.getElementById('kk-card-selected-mat').textContent = totalMat.toLocaleString('id-ID');
 }
 
 function kkFilterWOList() {
