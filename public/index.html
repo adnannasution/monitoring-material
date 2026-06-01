@@ -4495,6 +4495,8 @@ async function createKertasKerja() {
     setSyncStatus('ok', `✅ Kertas Kerja ${code} dibuat · ${res.rows} baris · ${new Date().toLocaleTimeString('id-ID')}`);
     toast(`Kertas Kerja ${code} berhasil dibuat! (${res.rows} baris)`, 'ok');
     switchApp('kertas-kerja');
+    renderKK();        // ← TAMBAH INI
+    updateBadges();    // ← TAMBAH INI
   } catch(e) {
     hideLoading();
     setSyncStatus('err', '❌ Gagal: ' + e.message);

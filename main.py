@@ -1109,18 +1109,12 @@ def prisma_search_materials(request: Request, pg: str = "All", q: str = ""):
 # ─── CREATE Kertas Kerja server-side ─────────────────────────
 @app.post("/api/kertas-kerja/create")
 async def create_kertas_kerja(request: Request):
-    """
-    Buat Kertas Kerja dari WO terpilih:
-    - Ambil baris PRISMA untuk WO tersebut (Del≠X, FIs≠X)
-    - Generate kode KK otomatis dari kolom PG pada data
-    - Simpan ke app_state kk_current
-    """
     check_api_key(request)
     user = get_current_user(request)
     body = await request.json()
 
-    wos   = body.get("wos", [])    # WO penuh (semua material)
-    items = body.get("items", [])  # [{order, itm}] material spesifik
+    wos   = body.get("wos", [])
+    items = body.get("items", [])
 
     if not wos and not items:
         raise HTTPException(400, "Pilih minimal satu Work Order atau Material")
@@ -1142,14 +1136,13 @@ async def create_kertas_kerja(request: Request):
         where = " AND ".join(conds)
         rows += query(f"SELECT * FROM prisma_reservasi WHERE {where} ORDER BY id", params)
 
-    # Ambil material spesifik (expand + partial select)
+    # Ambil material spesifik
     if items:
         for item in items:
-            ord_val = item.get("order","")
-            itm_val = item.get("itm","")
+            ord_val = item.get("order", "")
+            itm_val = item.get("itm", "")
             if not ord_val or not itm_val:
                 continue
-            # Skip kalau WO sudah masuk via wos (hindari duplikat)
             if ord_val in wos:
                 continue
             conds2 = [
@@ -1165,18 +1158,8 @@ async def create_kertas_kerja(request: Request):
 
     if not rows:
         raise HTTPException(404, "Tidak ada data PRISMA untuk WO yang dipilih")
-    
-    # Tandai code_kertas_kerja di DB (server-side, tidak bergantung state frontend)
-    ids = [r["id"] for r in rows]
-    ph_ids = ",".join(["%s"] * len(ids))
-    execute(
-        f"UPDATE prisma_reservasi SET code_kertas_kerja=%s, updated_at=NOW() WHERE id IN ({ph_ids})",
-        [code] + ids
-    )
 
-    # Auto-generate kode KK dari kolom PG pada baris terpilih.
-    # PG_SUFFIX_MAP = {"TA":"T","OH":"O","Rutin":"R"} → karakter terakhir PG menentukan group.
-    # Contoh: "3RO" → last char "O" → OH; "3MT" → "T" → TA; "3MR" → "R" → RT
+    # ── Generate kode KK ──────────────────────────────────────
     last_char_to_prefix = {"T": "TA", "O": "OH", "R": "RT"}
     pg_last_chars = set()
     for r in rows:
@@ -1187,17 +1170,12 @@ async def create_kertas_kerja(request: Request):
         prefix = last_char_to_prefix.get(next(iter(pg_last_chars)), "KK")
     else:
         prefix = "KK"
-    # import random, string
-    # digits = ''.join(random.choices(string.digits, k=8))
-    # code = f"{prefix}{digits}"
 
-    # Tentukan prefix dari pg_role + plant_code user yang login
     plant_from_data = (rows[0].get("plant") or "").strip() if rows else ""
     ru_digit = plant_from_data[1] if len(plant_from_data) >= 2 else "2"
     pg_group = prefix
     kk_prefix = f"{pg_group}{ru_digit}01"
 
-    # Cari nomor terakhir, increment
     max_row = query("""
         SELECT MAX(code_kertas_kerja) AS last_code
         FROM prisma_reservasi
@@ -1213,7 +1191,6 @@ async def create_kertas_kerja(request: Request):
 
     next_num = last_num + 1
     if next_num > 99999:
-        # Overflow ke series 02
         kk_prefix = f"{pg_group}{ru_digit}02"
         max_row2 = query("""
             SELECT MAX(code_kertas_kerja) AS last_code
@@ -1228,8 +1205,18 @@ async def create_kertas_kerja(request: Request):
             last_num = 0
         next_num = last_num + 1
 
+    # ✅ code didefinisikan dulu sebelum dipakai
     code = f"{kk_prefix}{next_num:05d}"
 
+    # ✅ UPDATE setelah code ada
+    ids = [r["id"] for r in rows]
+    ph_ids = ",".join(["%s"] * len(ids))
+    execute(
+        f"UPDATE prisma_reservasi SET code_kertas_kerja=%s, updated_at=NOW() WHERE id IN ({ph_ids})",
+        [code] + ids
+    )
+
+    # ── Build kk_data ─────────────────────────────────────────
     kk_data = []
     for r in rows:
         d = dict(r)
@@ -1248,7 +1235,9 @@ async def create_kertas_kerja(request: Request):
             "CodeKertasKerja": code,
         })
 
-    set_state("kk_current", {"code": code, "data": kk_data})
+    # ✅ set_state per user (bukan global)
+    actual_key = f"kk_current_{user['id']}"
+    set_state(actual_key, {"code": code, "data": kk_data})
 
     return jsonify({
         "ok": True, "code": code,
