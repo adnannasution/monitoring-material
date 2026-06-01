@@ -1383,19 +1383,31 @@ def sync_kumpulan_pr(request: Request):
     try:
         with conn.cursor() as cur:
 
-            # ── Step 0: Isi qty_stock_onhand di prisma dari taex ──
-            cur.execute("""
-                UPDATE prisma_reservasi p
-                SET qty_stock_onhand = t.qty_stock,
-                    updated_at       = NOW()
-                FROM taex_reservasi t
-                WHERE p."order"  = t."order"
-                  AND p.material = t.material
-                  AND p.itm      = t.itm
-                  AND (p.qty_stock_onhand IS NULL OR p.qty_stock_onhand = 0)
-            """)
+            # ── Step 0: Sebarkan qty_stock dari Summary ke PRISMA & TAEX ──
+            for k in kumpulan_rows:
+                # Update qty_stock_onhand di PRISMA
+                cur.execute("""
+                    UPDATE prisma_reservasi
+                    SET qty_stock_onhand = %s,
+                        updated_at       = NOW()
+                    WHERE material           = %s
+                      AND code_kertas_kerja  = %s
+                """, (k["qty_stock"], k["material"], k["code_tracking"]))
 
-            # ── Step 1: Loop sinkron PR ──
+                # Update qty_stock di TAEX
+                cur.execute("""
+                    UPDATE taex_reservasi t
+                    SET qty_stock  = %s,
+                        updated_at = NOW()
+                    FROM prisma_reservasi p
+                    WHERE t."order"  = p."order"
+                      AND t.material = p.material
+                      AND t.itm      = p.itm
+                      AND p.material          = %s
+                      AND p.code_kertas_kerja = %s
+                """, (k["qty_stock"], k["material"], k["code_tracking"]))
+
+            # ── Step 1: Sinkron PR → KUMPULAN, PRISMA, TAEX ──
             for k in kumpulan_rows:
                 pr_item = next((
                     p for p in pr_rows
@@ -1409,36 +1421,40 @@ def sync_kumpulan_pr(request: Request):
 
                 matched_count += 1
                 qty_to_pr = max(0,
-                    float(k["qty_req"] or 0)
+                    float(k["qty_req"]  or 0)
                     - float(k["qty_stock"] or 0)
                     - float(pr_item["qty_pr"] or 0)
                 )
 
+                # Update KUMPULAN SUMMARY
                 cur.execute("""
                     UPDATE kumpulan_summary
                     SET qty_pr=%s, qty_to_pr=%s, updated_at=NOW()
                     WHERE id=%s
                 """, (pr_item["qty_pr"], qty_to_pr, k["id"]))
 
+                # Update PRISMA — pr_prisma, item_prisma, qty_pr_prisma
                 cur.execute("""
                     UPDATE prisma_reservasi
-                    SET pr_prisma=%s, item_prisma=%s, qty_pr_prisma=%s, updated_at=NOW()
-                    WHERE material=%s AND code_kertas_kerja=%s
+                    SET pr_prisma=%s, item_prisma=%s, qty_pr_prisma=%s,
+                        updated_at=NOW()
+                    WHERE material          = %s
+                      AND code_kertas_kerja = %s
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
 
+                # Update TAEX — pr, item, qty_pr
                 cur.execute("""
                     UPDATE taex_reservasi t
-                    SET pr        = %s,
-                        item      = %s,
-                        qty_pr    = %s,
-                        qty_stock = COALESCE(p.qty_stock_onhand, t.qty_stock),
+                    SET pr         = %s,
+                        item       = %s,
+                        qty_pr     = %s,
                         updated_at = NOW()
                     FROM prisma_reservasi p
-                    WHERE t.material = p.material
-                      AND t."order"  = p."order"
+                    WHERE t."order"  = p."order"
+                      AND t.material = p.material
                       AND t.itm      = p.itm
-                      AND p.material = %s
+                      AND p.material          = %s
                       AND p.code_kertas_kerja = %s
                 """, (pr_item["pr"], pr_item["item"], pr_item["qty_pr"],
                       k["material"], k["code_tracking"]))
