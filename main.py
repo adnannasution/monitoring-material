@@ -4160,6 +4160,175 @@ def public_tracking(
     })
 
 
+@app.get("/api/public/joblist-taex")
+def public_joblist_taex(
+    request: Request,
+    page: int = 1,
+    limit: int = 999999,
+    q: str = "",
+    area: str = "",
+    disiplin: str = "",
+    project: str = "",
+    plant: str = "",
+):
+    """
+    Public endpoint Joblist TAEX untuk Power BI.
+    Auth: header x-api-key=<PUBLIC_API_KEY> atau ?api_key=<PUBLIC_API_KEY>
+    """
+    check_public_api_key(request)
+
+    limit  = min(999999, max(1, limit))
+    offset = (page - 1) * limit
+
+    clauses, params = ["COALESCE(is_deleted, 0) = 0"], []
+
+    if plant:
+        clauses.append("plant = %s"); params.append(plant)
+    if area:
+        clauses.append("area_name ILIKE %s"); params.append(f"%{area}%")
+    if disiplin:
+        clauses.append("disiplin ILIKE %s"); params.append(f"%{disiplin}%")
+    if project:
+        clauses.append("project_number ILIKE %s"); params.append(f"%{project}%")
+    if q:
+        clauses.append("""(
+            equipment_no           ILIKE %s OR
+            project_number         ILIKE %s OR
+            area_name              ILIKE %s OR
+            unit_name              ILIKE %s OR
+            joblist_description    ILIKE %s OR
+            joblist_detail_description ILIKE %s OR
+            no_package             ILIKE %s OR
+            "order"                ILIKE %s
+        )""")
+        params.extend([f"%{q}%"] * 8)
+
+    where = " AND ".join(clauses)
+
+    total = int(query(
+        f"SELECT COUNT(*) AS n FROM joblist_taex WHERE {where}", params
+    )[0]["n"])
+
+    rows = query(f"""
+        SELECT
+            joblist_id, no_joblist, joblist_description,
+            joblist_detail_description,
+            joblist_detail_reason_name,
+            document_joblist_type_name,
+            no_document, nomor_pm, notes,
+            plant, created, creator_name, creator_job_title,
+            project_id, project_number,
+            project_type_code, project_type_name,
+            project_status, start_date, finish_date,
+            revision, description,
+            equipment_id, equipment_no,
+            description_of_tech_object,
+            area_name, area_alias_name,
+            unit_name, unit_alias_name,
+            disiplin, functional_location, location,
+            criticallity, criticallity_text,
+            catalog_profile, catalog_profile_text,
+            group_asset, main_work_center,
+            manufacturer_of_asset, model_type,
+            planning_plant, maintenance_plant,
+            is_all_in, is_aspek_durasi, is_aspek_quality,
+            is_aspek_safety, is_jasa, is_lldii, is_material,
+            is_mechanical_integrity, is_optimization,
+            job_discipline_id, job_discipline_name,
+            status_id, code, code_name,
+            planning_jasa_status_id, planning_jasa_status_name,
+            planning_material_status_id, planning_material_status_name,
+            "order", no_package, package_description,
+            duration_ta_brick_id, duration_ta_brick_value, duration_ta_brick_text
+        FROM joblist_taex
+        WHERE {where}
+        ORDER BY project_number, area_name, equipment_no, "order"
+        LIMIT %s OFFSET %s
+    """, params + [limit, offset])
+
+    data = [{
+        "JoblistId":                  r["joblist_id"],
+        "NoJoblist":                  r["no_joblist"],
+        "JoblistDescription":         r["joblist_description"],
+        "JoblistDetailDescription":   r["joblist_detail_description"],
+        "JoblistDetailReasonName":    r["joblist_detail_reason_name"],
+        "DocumentJoblistTypeName":    r["document_joblist_type_name"],
+        "NoDocument":                 r["no_document"],
+        "NomorPM":                    r["nomor_pm"],
+        "Notes":                      r["notes"],
+        "Plant":                      r["plant"],
+        "Created":                    str(r["created"] or ""),
+        "CreatorName":                r["creator_name"],
+        "CreatorJobTitle":            r["creator_job_title"],
+        "ProjectId":                  r["project_id"],
+        "ProjectNumber":              r["project_number"],
+        "ProjectTypeCode":            r["project_type_code"],
+        "ProjectTypeName":            r["project_type_name"],
+        "ProjectStatus":              r["project_status"],
+        "StartDate":                  str(r["start_date"] or ""),
+        "FinishDate":                 str(r["finish_date"] or ""),
+        "Revision":                   r["revision"],
+        "Description":                r["description"],
+        "EquipmentId":                r["equipment_id"],
+        "EquipmentNo":                r["equipment_no"],
+        "DescriptionofTechnicalObject": r["description_of_tech_object"],
+        "AreaName":                   r["area_name"],
+        "AreaAliasName":              r["area_alias_name"],
+        "UnitName":                   r["unit_name"],
+        "UnitAliasName":              r["unit_alias_name"],
+        "Disiplin":                   r["disiplin"],
+        "FunctionalLocation":         r["functional_location"],
+        "Location":                   r["location"],
+        "Criticallity":               r["criticallity"],
+        "CriticallityText":           r["criticallity_text"],
+        "CatalogProfile":             r["catalog_profile"],
+        "CatalogProfileText":         r["catalog_profile_text"],
+        "GroupAsset":                 r["group_asset"],
+        "MainWorkCenter":             r["main_work_center"],
+        "ManufacturerOfAsset":        r["manufacturer_of_asset"],
+        "ModelType":                  r["model_type"],
+        "PlanningPlant":              r["planning_plant"],
+        "MaintenancePlant":           r["maintenance_plant"],
+        "IsAllIn":                    r["is_all_in"],
+        "IsAspekDurasi":              r["is_aspek_durasi"],
+        "IsAspekQuality":             r["is_aspek_quality"],
+        "IsAspekSafety":              r["is_aspek_safety"],
+        "IsJasa":                     r["is_jasa"],
+        "IsLLDII":                    r["is_lldii"],
+        "IsMaterial":                 r["is_material"],
+        "IsMechanicalIntegrity":      r["is_mechanical_integrity"],
+        "IsOptimization":             r["is_optimization"],
+        "JobDisciplineId":            r["job_discipline_id"],
+        "JobDisciplineName":          r["job_discipline_name"],
+        "StatusId":                   r["status_id"],
+        "Code":                       r["code"],
+        "CodeName":                   r["code_name"],
+        "PlanningJasaStatusId":       r["planning_jasa_status_id"],
+        "PlanningJasaStatusName":     r["planning_jasa_status_name"],
+        "PlanningMaterialStatusId":   r["planning_material_status_id"],
+        "PlanningMaterialStatusName": r["planning_material_status_name"],
+        "Order":                      r["order"],
+        "NoPackage":                  r["no_package"],
+        "PackageDescription":         r["package_description"],
+        "DurationTaBrickId":          r["duration_ta_brick_id"],
+        "DurationTaBrickValue":       r["duration_ta_brick_value"],
+        "DurationTaBrickText":        r["duration_ta_brick_text"],
+    } for r in rows]
+
+    return jsonify({
+        "@odata.count": total,
+        "meta": {
+            "total":       total,
+            "page":        page,
+            "limit":       limit,
+            "total_pages": max(1, -(-total // limit)),
+        },
+        "value": data,
+        "data":  data,
+    })
+
+
+
 @app.get("/api/public/tracking-joblist")
 def public_tracking_joblist(
     request: Request,
