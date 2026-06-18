@@ -208,6 +208,24 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
                         _s(r.get("Order")),
                         _s(r.get("NoPackage")),
                         _s(r.get("PackageDescription")),
+                        _s(r.get("Notification")),
+                        _s(r.get("CreatedOn")),
+                        _s(r.get("SuperiorOrder")),
+                        _s(r.get("FunctionalLoc")),
+                        _s(r.get("SystemStatus")),
+                        _s(r.get("UserStatus")),
+                        _s(r.get("WBSordheader")),
+                        _n(r.get("TotalPlnndCosts")),
+                        _n(r.get("Totalactcosts")),
+                        _s(r.get("PlannerGroup")),
+                        _s(r.get("MainWorkCtr")),
+                        _s(r.get("ChangeBy")),
+                        _s(r.get("Basstartdate")),
+                        _s(r.get("Basicfindate")),
+                        _s(r.get("ActualRelease")),
+                        _s(r.get("CostCenter")),
+                        _s(r.get("EnteredBy")),
+                        _s(r.get("Id")),
                     ))
                 execute_values(cur, """
                     INSERT INTO joblist_taex (
@@ -234,7 +252,12 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
                         status_id, code, code_name,
                         planning_jasa_status_id, planning_material_status_id,
                         planning_jasa_status_name, planning_material_status_name,
-                        "order", no_package, package_description
+                        "order", no_package, package_description,
+                        notification, created_on, superior_order, functional_loc,
+                        system_status, user_status, wbs_ord_header,
+                        total_plnnd_costs, total_act_costs, planner_group,
+                        main_work_ctr, change_by, bas_start_date, basic_fin_date,
+                        actual_release, cost_center, entered_by, sap_order_id
                     ) VALUES %s
                     ON CONFLICT (joblist_id, "order") DO UPDATE SET
                         joblist_detail_description   = EXCLUDED.joblist_detail_description,
@@ -256,7 +279,25 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
                         code_name                    = EXCLUDED.code_name,
                         no_package                   = EXCLUDED.no_package,
                         package_description          = EXCLUDED.package_description,
-                        is_deleted                   = EXCLUDED.is_deleted
+                        is_deleted                   = EXCLUDED.is_deleted,
+                        notification                 = EXCLUDED.notification,
+                        created_on                   = EXCLUDED.created_on,
+                        superior_order                = EXCLUDED.superior_order,
+                        functional_loc               = EXCLUDED.functional_loc,
+                        system_status                = EXCLUDED.system_status,
+                        user_status                  = EXCLUDED.user_status,
+                        wbs_ord_header                = EXCLUDED.wbs_ord_header,
+                        total_plnnd_costs            = EXCLUDED.total_plnnd_costs,
+                        total_act_costs               = EXCLUDED.total_act_costs,
+                        planner_group                 = EXCLUDED.planner_group,
+                        main_work_ctr                 = EXCLUDED.main_work_ctr,
+                        change_by                     = EXCLUDED.change_by,
+                        bas_start_date                = EXCLUDED.bas_start_date,
+                        basic_fin_date                = EXCLUDED.basic_fin_date,
+                        actual_release                = EXCLUDED.actual_release,
+                        cost_center                   = EXCLUDED.cost_center,
+                        entered_by                    = EXCLUDED.entered_by,
+                        sap_order_id                   = EXCLUDED.sap_order_id
                         -- TIDAK di-update: joblist_id, order, project_id, equipment_id,
                         -- equipment_no, project_number, area_name, unit_name (dari master data)
                 """, vals)

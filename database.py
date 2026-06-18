@@ -220,9 +220,38 @@ def migrate():
             "order"                       TEXT,
             no_package                    TEXT,
             package_description           TEXT,
+            notification                  TEXT,
+            created_on                    TEXT,
+            superior_order                TEXT,
+            functional_loc                TEXT,
+            system_status                 TEXT,
+            user_status                   TEXT,
+            wbs_ord_header                TEXT,
+            total_plnnd_costs             NUMERIC,
+            total_act_costs               NUMERIC,
+            planner_group                 TEXT,
+            main_work_ctr                 TEXT,
+            change_by                     TEXT,
+            bas_start_date                TEXT,
+            basic_fin_date                TEXT,
+            actual_release                TEXT,
+            cost_center                   TEXT,
+            entered_by                    TEXT,
+            sap_order_id                  TEXT,
             inserted_at                   TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+
+    # Tambah kolom baru ke tabel joblist_taex yang sudah ada (deploy sebelumnya)
+    for _col_def in (
+        'notification TEXT', 'created_on TEXT', 'superior_order TEXT',
+        'functional_loc TEXT', 'system_status TEXT', 'user_status TEXT',
+        'wbs_ord_header TEXT', 'total_plnnd_costs NUMERIC', 'total_act_costs NUMERIC',
+        'planner_group TEXT', 'main_work_ctr TEXT', 'change_by TEXT',
+        'bas_start_date TEXT', 'basic_fin_date TEXT', 'actual_release TEXT',
+        'cost_center TEXT', 'entered_by TEXT', 'sap_order_id TEXT',
+    ):
+        execute(f'ALTER TABLE joblist_taex ADD COLUMN IF NOT EXISTS {_col_def}')
 
     execute("""
         CREATE TABLE IF NOT EXISTS taex_reservasi (
