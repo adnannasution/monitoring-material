@@ -41,7 +41,7 @@ def _i(v):
 def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
     """
     Upsert — update baris yang sama (order+material+itm), insert baris baru.
-    Kolom PR/PO tidak ditimpa saat upload TA-ex (diisi via Sinkron PR/PO).
+    Semua kolom termasuk PR/PO ditimpa saat upload TA-ex.
     """
     conn = get_conn()
     try:
@@ -86,7 +86,14 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                     material_description = EXCLUDED.material_description,
                     qty_reqmts           = EXCLUDED.qty_reqmts,
                     qty_stock            = EXCLUDED.qty_stock,
+                    pr                   = EXCLUDED.pr,
+                    item                 = EXCLUDED.item,
+                    qty_pr               = EXCLUDED.qty_pr,
                     cost_ctrs            = EXCLUDED.cost_ctrs,
+                    po                   = EXCLUDED.po,
+                    po_date              = EXCLUDED.po_date,
+                    qty_deliv            = EXCLUDED.qty_deliv,
+                    delivery_date        = EXCLUDED.delivery_date,
                     sloc                 = EXCLUDED.sloc,
                     del                  = EXCLUDED.del,
                     fis                  = EXCLUDED.fis,
@@ -104,8 +111,6 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                     res_curr             = EXCLUDED.res_curr,
                     reservno             = EXCLUDED.reservno,
                     updated_at           = NOW()
-                    -- TIDAK di-update: pr, item, qty_pr, po, po_date, qty_deliv, delivery_date
-                    -- (diisi via Sinkron PR dan Sinkron PO, bukan dari upload TA-ex)
             """
             execute_values(cur, sql, rows)
 
