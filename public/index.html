@@ -783,6 +783,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <span>Jasa: <b id="joblist-taex-jasa">—</b></span>
     <div class="info-divider"></div>
     <button class="btn btn-teal" onclick="openJoblistTaexUploadModal()">📥 Upload Excel</button>
+    <button class="btn btn-orange" onclick="downloadJoblistTaexTemplate()" style="margin-left:4px">📋 Download Template</button>
     <button class="btn" onclick="deleteJoblistTaex()" style="background:#dc2626;color:white;margin-left:4px">🗑 Hapus Semua</button>
   </div>
   <div class="filter-bar">
@@ -3980,6 +3981,15 @@ function downloadSapTemplate() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Template SAP PR');
   XLSX.writeFile(wb, 'Template_SAP_PR.xlsx');
+  toast('Template berhasil diunduh!', 'ok');
+}
+function downloadJoblistTaexTemplate() {
+  const headers = [['JoblistId','JoblistDetailDescription','JoblistDetailReasonId','JoblistDetailReasonName','DocumentJoblistTypeId','DocumentJoblistTypeName','NoDocument','IsMechanicalIntegrity','IsOptimization','JobDisciplineId','JobDisciplineName','NomorPM','MaintenancePlan','Maintenanceitem','Notes','Plant','Created','CreatorName','CreatorJobTitle','IsDeleted','ProjectId','EquipmentId','JoblistDescription','NoJoblist','ProjectNumber','ProjectTypeId','ProjectTypeCode','ProjectTypeName','StartDate','FinishDate','Revision','Description','DurationTaBrickId','DurationTaBrickValue','DurationTaBrickText','ProjectStatus','EquipmentNo','UnitId','AreaName','AreaAliasName','UnitName','UnitAliasName','PlanningPlant','FunctionalLocation','Location','DescriptionofTechnicalObject','EquipmentCategory','Disiplin','CatalogProfile','CatalogProfileText','GroupAsset','Criticallity','CriticallityText','MaintenancePlant','MainWorkCenter','ManufacturerOfAsset','ModelType','IsAllIn','IsAspekDurasi','IsAspekQuality','IsAspekSafety','IsJasa','IsLLDII','IsMaterial','StatusId','Code','CodeName','PlanningJasaStatusId','PlanningMaterialStatusId','PlanningJasaStatusName','PlanningMaterialStatusName','Order','NoPackage','PackageDescription','Notification','CreatedOn','SuperiorOrder','FunctionalLoc','SystemStatus','UserStatus','WBSordheader','TotalPlnndCosts','Totalactcosts','PlannerGroup','MainWorkCtr','ChangeBy','Basstartdate','Basicfindate','ActualRelease','CostCenter','EnteredBy','Id']];
+  const ws = XLSX.utils.aoa_to_sheet(headers);
+  ws['!cols'] = headers[0].map(() => ({wch:16}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Joblist TAEX');
+  XLSX.writeFile(wb, 'Template_Joblist_TAEX.xlsx');
   toast('Template berhasil diunduh!', 'ok');
 }
 
