@@ -1239,7 +1239,8 @@ def project_jasa_planning(request: Request, project_number: str = ""):
 
 @router.get("/project-planning-rows")
 def project_planning_rows(request: Request, project_number: str = "",
-                          kind: str = "jobdetail", status: str = "complete"):
+                          kind: str = "jobdetail", status: str = "complete",
+                          area: str = ""):
     """List baris joblist_taex untuk satu kategori planning status (utk bottom sheet)."""
     if not project_number:
         return J({"total": 0, "rows": []})
@@ -1265,8 +1266,13 @@ def project_planning_rows(request: Request, project_number: str = "",
         where.append(complete_expr)
     elif status == "not_planned":
         where.append(not_planned_expr)
-    else:
+    elif status == "others":
         where.append(f"NOT {complete_expr} AND NOT {not_planned_expr}")
+    # status == "all" (atau lainnya): tidak ada filter status, semua baris
+
+    if area:
+        where.append("COALESCE(area_name, '(Tanpa Area)') = %s")
+        params.append(area)
 
     rows = query(f"""
         SELECT no_joblist, joblist_detail_description, area_name, equipment_no,
