@@ -1235,3 +1235,59 @@ def project_jasa_planning(request: Request, project_number: str = ""):
             "not_planned":       int(r["not_planned"] or 0),
         } for r in area_rows],
     })
+
+
+@router.get("/project-planning-rows")
+def project_planning_rows(request: Request, project_number: str = "",
+                          kind: str = "jobdetail", status: str = "complete"):
+    """List baris joblist_taex untuk satu kategori planning status (utk bottom sheet)."""
+    if not project_number:
+        return J({"total": 0, "rows": []})
+
+    where = ['project_number = %s', 'COALESCE(is_deleted, 0) = 0']
+    params = [project_number]
+
+    if kind == "jasa":
+        where.append('is_jasa = 1')
+        complete_expr     = "COALESCE(planning_jasa_status_name,'') = 'Planning Complete'"
+        not_planned_expr  = "COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'"
+    else:
+        complete_expr = """(
+            COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
+            OR COALESCE(planning_material_status_name,'') = 'Planning Complete'
+        )"""
+        not_planned_expr = """(
+            COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+            AND COALESCE(planning_material_status_name,'Not Planned') = 'Not Planned'
+        )"""
+
+    if status == "complete":
+        where.append(complete_expr)
+    elif status == "not_planned":
+        where.append(not_planned_expr)
+    else:
+        where.append(f"NOT {complete_expr} AND NOT {not_planned_expr}")
+
+    rows = query(f"""
+        SELECT no_joblist, joblist_detail_description, area_name, equipment_no,
+               "order", planning_jasa_status_name, planning_material_status_name,
+               is_jasa, is_material
+        FROM joblist_taex
+        WHERE {' AND '.join(where)}
+        ORDER BY area_name, no_joblist
+    """, params)
+
+    return J({
+        "total": len(rows),
+        "rows": [{
+            "no_joblist":      r["no_joblist"] or "—",
+            "description":     r["joblist_detail_description"] or "—",
+            "area":            r["area_name"] or "—",
+            "equipment_no":    r["equipment_no"] or "—",
+            "order":           r["order"] or "—",
+            "jasa_status":     r["planning_jasa_status_name"] or "Not Planned",
+            "material_status": r["planning_material_status_name"] or "Not Planned",
+            "is_jasa":         int(r["is_jasa"] or 0),
+            "is_material":     int(r["is_material"] or 0),
+        } for r in rows],
+    })
