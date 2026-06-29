@@ -171,6 +171,20 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .badge.wo-notready{background:#fee2e2;color:#dc2626}
 .modal-loading{display:flex;align-items:center;justify-content:center;height:200px;gap:8px;color:var(--text-sm)}
 
+/* ── BOTTOM SHEET MODAL ── */
+.bsheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:none;align-items:flex-end;justify-content:center}
+.bsheet-overlay.show{display:flex}
+.bsheet-box{background:#fff;width:100%;max-width:780px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -10px 40px rgba(0,0,0,0.25);animation:bsheet-up .2s ease-out}
+@keyframes bsheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.bsheet-handle{width:40px;height:4px;background:#e2e8f0;border-radius:99px;margin:8px auto 0;flex-shrink:0}
+.bsheet-header{padding:10px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.bsheet-title{font-size:15px;font-weight:800;color:var(--text)}
+.bsheet-sub{font-size:12px;color:var(--text-sm);margin-top:2px}
+.bsheet-close{width:30px;height:30px;border-radius:50%;border:none;background:#f1f5f9;cursor:pointer;font-size:16px;flex-shrink:0}
+.bsheet-close:hover{background:#e2e8f0}
+.bsheet-search{padding:10px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.bsheet-body{overflow-y:auto;flex:1}
+
 /* ── RESPONSIVE ── */
 @media(max-width:900px){
   .grid-2,.grid-3{grid-template-columns:1fr}
@@ -208,6 +222,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="modal-summary" id="modal-summary"></div>
     <div class="modal-body" id="modal-body">
       <div class="modal-loading"><div class="spin"></div> Memuat detail...</div>
+    </div>
+  </div>
+</div>
+
+<!-- PLANNING ROWS BOTTOM SHEET -->
+<div class="bsheet-overlay" id="plan-rows-sheet" onclick="closePlanRowsSheet(event)">
+  <div class="bsheet-box">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-header">
+      <div>
+        <div class="bsheet-title" id="plan-rows-title">Detail</div>
+        <div class="bsheet-sub" id="plan-rows-sub"></div>
+      </div>
+      <button class="bsheet-close" onclick="closePlanRowsSheetBtn()">✕</button>
+    </div>
+    <div class="bsheet-search">
+      <input id="plan-rows-search" type="text" placeholder="🔍 Cari No Joblist, Deskripsi, Area, Equipment, Order..."
+        style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box"
+        oninput="_planRowsSearch=this.value;_planRowsPage=1;renderPlanRowsPaged()">
+    </div>
+    <div class="bsheet-body" id="plan-rows-body">
+      <div class="modal-loading"><div class="spin"></div> Memuat data...</div>
     </div>
   </div>
 </div>
@@ -943,6 +979,104 @@ function closeDetailModal(e) {
 }
 function closeDetailModalBtn() {
   document.getElementById('detail-modal').classList.remove('show');
+}
+
+// ── Planning Status rows (bottom sheet) ────────────────────────
+let _planRows = [];
+let _planRowsPage = 1;
+let _planRowsSearch = '';
+const _planRowsPageSize = 20;
+
+async function openPlanRowsSheet(kind, status, label, colorHex) {
+  const proj = document.getElementById('p4-project-select').value;
+  if (!proj) return;
+
+  const sheet = document.getElementById('plan-rows-sheet');
+  const kindLabel = kind === 'jasa' ? 'Jasa' : 'Jobdetail';
+  document.getElementById('plan-rows-title').innerHTML =
+    `<span style="color:${colorHex}">●</span> ${label} — ${kindLabel}`;
+  document.getElementById('plan-rows-sub').textContent = '';
+  document.getElementById('plan-rows-search').value = '';
+  _planRowsSearch = ''; _planRowsPage = 1; _planRows = [];
+  document.getElementById('plan-rows-body').innerHTML =
+    '<div class="modal-loading"><div class="spin"></div> Memuat data...</div>';
+  sheet.classList.add('show');
+
+  try {
+    const qs = new URLSearchParams({ project_number: proj, kind, status });
+    const d = await apiFetch('/api/dashboard/project-planning-rows?' + qs);
+    if (!d) return;
+    _planRows = d.rows;
+    document.getElementById('plan-rows-sub').textContent = `${fmt(d.total)} baris`;
+    renderPlanRowsPaged();
+  } catch(e) {
+    document.getElementById('plan-rows-body').innerHTML =
+      `<div style="padding:20px;color:red">Gagal: ${e.message}</div>`;
+  }
+}
+
+function _planStatusBadge(s) {
+  if (s === 'Planning Complete') return `<span class="badge ready">${s}</span>`;
+  if (s === 'Not Planned')       return `<span class="badge not-ready">${s}</span>`;
+  return `<span class="badge on-process">${s}</span>`;
+}
+
+function renderPlanRowsPaged() {
+  const q = _planRowsSearch.trim().toLowerCase();
+  const filtered = q
+    ? _planRows.filter(r => [r.no_joblist, r.description, r.area, r.equipment_no, r.order]
+        .some(v => String(v || '').toLowerCase().includes(q)))
+    : _planRows;
+
+  if (!filtered.length) {
+    document.getElementById('plan-rows-body').innerHTML =
+      '<div style="padding:40px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+    return;
+  }
+
+  const total = filtered.length;
+  const totalPages = Math.ceil(total / _planRowsPageSize) || 1;
+  if (_planRowsPage > totalPages) _planRowsPage = totalPages;
+  const start = (_planRowsPage - 1) * _planRowsPageSize;
+  const pageRows = filtered.slice(start, start + _planRowsPageSize);
+
+  let html = `<table class="detail-table">
+    <thead><tr>
+      <th>No Joblist</th><th>Deskripsi</th><th>Area</th><th>Equipment</th><th>Order</th>
+      <th style="text-align:center">Status Jasa</th><th style="text-align:center">Status Material</th>
+    </tr></thead><tbody>`;
+  pageRows.forEach(r => {
+    html += `<tr>
+      <td style="font-family:monospace;font-size:11px">${r.no_joblist}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description}">${r.description}</td>
+      <td>${r.area}</td>
+      <td>${r.equipment_no}</td>
+      <td style="font-family:monospace;font-size:11px">${r.order}</td>
+      <td style="text-align:center">${r.is_jasa ? _planStatusBadge(r.jasa_status) : '<span class="badge nr">—</span>'}</td>
+      <td style="text-align:center">${r.is_material ? _planStatusBadge(r.material_status) : '<span class="badge nr">—</span>'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+
+  if (totalPages > 1) {
+    html += `<div style="padding:10px 12px;display:flex;align-items:center;justify-content:center;gap:6px;border-top:1px solid var(--border)">
+      <button onclick="_planRowsPage=Math.max(1,_planRowsPage-1);renderPlanRowsPaged()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_planRowsPage===1?';opacity:.4;cursor:default':''}">‹ Prev</button>
+      <span style="font-size:11px;color:var(--text-sm)">Hal ${_planRowsPage}/${totalPages} (${fmt(total)} baris)</span>
+      <button onclick="_planRowsPage=Math.min(${totalPages},_planRowsPage+1);renderPlanRowsPaged()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_planRowsPage===totalPages?';opacity:.4;cursor:default':''}">Next ›</button>
+    </div>`;
+  }
+
+  document.getElementById('plan-rows-body').innerHTML = html;
+}
+
+function closePlanRowsSheet(e) {
+  if (e.target.id === 'plan-rows-sheet')
+    document.getElementById('plan-rows-sheet').classList.remove('show');
+}
+function closePlanRowsSheetBtn() {
+  document.getElementById('plan-rows-sheet').classList.remove('show');
 }
 
 function renderDdChart(data) {
@@ -1997,15 +2131,18 @@ async function loadP4JasaPlanning(proj) {
 
       <!-- Summary cards -->
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jobdetail','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
           <div id="p4-planning-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
           <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
         </div>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jobdetail','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
           <div id="p4-planning-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
           <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
         </div>
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jobdetail','others','Lainnya','#d97706')" title="Klik untuk lihat detail baris">
           <div id="p4-planning-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
           <div style="font-size:11px;color:#d97706;font-weight:600">Lainnya</div>
         </div>
@@ -2064,15 +2201,18 @@ async function loadP4JasaPlanning(proj) {
 
       <!-- Summary cards -->
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jasa','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
           <div id="p4-jasa-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
           <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
         </div>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jasa','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
           <div id="p4-jasa-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
           <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
         </div>
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center">
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+             onclick="openPlanRowsSheet('jasa','others','Lainnya','#d97706')" title="Klik untuk lihat detail baris">
           <div id="p4-jasa-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
           <div style="font-size:11px;color:#d97706;font-weight:600">Lainnya</div>
         </div>
