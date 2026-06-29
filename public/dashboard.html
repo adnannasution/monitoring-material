@@ -210,17 +210,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <!-- PAGE TABS -->
 <!-- DETAIL MODAL -->
-<div class="modal-overlay" id="detail-modal" onclick="closeDetailModal(event)">
-  <div class="modal-box">
-    <div class="modal-header">
+<div class="bsheet-overlay" id="detail-modal" onclick="closeDetailModal(event)">
+  <div class="bsheet-box">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-header">
       <div class="modal-header-info">
-        <div class="modal-header-title" id="modal-title">Detail</div>
-        <div class="modal-header-sub" id="modal-sub"></div>
+        <div class="bsheet-title" id="modal-title">Detail</div>
+        <div class="bsheet-sub" id="modal-sub"></div>
       </div>
-      <button class="modal-close" onclick="closeDetailModalBtn()">✕</button>
+      <button class="bsheet-close" onclick="closeDetailModalBtn()">✕</button>
     </div>
     <div class="modal-summary" id="modal-summary"></div>
-    <div class="modal-body" id="modal-body">
+    <div class="modal-body bsheet-body" id="modal-body">
       <div class="modal-loading"><div class="spin"></div> Memuat detail...</div>
     </div>
   </div>
