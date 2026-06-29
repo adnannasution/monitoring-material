@@ -126,14 +126,12 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
 # ─── JOBLIST TAEX ────────────────────────────────────────────
 def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
     """
-    Replace per revisi/project: hapus dulu baris joblist_taex untuk setiap
-    project_id yang ada di file, lalu insert ulang semua baris dari file.
+    Replace total: hapus semua baris joblist_taex, lalu insert ulang semua
+    baris dari file.
 
     Tabel ini tidak punya kunci unik yang sah (kolom Id kosong, dan satu joblist
     bisa punya banyak baris detail dengan order = NULL), sehingga upsert
-    ON CONFLICT (joblist_id, "order") tidak bisa dipakai. Pendekatan replace-per-
-    project bersifat idempoten (re-upload tidak menggandakan baris) dan data
-    project/revisi lain tetap aman.
+    ON CONFLICT (joblist_id, "order") tidak bisa dipakai.
     """
     conn = get_conn()
     try:
@@ -141,17 +139,7 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
             CHUNK = 500
             total = len(df)
 
-            # Scope replace: kumpulkan project_id unik yang ada di file, lalu
-            # hapus baris lama untuk project tersebut sebelum insert ulang.
-            project_ids = sorted({
-                pid for pid in (_s(v) for v in df.get("ProjectId", pd.Series(dtype=str)))
-                if pid
-            })
-            if project_ids:
-                cur.execute(
-                    'DELETE FROM joblist_taex WHERE project_id = ANY(%s)',
-                    (project_ids,),
-                )
+            cur.execute('DELETE FROM joblist_taex')
 
             for start in range(0, total, CHUNK):
                 chunk = df.iloc[start:start + CHUNK]
