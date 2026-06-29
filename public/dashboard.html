@@ -987,14 +987,15 @@ let _planRowsPage = 1;
 let _planRowsSearch = '';
 const _planRowsPageSize = 20;
 
-async function openPlanRowsSheet(kind, status, label, colorHex) {
+async function openPlanRowsSheet(kind, status, label, colorHex, area) {
   const proj = document.getElementById('p4-project-select').value;
   if (!proj) return;
 
   const sheet = document.getElementById('plan-rows-sheet');
   const kindLabel = kind === 'jasa' ? 'Jasa' : 'Jobdetail';
-  document.getElementById('plan-rows-title').innerHTML =
-    `<span style="color:${colorHex}">●</span> ${label} — ${kindLabel}`;
+  document.getElementById('plan-rows-title').innerHTML = area
+    ? `📍 ${label} — ${kindLabel}`
+    : `<span style="color:${colorHex}">●</span> ${label} — ${kindLabel}`;
   document.getElementById('plan-rows-sub').textContent = '';
   document.getElementById('plan-rows-search').value = '';
   _planRowsSearch = ''; _planRowsPage = 1; _planRows = [];
@@ -1003,7 +1004,9 @@ async function openPlanRowsSheet(kind, status, label, colorHex) {
   sheet.classList.add('show');
 
   try {
-    const qs = new URLSearchParams({ project_number: proj, kind, status });
+    const params = { project_number: proj, kind, status };
+    if (area) params.area = area;
+    const qs = new URLSearchParams(params);
     const d = await apiFetch('/api/dashboard/project-planning-rows?' + qs);
     if (!d) return;
     _planRows = d.rows;
@@ -1906,7 +1909,7 @@ async function loadP4PlanningJobdetail(proj) {
     document.getElementById('p4-planning-tbody').innerHTML = d.by_area.map(r => {
       const pct = r.total ? (r.planning_complete / r.total * 100) : 0;
       const color = pct === 100 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626';
-      return `<tr>
+      return `<tr data-area="${r.area}" style="cursor:pointer" onclick="openPlanRowsSheet('jobdetail','all',this.dataset.area,'#3b82f6',this.dataset.area)" title="Klik untuk lihat detail baris area ini">
         <td>${r.area}</td>
         <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
         <td style="text-align:right;color:#16a34a;font-weight:700">${fmt(r.planning_complete)}</td>
@@ -1968,7 +1971,7 @@ async function loadP4JasaPlanning(proj) {
     document.getElementById('p4-jasa-tbody').innerHTML = d.by_area.map(r => {
       const pct   = r.total ? (r.planning_complete / r.total * 100) : 0;
       const color = pct === 100 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626';
-      return `<tr>
+      return `<tr data-area="${r.area}" style="cursor:pointer" onclick="openPlanRowsSheet('jasa','all',this.dataset.area,'#3b82f6',this.dataset.area)" title="Klik untuk lihat detail baris area ini">
         <td>${r.area}</td>
         <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
         <td style="text-align:right;color:#16a34a;font-weight:700">${fmt(r.planning_complete)}</td>
