@@ -126,14 +126,33 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
 # ─── JOBLIST TAEX ────────────────────────────────────────────
 def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
     """
-    Upsert berdasarkan (joblist_id, "order") — tidak ada DELETE saat upload.
-    Data lama yang tidak ada di file upload tetap tersimpan.
+    Replace per revisi/project: hapus dulu baris joblist_taex untuk setiap
+    project_id yang ada di file, lalu insert ulang semua baris dari file.
+
+    Tabel ini tidak punya kunci unik yang sah (kolom Id kosong, dan satu joblist
+    bisa punya banyak baris detail dengan order = NULL), sehingga upsert
+    ON CONFLICT (joblist_id, "order") tidak bisa dipakai. Pendekatan replace-per-
+    project bersifat idempoten (re-upload tidak menggandakan baris) dan data
+    project/revisi lain tetap aman.
     """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             CHUNK = 500
             total = len(df)
+
+            # Scope replace: kumpulkan project_id unik yang ada di file, lalu
+            # hapus baris lama untuk project tersebut sebelum insert ulang.
+            project_ids = sorted({
+                pid for pid in (_s(v) for v in df.get("ProjectId", pd.Series(dtype=str)))
+                if pid
+            })
+            if project_ids:
+                cur.execute(
+                    'DELETE FROM joblist_taex WHERE project_id = ANY(%s)',
+                    (project_ids,),
+                )
+
             for start in range(0, total, CHUNK):
                 chunk = df.iloc[start:start + CHUNK]
                 vals = []
@@ -264,47 +283,6 @@ def bulk_replace_joblist_taex(df: pd.DataFrame) -> int:
                         main_work_ctr, change_by, bas_start_date, basic_fin_date,
                         actual_release, cost_center, entered_by, sap_order_id
                     ) VALUES %s
-                    ON CONFLICT (joblist_id, "order") DO UPDATE SET
-                        joblist_detail_description   = EXCLUDED.joblist_detail_description,
-                        joblist_detail_reason_name   = EXCLUDED.joblist_detail_reason_name,
-                        document_joblist_type_name   = EXCLUDED.document_joblist_type_name,
-                        no_document                  = EXCLUDED.no_document,
-                        is_mechanical_integrity      = EXCLUDED.is_mechanical_integrity,
-                        job_discipline_name          = EXCLUDED.job_discipline_name,
-                        nomor_pm                     = EXCLUDED.nomor_pm,
-                        notes                        = EXCLUDED.notes,
-                        project_status               = EXCLUDED.project_status,
-                        planning_jasa_status_name    = EXCLUDED.planning_jasa_status_name,
-                        planning_material_status_name= EXCLUDED.planning_material_status_name,
-                        planning_jasa_status_id      = EXCLUDED.planning_jasa_status_id,
-                        planning_material_status_id  = EXCLUDED.planning_material_status_id,
-                        is_jasa                      = EXCLUDED.is_jasa,
-                        is_material                  = EXCLUDED.is_material,
-                        is_lldii                     = EXCLUDED.is_lldii,
-                        code_name                    = EXCLUDED.code_name,
-                        no_package                   = EXCLUDED.no_package,
-                        package_description          = EXCLUDED.package_description,
-                        is_deleted                   = EXCLUDED.is_deleted,
-                        notification                 = EXCLUDED.notification,
-                        created_on                   = EXCLUDED.created_on,
-                        superior_order                = EXCLUDED.superior_order,
-                        functional_loc               = EXCLUDED.functional_loc,
-                        system_status                = EXCLUDED.system_status,
-                        user_status                  = EXCLUDED.user_status,
-                        wbs_ord_header                = EXCLUDED.wbs_ord_header,
-                        total_plnnd_costs            = EXCLUDED.total_plnnd_costs,
-                        total_act_costs               = EXCLUDED.total_act_costs,
-                        planner_group                 = EXCLUDED.planner_group,
-                        main_work_ctr                 = EXCLUDED.main_work_ctr,
-                        change_by                     = EXCLUDED.change_by,
-                        bas_start_date                = EXCLUDED.bas_start_date,
-                        basic_fin_date                = EXCLUDED.basic_fin_date,
-                        actual_release                = EXCLUDED.actual_release,
-                        cost_center                   = EXCLUDED.cost_center,
-                        entered_by                    = EXCLUDED.entered_by,
-                        sap_order_id                   = EXCLUDED.sap_order_id
-                        -- TIDAK di-update: joblist_id, order, project_id, equipment_id,
-                        -- equipment_no, project_number, area_name, unit_name (dari master data)
                 """, vals)
         conn.commit()
         return total
