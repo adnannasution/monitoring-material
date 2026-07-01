@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from database import migrate, query, query_one, execute, get_state, set_state
+from database import migrate, query, query_one, query_stream, execute, get_state, set_state
 from bulk_ops import (
     bulk_replace_taex, bulk_replace_prisma, bulk_replace_pr,
     bulk_replace_po, bulk_replace_kumpulan, bulk_replace_order,
@@ -2256,7 +2256,10 @@ def export_tracking_csv(
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     safe_ob, safe_dir = _tracking_sort(order_by, order_dir)
 
-    CHUNK = 5000  # baris per query — jaga memori tetap kecil
+    sql = f"""SELECT {_TRACKING_SELECT_COLS}
+        {_TRACKING_BASE_SQL} {where}
+        ORDER BY {safe_ob} {safe_dir}
+    """
 
     def generate():
         import csv as _csv
@@ -2272,35 +2275,29 @@ def export_tracking_csv(
         yield "﻿"
 
         header = None
-        offset = 0
-        while True:
-            rows = query(
-                f"""SELECT {_TRACKING_SELECT_COLS}
-                {_TRACKING_BASE_SQL} {where}
-                ORDER BY {safe_ob} {safe_dir}
-                LIMIT %s OFFSET %s
-                """,
-                params + [CHUNK, offset],
+        pending = 0
+        # Query dieksekusi SEKALI, baris di-stream dari server-side cursor
+        # (tanpa re-scan LIMIT/OFFSET) → jauh lebih cepat untuk data besar.
+        for r in query_stream(sql, params, batch_size=5000):
+            m = _map_tracking(r)
+            if header is None:
+                header = list(m.keys()) + ["Status"]
+                writer.writerow(header)
+                yield flush()
+            st = _calc_item_status(
+                m.get("PR"), m.get("PO") or m.get("PO_PO"),
+                m.get("PO_Quantity"), m.get("PO_Qty_Delivered"),
             )
-            if not rows:
-                break
-            for r in rows:
-                m = _map_tracking(r)
-                if header is None:
-                    header = list(m.keys()) + ["Status"]
-                    writer.writerow(header)
-                    yield flush()
-                st = _calc_item_status(
-                    m.get("PR"), m.get("PO") or m.get("PO_PO"),
-                    m.get("PO_Quantity"), m.get("PO_Qty_Delivered"),
-                )
-                row = ["" if m[k] is None else m[k] for k in header[:-1]]
-                row.append(_TRACKING_STATUS_LABEL.get(st, ""))
-                writer.writerow(row)
+            row = ["" if m[k] is None else m[k] for k in header[:-1]]
+            row.append(_TRACKING_STATUS_LABEL.get(st, ""))
+            writer.writerow(row)
+            pending += 1
+            # Kirim buffer tiap ~2000 baris supaya download mengalir bertahap
+            if pending >= 2000:
+                yield flush()
+                pending = 0
+        if pending:
             yield flush()
-            if len(rows) < CHUNK:
-                break
-            offset += CHUNK
 
         # Bila tidak ada data sama sekali, tetap kirim header kosong minimal
         if header is None:
@@ -4096,30 +4093,72 @@ def _calc_status(r):
     return "complete"
 
 
-@app.get("/api/public/tracking")
-def public_tracking(
-    request: Request,
-    page: int = 1,
-    limit: int = 99999,
-    q: str = "",
-    order_val: str = "",
-    material: str = "",
-    pr: str = "",
-    po: str = "",
-    status: str = "",
-    plant: str = "",
-    order_by: str = "t.id",
-    order_dir: str = "ASC",
-):
-    """
-    Public endpoint untuk Power BI.
-    Auth: header x-api-key=<PUBLIC_API_KEY> atau ?api_key=<PUBLIC_API_KEY>
-    """
-    check_public_api_key(request)
+# ── Kolom sortable aman untuk public tracking ──
+_PUBLIC_TRACKING_SAFE_COLS = {
+    "t.id", "t.plant", "t.equipment", 't."order"',
+    "t.material", "t.qty_reqmts", "t.qty_stock",
+    "t.pr", "t.po", "t.qty_deliv",
+}
 
-    limit  = min(99999, max(1, limit))
-    offset = (page - 1) * limit
+# ── SELECT + JOIN untuk public tracking (dipakai bersama JSON & CSV) ──
+_PUBLIC_TRACKING_SELECT = """
+    SELECT
+        -- ── TA-ex ──
+        t.plant, t.equipment, t."order",
+        t.revision, t.reservno, t.itm,
+        t.material, t.material_description,
+        t.qty_reqmts, t.qty_stock,
+        t.pr, t.item AS pr_item, t.qty_pr,
+        t.cost_ctrs, t.sloc,
+        t.po, t.po_date, t.qty_deliv, t.delivery_date,
+        t.reqmts_date, t.uom, t.pg,
+        t.del, t.fis, t.ict,
+        t.res_price, t.res_curr,
+        -- ── SAP PR ──
+        sp.tracking_no  AS pr_tracking_no,
+        sp.tracking     AS pr_tracking,
+        sp.req_date     AS pr_req_date,
+        sp.release_date AS pr_release_date,
+        sp.valn_price   AS pr_valn_price,
+        sp.pr_curr      AS pr_currency,
+        sp.pgr          AS pr_pgr,
+        -- ── SAP PO ──
+        spo.doc_date    AS po_doc_date,
+        spo.deliv_date  AS po_deliv_date,
+        spo.net_price   AS po_net_price,
+        spo.crcy        AS po_currency,
+        spo.po_quantity AS po_quantity,
+        -- ── Work Order ──
+        wo.description        AS wo_description,
+        wo.system_status      AS wo_system_status,
+        wo.user_status        AS wo_user_status,
+        wo.basic_start_date   AS wo_basic_start,
+        wo.basic_finish_date  AS wo_basic_finish,
+        wo.actual_release     AS wo_actual_release,
+        wo.planner_group      AS wo_planner_group,
+        wo.main_work_ctr      AS wo_main_work_ctr,
+        wo.total_plan_cost    AS wo_total_plan_cost,
+        wo.total_act_cost     AS wo_total_act_cost
+    FROM taex_reservasi t
+    LEFT JOIN sap_pr sp
+        ON sp.pr = t.pr AND sp.material = t.material
+    LEFT JOIN sap_po spo
+        ON spo.po = t.po AND spo.material = t.material
+    LEFT JOIN LATERAL (
+        SELECT description, system_status, user_status,
+               basic_start_date, basic_finish_date, actual_release,
+               planner_group, main_work_ctr,
+               total_plan_cost, total_act_cost
+        FROM work_order wo
+        WHERE wo."order" = t."order"
+        ORDER BY wo.id LIMIT 1
+    ) wo ON TRUE
+"""
 
+
+def _build_public_tracking_where(plant="", order_val="", material="",
+                                 pr="", po="", q="", status=""):
+    """WHERE + params untuk public tracking (dipakai JSON & CSV)."""
     clauses, params = ["1=1"], []
 
     if plant:
@@ -4161,81 +4200,17 @@ def public_tracking(
     elif status == "without_po":
         clauses.append("(t.po IS NULL OR t.po = '')")
 
-    # Kolom sortable yang aman
-    SAFE_COLS = {
-        "t.id", "t.plant", "t.equipment", 't."order"',
-        "t.material", "t.qty_reqmts", "t.qty_stock",
-        "t.pr", "t.po", "t.qty_deliv",
-    }
-    safe_ob  = order_by if order_by in SAFE_COLS else "t.id"
-    safe_dir = "DESC" if order_dir.upper() == "DESC" else "ASC"
+    return " AND ".join(clauses), params
 
-    where = " AND ".join(clauses)
 
-    # COUNT
-    total = int(query(
-        f"SELECT COUNT(*) AS n FROM taex_reservasi t WHERE {where}", params
-    )[0]["n"])
+def _public_tracking_sort(order_by="t.id", order_dir="ASC"):
+    safe_ob  = order_by if order_by in _PUBLIC_TRACKING_SAFE_COLS else "t.id"
+    safe_dir = "DESC" if str(order_dir).upper() == "DESC" else "ASC"
+    return safe_ob, safe_dir
 
-    # DATA
-    rows = query(f"""
-        SELECT
-            -- ── TA-ex ──
-            t.plant, t.equipment, t."order",
-            t.revision, t.reservno, t.itm,
-            t.material, t.material_description,
-            t.qty_reqmts, t.qty_stock,
-            t.pr, t.item AS pr_item, t.qty_pr,
-            t.cost_ctrs, t.sloc,
-            t.po, t.po_date, t.qty_deliv, t.delivery_date,
-            t.reqmts_date, t.uom, t.pg,
-            t.del, t.fis, t.ict,
-            t.res_price, t.res_curr,
-            -- ── SAP PR ──
-            sp.tracking_no  AS pr_tracking_no,
-            sp.tracking     AS pr_tracking,
-            sp.req_date     AS pr_req_date,
-            sp.release_date AS pr_release_date,
-            sp.valn_price   AS pr_valn_price,
-            sp.pr_curr      AS pr_currency,
-            sp.pgr          AS pr_pgr,
-            -- ── SAP PO ──
-            spo.doc_date    AS po_doc_date,
-            spo.deliv_date  AS po_deliv_date,
-            spo.net_price   AS po_net_price,
-            spo.crcy        AS po_currency,
-            spo.po_quantity AS po_quantity,
-            -- ── Work Order ──
-            wo.description        AS wo_description,
-            wo.system_status      AS wo_system_status,
-            wo.user_status        AS wo_user_status,
-            wo.basic_start_date   AS wo_basic_start,
-            wo.basic_finish_date  AS wo_basic_finish,
-            wo.actual_release     AS wo_actual_release,
-            wo.planner_group      AS wo_planner_group,
-            wo.main_work_ctr      AS wo_main_work_ctr,
-            wo.total_plan_cost    AS wo_total_plan_cost,
-            wo.total_act_cost     AS wo_total_act_cost
-        FROM taex_reservasi t
-        LEFT JOIN sap_pr sp
-            ON sp.pr = t.pr AND sp.material = t.material
-        LEFT JOIN sap_po spo
-            ON spo.po = t.po AND spo.material = t.material
-        LEFT JOIN LATERAL (
-            SELECT description, system_status, user_status,
-                   basic_start_date, basic_finish_date, actual_release,
-                   planner_group, main_work_ctr,
-                   total_plan_cost, total_act_cost
-            FROM work_order wo
-            WHERE wo."order" = t."order"
-            ORDER BY wo.id LIMIT 1
-        ) wo ON TRUE
-        WHERE {where}
-        ORDER BY {safe_ob} {safe_dir}
-        LIMIT %s OFFSET %s
-    """, params + [limit, offset])
 
-    data = [{
+def _map_public_tracking(r):
+    return {
         "Plant":                r["plant"],
         "Equipment":            r["equipment"],
         "Order":                r["order"],
@@ -4290,7 +4265,53 @@ def public_tracking(
         "WO_Total_Act_Cost":    _n(r["wo_total_act_cost"]),
         # Status
         "Status":               _calc_status(r),
-    } for r in rows]
+    }
+
+
+@app.get("/api/public/tracking")
+def public_tracking(
+    request: Request,
+    page: int = 1,
+    limit: int = 99999,
+    q: str = "",
+    order_val: str = "",
+    material: str = "",
+    pr: str = "",
+    po: str = "",
+    status: str = "",
+    plant: str = "",
+    order_by: str = "t.id",
+    order_dir: str = "ASC",
+):
+    """
+    Public endpoint untuk Power BI.
+    Auth: header x-api-key=<PUBLIC_API_KEY> atau ?api_key=<PUBLIC_API_KEY>
+    """
+    check_public_api_key(request)
+
+    limit  = min(99999, max(1, limit))
+    offset = (page - 1) * limit
+
+    where, params = _build_public_tracking_where(
+        plant=plant, order_val=order_val, material=material,
+        pr=pr, po=po, q=q, status=status,
+    )
+    safe_ob, safe_dir = _public_tracking_sort(order_by, order_dir)
+
+    # COUNT
+    total = int(query(
+        f"SELECT COUNT(*) AS n FROM taex_reservasi t WHERE {where}", params
+    )[0]["n"])
+
+    # DATA
+    rows = query(f"""
+        {_PUBLIC_TRACKING_SELECT}
+        WHERE {where}
+        ORDER BY {safe_ob} {safe_dir}
+        LIMIT %s OFFSET %s
+    """, params + [limit, offset])
+
+    data = [_map_public_tracking(r) for r in rows]
 
     return jsonify({
         "@odata.count": total,
@@ -4303,6 +4324,76 @@ def public_tracking(
         "value": data,
         "data":  data,
     })
+
+
+@app.get("/api/public/tracking.csv")
+def public_tracking_csv(
+    request: Request,
+    q: str = "",
+    order_val: str = "",
+    material: str = "",
+    pr: str = "",
+    po: str = "",
+    status: str = "",
+    plant: str = "",
+    order_by: str = "t.id",
+    order_dir: str = "ASC",
+):
+    """Public export CSV — SELURUH baris tracking (tanpa cap), di-stream.
+
+    Auth: header x-api-key=<PUBLIC_API_KEY> atau ?api_key=<PUBLIC_API_KEY>.
+    Query dieksekusi sekali via server-side cursor → ringan & tanpa re-scan
+    LIMIT/OFFSET. Kolom sama dengan /api/public/tracking (termasuk Status).
+    """
+    check_public_api_key(request)
+
+    where, params = _build_public_tracking_where(
+        plant=plant, order_val=order_val, material=material,
+        pr=pr, po=po, q=q, status=status,
+    )
+    safe_ob, safe_dir = _public_tracking_sort(order_by, order_dir)
+    sql = f"""{_PUBLIC_TRACKING_SELECT}
+        WHERE {where}
+        ORDER BY {safe_ob} {safe_dir}
+    """
+
+    def generate():
+        import csv as _csv
+        buf = io.StringIO()
+        writer = _csv.writer(buf)
+
+        def flush():
+            data = buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+            return data
+
+        # BOM supaya Excel membaca UTF-8 dengan benar
+        yield "﻿"
+
+        header = None
+        pending = 0
+        for r in query_stream(sql, params, batch_size=5000):
+            m = _map_public_tracking(r)
+            if header is None:
+                header = list(m.keys())
+                writer.writerow(header)
+                yield flush()
+            writer.writerow(["" if m[k] is None else m[k] for k in header])
+            pending += 1
+            if pending >= 2000:
+                yield flush()
+                pending = 0
+        if pending:
+            yield flush()
+        if header is None:
+            yield "Plant\n"
+
+    fname = f"Tracking_{datetime.now().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @app.get("/api/public/joblist-taex")
@@ -4680,8 +4771,14 @@ def public_info(request: Request):
             {
                 "method": "GET",
                 "path": "/api/public/tracking",
-                "description": "Tracking material (TA-ex + PR + PO)",
+                "description": "Tracking material (TA-ex + PR + PO) — JSON, paginasi (limit maks 99999)",
                 "params": ["page","limit","q","order_val","material","pr","po","status","plant"]
+            },
+            {
+                "method": "GET",
+                "path": "/api/public/tracking.csv",
+                "description": "Tracking material — SELURUH baris sebagai CSV (streaming, tanpa cap limit)",
+                "params": ["q","order_val","material","pr","po","status","plant","order_by","order_dir"]
             },
             {
                 "method": "GET",

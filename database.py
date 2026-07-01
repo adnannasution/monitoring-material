@@ -56,6 +56,33 @@ def query(sql, params=None):
         release_conn(conn)
 
 
+def query_stream(sql, params=None, batch_size=5000):
+    """Stream hasil query pakai server-side (named) cursor.
+
+    Cocok untuk export data besar: baris di-fetch bertahap dari server
+    (tidak sekaligus ke memori) dan query hanya dieksekusi SEKALI —
+    tanpa re-scan seperti LIMIT/OFFSET. Yield dict per baris.
+    """
+    conn = get_conn()
+    cur = None
+    try:
+        # Named cursor = server-side cursor (streaming dari PostgreSQL)
+        cur = conn.cursor(name="stream_cur", cursor_factory=RealDictCursor)
+        cur.itersize = batch_size
+        cur.execute(sql, params or ())
+        for row in cur:
+            yield row
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        if cur is not None:
+            try: cur.close()
+            except Exception: pass
+        release_conn(conn)
+
+
 def query_one(sql, params=None):
     rows = query(sql, params)
     return rows[0] if rows else None
