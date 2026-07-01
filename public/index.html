@@ -1491,6 +1491,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <button class="btn btn-search" onclick="trkApplyFilter()">Cari</button>
     <button class="btn btn-reset" onclick="trkResetFilter()">Reset</button>
     <button class="btn btn-export" onclick="exportTrackingExcel()" style="margin-left:8px">📤 Export Excel</button>
+    <button class="btn btn-export" onclick="exportTrackingCSV()" style="margin-left:4px" title="Export keseluruhan data (semua baris) ke CSV — ringan & cepat">📄 Export CSV (semua)</button>
     <button class="col-toggle-btn" onclick="toggleColPanel('trk')" style="margin-left:4px">⚙ Kolom</button>
     <span class="filter-right" id="trk-rowCount"></span>
   </div>
@@ -5978,6 +5979,37 @@ async function exportTrackingExcel() {
     hideLoading();
     toast('Gagal export: ' + e.message, 'err');
   }
+}
+
+// ── Export CSV keseluruhan data (streaming, ringan) ──────────────
+// Menghindari load semua baris ke memori browser + bikin XLSX yang berat.
+// Server men-stream CSV langsung ke file, mengikuti filter yang aktif.
+function exportTrackingCSV() {
+  const q      = (document.getElementById('trk-search').value || '');
+  const fStat  = document.getElementById('trk-filterStatus').value || '';
+  const fPlant = document.getElementById('trk-filterPlant').value || '';
+  const sort   = getSort('trk');
+
+  const params = new URLSearchParams({
+    q,
+    plant: fPlant,
+    status: fStat,
+    order_by: sort.key || 't.id',
+    order_dir: sort.dir > 0 ? 'ASC' : 'DESC',
+    api_key: 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK',
+    token: getToken(),
+  });
+
+  const url = `${API}/tracking/export.csv?${params}`;
+  // Trigger download langsung — browser menyimpan stream ke disk tanpa
+  // menahan seluruh data di memori JS.
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Tracking_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('Export CSV dimulai — file akan terunduh otomatis...', 'ok');
 }
 
 // ============================================================
