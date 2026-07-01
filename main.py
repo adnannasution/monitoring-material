@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from database import migrate, query, query_one, execute, get_state, set_state
+from database import migrate, query, query_one, query_stream, execute, get_state, set_state
 from bulk_ops import (
     bulk_replace_taex, bulk_replace_prisma, bulk_replace_pr,
     bulk_replace_po, bulk_replace_kumpulan, bulk_replace_order,
@@ -2256,7 +2256,10 @@ def export_tracking_csv(
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     safe_ob, safe_dir = _tracking_sort(order_by, order_dir)
 
-    CHUNK = 5000  # baris per query — jaga memori tetap kecil
+    sql = f"""SELECT {_TRACKING_SELECT_COLS}
+        {_TRACKING_BASE_SQL} {where}
+        ORDER BY {safe_ob} {safe_dir}
+    """
 
     def generate():
         import csv as _csv
@@ -2272,35 +2275,29 @@ def export_tracking_csv(
         yield "﻿"
 
         header = None
-        offset = 0
-        while True:
-            rows = query(
-                f"""SELECT {_TRACKING_SELECT_COLS}
-                {_TRACKING_BASE_SQL} {where}
-                ORDER BY {safe_ob} {safe_dir}
-                LIMIT %s OFFSET %s
-                """,
-                params + [CHUNK, offset],
+        pending = 0
+        # Query dieksekusi SEKALI, baris di-stream dari server-side cursor
+        # (tanpa re-scan LIMIT/OFFSET) → jauh lebih cepat untuk data besar.
+        for r in query_stream(sql, params, batch_size=5000):
+            m = _map_tracking(r)
+            if header is None:
+                header = list(m.keys()) + ["Status"]
+                writer.writerow(header)
+                yield flush()
+            st = _calc_item_status(
+                m.get("PR"), m.get("PO") or m.get("PO_PO"),
+                m.get("PO_Quantity"), m.get("PO_Qty_Delivered"),
             )
-            if not rows:
-                break
-            for r in rows:
-                m = _map_tracking(r)
-                if header is None:
-                    header = list(m.keys()) + ["Status"]
-                    writer.writerow(header)
-                    yield flush()
-                st = _calc_item_status(
-                    m.get("PR"), m.get("PO") or m.get("PO_PO"),
-                    m.get("PO_Quantity"), m.get("PO_Qty_Delivered"),
-                )
-                row = ["" if m[k] is None else m[k] for k in header[:-1]]
-                row.append(_TRACKING_STATUS_LABEL.get(st, ""))
-                writer.writerow(row)
+            row = ["" if m[k] is None else m[k] for k in header[:-1]]
+            row.append(_TRACKING_STATUS_LABEL.get(st, ""))
+            writer.writerow(row)
+            pending += 1
+            # Kirim buffer tiap ~2000 baris supaya download mengalir bertahap
+            if pending >= 2000:
+                yield flush()
+                pending = 0
+        if pending:
             yield flush()
-            if len(rows) < CHUNK:
-                break
-            offset += CHUNK
 
         # Bila tidak ada data sama sekali, tetap kirim header kosong minimal
         if header is None:
