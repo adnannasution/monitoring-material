@@ -5982,9 +5982,10 @@ async function exportTrackingExcel() {
 }
 
 // ── Export CSV keseluruhan data (streaming, ringan) ──────────────
-// Menghindari load semua baris ke memori browser + bikin XLSX yang berat.
-// Server men-stream CSV langsung ke file, mengikuti filter yang aktif.
-function exportTrackingCSV() {
+// Server men-stream CSV mengikuti filter aktif. Di sisi klien kita
+// fetch streaming supaya bisa menampilkan overlay "mohon tunggu" beserta
+// progress (MB terunduh) dan menutupnya begitu selesai.
+async function exportTrackingCSV() {
   const q      = (document.getElementById('trk-search').value || '');
   const fStat  = document.getElementById('trk-filterStatus').value || '';
   const fPlant = document.getElementById('trk-filterPlant').value || '';
@@ -5996,20 +5997,50 @@ function exportTrackingCSV() {
     status: fStat,
     order_by: sort.key || 't.id',
     order_dir: sort.dir > 0 ? 'ASC' : 'DESC',
-    api_key: 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK',
-    token: getToken(),
   });
 
   const url = `${API}/tracking/export.csv?${params}`;
-  // Trigger download langsung — browser menyimpan stream ke disk tanpa
-  // menahan seluruh data di memori JS.
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Tracking_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  toast('Export CSV dimulai — file akan terunduh otomatis...', 'ok');
+  showLoading('Menyiapkan export CSV… Mohon tunggu, jangan tutup halaman.');
+  const loadingMsg = document.getElementById('loading-msg');
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'x-api-key': 'Xz5jX1R1bqheB0AcVuM8W7jJlUzJGAIK',
+        ...(getToken() ? { 'x-auth-token': getToken() } : {}),
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    // Baca stream bertahap → tampilkan berapa MB yang sudah terunduh
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      loadingMsg.textContent =
+        `Mengunduh data CSV… ${(received / 1048576).toFixed(1)} MB (mohon tunggu)`;
+    }
+
+    const blob = new Blob(chunks, { type: 'text/csv;charset=utf-8;' });
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = `Tracking_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(dlUrl);
+
+    hideLoading();
+    toast(`Export CSV selesai! (${(received / 1048576).toFixed(1)} MB terunduh)`, 'ok');
+  } catch (e) {
+    hideLoading();
+    toast('Gagal export CSV: ' + e.message, 'err');
+  }
 }
 
 // ============================================================
