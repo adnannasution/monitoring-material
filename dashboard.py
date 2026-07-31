@@ -635,11 +635,13 @@ def project_equipment(request: Request, project_number: str = ""):
             SELECT DISTINCT jt.equipment_no, jt.plant, jt.area_name, jt.unit_name
             FROM joblist_taex jt
             WHERE jt.project_number = %s AND jt.equipment_no IS NOT NULL
+                  AND jt.equipment_no != ''
         ),
         wo_per_eq AS (
             SELECT DISTINCT el.equipment_no, el.area_name, el.plant, jt."order"
             FROM equipment_list el
             LEFT JOIN joblist_taex jt ON jt.equipment_no = el.equipment_no
+                                     AND jt.project_number = %s
         ),
         order_ready AS (
             SELECT t."order",
@@ -672,7 +674,7 @@ def project_equipment(request: Request, project_number: str = ""):
         FROM eq_ready
         GROUP BY area_name
         ORDER BY area_name
-    """, [project_number])
+    """, [project_number, project_number])
 
     total_eq  = sum(int(r["total_equipment"] or 0) for r in rows)
     total_rdy = sum(int(r["ready"]           or 0) for r in rows)
@@ -836,23 +838,26 @@ def project_equipment_detail(
     if not project_number:
         return J({"rows": [], "total": 0})
 
-    params = [project_number]
     area_filter = ""
+    params = [project_number]
     if area:
         area_filter = "AND jt.area_name = %s"
         params.append(area)
+    params.append(project_number)
 
     rows = query(f"""
         WITH equipment_list AS (
             SELECT DISTINCT jt.equipment_no, jt.area_name, jt.unit_name
             FROM joblist_taex jt
             WHERE jt.project_number = %s AND jt.equipment_no IS NOT NULL
+                  AND jt.equipment_no != ''
               {area_filter}
         ),
         wo_per_eq AS (
             SELECT DISTINCT el.equipment_no, el.area_name, el.unit_name, jt."order"
             FROM equipment_list el
             LEFT JOIN joblist_taex jt ON jt.equipment_no = el.equipment_no
+                                     AND jt.project_number = %s
         ),
         order_ready AS (
             SELECT t."order",
@@ -1062,12 +1067,13 @@ def project_equipment_by_mat_status(
             SELECT DISTINCT jt.equipment_no, jt.area_name
             FROM joblist_taex jt
             WHERE jt."order" IN (SELECT "order" FROM filtered_orders)
-              AND jt.equipment_no IS NOT NULL
+              AND jt.equipment_no IS NOT NULL AND jt.equipment_no != ''
         ),
         all_orders_per_eq AS (
             SELECT DISTINCT jt.equipment_no, jt."order"
             FROM joblist_taex jt
             WHERE jt.equipment_no IN (SELECT equipment_no FROM eq_from_filtered)
+              AND jt.project_number='{safe_proj}'
         ),
         order_readiness AS (
             SELECT t."order",
