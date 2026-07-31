@@ -38,10 +38,13 @@ TAEX_HEADER_MAP = {
     'price': 'Res_Price', 'res_price': 'Res_Price', 'res price': 'Res_Price',
     'per': 'Res_per', 'res_per': 'Res_per', 'res per': 'Res_per',
     'crcy': 'Res_Curr', 'res_curr': 'Res_Curr', 'currency': 'Res_Curr',
-    'po': 'PO', 'purchase order': 'PO',
-    'po_date': 'PO_Date', 'po date': 'PO_Date',
-    'qty_deliv': 'Qty_Deliv', 'qty deliv': 'Qty_Deliv',
-    'delivery_date': 'Delivery_Date', 'delivery date': 'Delivery_Date',
+    'po': 'PO', 'purchase order': 'PO', 'po migrasi': 'PO',
+    'po_date': 'PO_Date', 'po date': 'PO_Date', 'tgl po': 'PO_Date',
+    'qty_deliv': 'Qty_Deliv', 'qty deliv': 'Qty_Deliv', 'qpo': 'Qty_Deliv',
+    'delivery_date': 'Delivery_Date', 'delivery date': 'Delivery_Date', 'delv date': 'Delivery_Date',
+    'qty': 'Qty_Reqmts',
+    'qpr': 'Qty_PR',
+    'sloc pr': 'SLoc',
 }
 
 SAP_HEADER_MAP = {
