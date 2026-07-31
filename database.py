@@ -789,6 +789,8 @@ def migrate():
         )
     """)
 
+    execute('ALTER TABLE taex_reservasi ADD COLUMN IF NOT EXISTS vendor TEXT')
+
     # Indexes
     for sql in [
         'CREATE INDEX IF NOT EXISTS idx_taex_material ON taex_reservasi(material)',
