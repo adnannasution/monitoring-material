@@ -65,7 +65,7 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                     _n(r.get("Qty_f_avail_check")), _n(r.get("Qty_Withdrawn")),
                     _s(r.get("UoM")), _s(r.get("GL_Acct")),
                     _n(r.get("Res_Price")), _n(r.get("Res_per")), _s(r.get("Res_Curr")),
-                    _s(r.get("Reservno")),
+                    _s(r.get("Reservno")), _s(r.get("Vendor")),
                 ))
 
             sql = """
@@ -77,7 +77,7 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                  sloc, del, fis, ict, pg,
                  recipient, unloading_point, reqmts_date,
                  qty_f_avail_check, qty_withdrawn,
-                 uom, gl_acct, res_price, res_per, res_curr, reservno)
+                 uom, gl_acct, res_price, res_per, res_curr, reservno, vendor)
                 VALUES %s
                 ON CONFLICT ("order", material, itm) DO UPDATE SET
                     plant                = EXCLUDED.plant,
@@ -110,6 +110,7 @@ def bulk_replace_taex(df: pd.DataFrame, mode: str = "replace") -> int:
                     res_per              = EXCLUDED.res_per,
                     res_curr             = EXCLUDED.res_curr,
                     reservno             = EXCLUDED.reservno,
+                    vendor               = EXCLUDED.vendor,
                     updated_at           = NOW()
             """
             execute_values(cur, sql, rows)

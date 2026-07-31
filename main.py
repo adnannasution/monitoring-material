@@ -223,6 +223,7 @@ def map_taex(r):
         "UoM": r["uom"], "GL_Acct": r["gl_acct"],
         "Res_Price": _n(r["res_price"]), "Res_per": _n(r["res_per"]),
         "Res_Curr": r["res_curr"],
+        "Vendor": r["vendor"],
     }
 
 def map_prisma(r):

@@ -45,6 +45,7 @@ TAEX_HEADER_MAP = {
     'qty': 'Qty_Reqmts',
     'qpr': 'Qty_PR',
     'sloc pr': 'SLoc',
+    'vendor': 'Vendor',
 }
 
 SAP_HEADER_MAP = {
