@@ -675,6 +675,7 @@ async def upload_excel(upload_type: str, request: Request,
             elif upload_type == "vwjoblistdetail":
                 cnt = bulk_replace_vw_joblist_detail(df)
             elif upload_type == "joblisttaex":
+                df.columns = df.columns.str.replace(r'\s+', '', regex=True)
                 cnt = bulk_replace_joblist_taex(df)
             else:
                 cnt = 0
