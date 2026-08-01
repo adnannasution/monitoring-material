@@ -743,15 +743,18 @@ def project_material(request: Request, project_number: str = ""):
                 WHEN COALESCE(t.qty_stock, 0) >= COALESCE(t.qty_reqmts, 0)
                      AND COALESCE(t.qty_reqmts, 0) > 0 THEN 'Stock On Hand'
                 WHEN t.po IS NOT NULL AND t.po != ''
-                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date IS NOT NULL AND t.delivery_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND wo.basic_start_date IS NOT NULL AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
                      AND t.delivery_date::date < wo.basic_start_date::date THEN 'PO-DT Sebelum MD'
                 WHEN t.po IS NOT NULL AND t.po != ''
-                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date IS NOT NULL AND t.delivery_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND wo.basic_start_date IS NOT NULL AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
                      AND t.delivery_date::date > wo.basic_start_date::date THEN 'PO-DT Melebihi MD'
                 WHEN t.po IS NOT NULL AND t.po != '' THEN 'PO-DT Sebelum MD'
                 WHEN t.pr IS NOT NULL AND t.pr != ''
                      AND (t.po IS NULL OR t.po = '') AND wo.basic_start_date IS NOT NULL
-                     AND (t.reqmts_date IS NULL OR t.reqmts_date::date <= wo.basic_start_date::date)
+                     AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND (t.reqmts_date IS NULL OR (t.reqmts_date ~ '^\d{4}-\d{2}-\d{2}' AND t.reqmts_date::date <= wo.basic_start_date::date))
                      THEN 'PR-Prognosa DT sebelum MD'
                 WHEN t.pr IS NOT NULL AND t.pr != ''
                      AND (t.po IS NULL OR t.po = '') THEN 'PR-Prognosa DT Melebihi MD'
@@ -795,7 +798,9 @@ def project_monthly(request: Request, project_number: str = ""):
     plan_rows = query(f"""
         SELECT TO_CHAR(t.reqmts_date::date, 'YYYY-MM') AS bulan, COUNT(*) AS jumlah
         FROM taex_reservasi t
-        WHERE t.reqmts_date IS NOT NULL AND t."order" IN ({order_sub})
+        WHERE t.reqmts_date IS NOT NULL
+          AND t.reqmts_date ~ '^\d{{4}}-\d{{2}}-\d{{2}}'
+          AND t."order" IN ({order_sub})
         GROUP BY bulan ORDER BY bulan
     """, [project_number])
 
@@ -803,6 +808,7 @@ def project_monthly(request: Request, project_number: str = ""):
         SELECT TO_CHAR(t.delivery_date::date, 'YYYY-MM') AS bulan, COUNT(*) AS jumlah
         FROM taex_reservasi t
         WHERE t.delivery_date IS NOT NULL
+          AND t.delivery_date ~ '^\d{{4}}-\d{{2}}-\d{{2}}'
           AND t.po IS NOT NULL AND t.po != ''
           AND t."order" IN ({order_sub})
         GROUP BY bulan ORDER BY bulan
@@ -930,15 +936,18 @@ def project_material_detail(
                 WHEN COALESCE(t.qty_stock,0) >= COALESCE(t.qty_reqmts,0)
                      AND COALESCE(t.qty_reqmts,0) > 0 THEN 'Stock On Hand'
                 WHEN t.po IS NOT NULL AND t.po != ''
-                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date IS NOT NULL AND t.delivery_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND wo.basic_start_date IS NOT NULL AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
                      AND t.delivery_date::date < wo.basic_start_date::date THEN 'PO-DT Sebelum MD'
                 WHEN t.po IS NOT NULL AND t.po != ''
-                     AND t.delivery_date IS NOT NULL AND wo.basic_start_date IS NOT NULL
+                     AND t.delivery_date IS NOT NULL AND t.delivery_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND wo.basic_start_date IS NOT NULL AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
                      AND t.delivery_date::date > wo.basic_start_date::date THEN 'PO-DT Melebihi MD'
                 WHEN t.po IS NOT NULL AND t.po != '' THEN 'PO-DT Sebelum MD'
                 WHEN t.pr IS NOT NULL AND t.pr != ''
                      AND (t.po IS NULL OR t.po = '') AND wo.basic_start_date IS NOT NULL
-                     AND (t.reqmts_date IS NULL OR t.reqmts_date::date <= wo.basic_start_date::date)
+                     AND wo.basic_start_date ~ '^\d{4}-\d{2}-\d{2}'
+                     AND (t.reqmts_date IS NULL OR (t.reqmts_date ~ '^\d{4}-\d{2}-\d{2}' AND t.reqmts_date::date <= wo.basic_start_date::date))
                      THEN 'PR-Prognosa DT sebelum MD'
                 WHEN t.pr IS NOT NULL AND t.pr != ''
                      AND (t.po IS NULL OR t.po = '') THEN 'PR-Prognosa DT Melebihi MD'
