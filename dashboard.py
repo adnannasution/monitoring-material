@@ -1360,23 +1360,31 @@ STATUS_JOIN_PR = """
 
 _PR_STATUSES = ("'PR - Outstanding PR'", "'PR - Penyusunan HPS/OE'", "'PR - Proses Tender'")
 
-_REVISION_FILTER = "t.revision IN ('TA6-2027', 'PS042026')"
+_VALID_REVISIONS = ('TA6-2027', 'PS042026')
+_REVISION_FILTER_ALL = "t.revision IN ('TA6-2027', 'PS042026')"
+
+
+def _revision_filter(revision: str):
+    if revision and revision in _VALID_REVISIONS:
+        return "t.revision = %s", [revision]
+    return _REVISION_FILTER_ALL, []
 
 
 @router.get("/mat-tracking")
-def mat_tracking(request: Request):
+def mat_tracking(request: Request, revision: str = ""):
     _require_admin(request)
+    rev_sql, params = _revision_filter(revision)
     rows = query(f"""
         SELECT
             ({STATUS_EXPR_ACTUAL}) AS status_material,
             COUNT(*) AS jumlah
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        WHERE {_REVISION_FILTER}
+        WHERE {rev_sql}
           AND COALESCE(t.qty_reqmts, 0) > 0
         GROUP BY status_material
         ORDER BY jumlah DESC
-    """)
+    """, params)
 
     total = sum(int(r["jumlah"] or 0) for r in rows)
     items = [{
@@ -1405,10 +1413,11 @@ def mat_tracking(request: Request):
 @router.get("/mat-tracking-detail")
 def mat_tracking_detail(
     request: Request,
+    revision: str = "",
     status: str = "",
 ):
     _require_admin(request)
-    params = []
+    rev_sql, params = _revision_filter(revision)
     status_filter = ""
     if status:
         status_filter = f"AND ({STATUS_EXPR_ACTUAL}) = %s"
@@ -1437,7 +1446,7 @@ def mat_tracking_detail(
             ({STATUS_EXPR_ACTUAL}) AS status_label
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        WHERE {_REVISION_FILTER}
+        WHERE {rev_sql}
           AND COALESCE(t.qty_reqmts, 0) > 0
           {status_filter}
         ORDER BY t.revision, t."order", t.itm
@@ -1484,7 +1493,7 @@ def mat_tracking_summary(request: Request):
             SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'                  THEN 1 ELSE 0 END) AS belum_pr
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        WHERE {_REVISION_FILTER}
+        WHERE {_REVISION_FILTER_ALL}
           AND COALESCE(t.qty_reqmts, 0) > 0
         GROUP BY t.revision
         ORDER BY t.revision
