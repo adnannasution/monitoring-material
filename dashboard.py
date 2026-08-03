@@ -1394,17 +1394,22 @@ def mat_tracking(request: Request, revision: str = ""):
     } for r in rows]
 
     status_map = {i["status"]: i["jumlah"] for i in items}
-    sudah_pr = (status_map.get("PR - Outstanding PR", 0)
+    pr_outstanding = status_map.get("PR - Outstanding PR", 0)
+    sudah_pr = (pr_outstanding
                 + status_map.get("PR - Penyusunan HPS/OE", 0)
                 + status_map.get("PR - Proses Tender", 0))
+    po_tunggu = status_map.get("Sudah PO - Tunggu On Site", 0)
+    po_onsite = status_map.get("Sudah PO - Sudah On Site", 0)
     return J({
         "summary": {
-            "total":     total,
-            "belum_pr":  status_map.get("Belum PR", 0),
-            "sudah_pr":  sudah_pr,
-            "po_tunggu": status_map.get("Sudah PO - Tunggu On Site", 0),
-            "po_onsite": status_map.get("Sudah PO - Sudah On Site", 0),
-            "stock":     status_map.get("Dipenuhi dari Stock", 0),
+            "total":          total,
+            "stock":          status_map.get("Dipenuhi dari Stock", 0),
+            "belum_pr":       status_map.get("Belum PR", 0),
+            "sudah_pr":       sudah_pr,
+            "pr_outstanding": pr_outstanding,
+            "sudah_po":       po_tunggu + po_onsite,
+            "po_tunggu":      po_tunggu,
+            "po_onsite":      po_onsite,
         },
         "items": items,
     })

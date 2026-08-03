@@ -1944,7 +1944,7 @@ let _p5MatPage      = 1;
 let _p5MatSearch    = '';
 const _p5MatPageSize = 25;
 
-// Urutan kategori: Point 2 → 3 → 4(a/b/c) → 5a → 5b
+// Urutan kategori: 2 → 3 → 4(PR sub) → 7 → 8
 const MAT_STATUS_COLORS = {
   'Dipenuhi dari Stock':       '#15803d',
   'Belum PR':                  '#dc2626',
@@ -1953,6 +1953,16 @@ const MAT_STATUS_COLORS = {
   'PR - Proses Tender':        '#b45309',
   'Sudah PO - Tunggu On Site': '#3b82f6',
   'Sudah PO - Sudah On Site':  '#16a34a',
+};
+// Label tampilan sesuai legend 1-8
+const MAT_STATUS_DISPLAY = {
+  'Dipenuhi dari Stock':       '② Dipenuhi dari Stock',
+  'Belum PR':                  '③ Reservasi Belum PR',
+  'PR - Outstanding PR':       '⑤ Outstanding PR',
+  'PR - Penyusunan HPS/OE':    '④ Penyusunan HPS/OE',
+  'PR - Proses Tender':        '④ Proses Tender',
+  'Sudah PO - Tunggu On Site': '⑦ Tunggu On Site',
+  'Sudah PO - Sudah On Site':  '⑧ Sudah On Site',
 };
 const MAT_STATUS_ORDER = [
   'Dipenuhi dari Stock',
@@ -1965,6 +1975,9 @@ const MAT_STATUS_ORDER = [
 ];
 function _p5Color(status, i) {
   return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#15803d','#d97706','#b45309'][i % 7];
+}
+function _p5Label(status) {
+  return MAT_STATUS_DISPLAY[status] || status;
 }
 
 async function loadP5() {
@@ -2004,7 +2017,7 @@ function _renderP5Cards(s) {
   document.getElementById('p5-cards').innerHTML = `
     <div class="stat-card blue">
       <div class="stat-card-val">${fmt(s.total)}</div>
-      <div class="stat-card-lbl">① Total Item</div>
+      <div class="stat-card-lbl">① Total</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #15803d">
       <div class="stat-card-val" style="color:#15803d">${fmt(s.stock)}</div>
@@ -2013,22 +2026,32 @@ function _renderP5Cards(s) {
     </div>
     <div class="stat-card" style="border-left:4px solid #dc2626">
       <div class="stat-card-val" style="color:#dc2626">${fmt(s.belum_pr)}</div>
-      <div class="stat-card-lbl">③ Belum PR</div>
+      <div class="stat-card-lbl">③ Reservasi Belum PR</div>
       <div class="stat-card-pct" style="color:#dc2626">${s.total ? (s.belum_pr/s.total*100).toFixed(1) : 0}%</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #f59e0b">
       <div class="stat-card-val" style="color:#f59e0b">${fmt(s.sudah_pr)}</div>
-      <div class="stat-card-lbl">④ Sudah PR, Belum PO</div>
+      <div class="stat-card-lbl">④ Reservasi Sudah PR Belum PO</div>
       <div class="stat-card-pct" style="color:#f59e0b">${s.total ? (s.sudah_pr/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #d97706">
+      <div class="stat-card-val" style="color:#d97706">${fmt(s.pr_outstanding)}</div>
+      <div class="stat-card-lbl">⑤ Outstanding PR</div>
+      <div class="stat-card-pct" style="color:#d97706">${s.total ? (s.pr_outstanding/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #1d4ed8">
+      <div class="stat-card-val" style="color:#1d4ed8">${fmt(s.sudah_po)}</div>
+      <div class="stat-card-lbl">⑥ Reservasi Sudah PO</div>
+      <div class="stat-card-pct" style="color:#1d4ed8">${s.total ? (s.sudah_po/s.total*100).toFixed(1) : 0}%</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #3b82f6">
       <div class="stat-card-val" style="color:#3b82f6">${fmt(s.po_tunggu)}</div>
-      <div class="stat-card-lbl">⑤a Tunggu On Site</div>
+      <div class="stat-card-lbl">⑦ Tunggu On Site</div>
       <div class="stat-card-pct" style="color:#3b82f6">${s.total ? (s.po_tunggu/s.total*100).toFixed(1) : 0}%</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #16a34a">
       <div class="stat-card-val" style="color:#16a34a">${fmt(s.po_onsite)}</div>
-      <div class="stat-card-lbl">⑤b Sudah On Site</div>
+      <div class="stat-card-lbl">⑧ Sudah On Site</div>
       <div class="stat-card-pct" style="color:#16a34a">${pctOnsite}%</div>
     </div>
   `;
@@ -2063,7 +2086,7 @@ function _renderP5Donut(items) {
   // Legend clickable
   document.getElementById('p5-donut-legend').innerHTML = items.map((item, i) =>
     `<div class="legend-item" style="cursor:pointer" onclick="_p5ToggleStatus('${item.status.replace(/'/g,"\\'")}',null,null,${i})">
-      <div class="legend-dot" style="background:${colors[i]}"></div>${item.status}
+      <div class="legend-dot" style="background:${colors[i]}"></div>${_p5Label(item.status)}
     </div>`
   ).join('');
 }
@@ -2077,7 +2100,7 @@ function _renderP5BarChart(items) {
   charts['p5-bar'] = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: items.map(i => i.status),
+      labels: items.map(i => _p5Label(i.status)),
       datasets: [{
         label: 'Jumlah Material',
         data: items.map(i => i.jumlah),
@@ -2123,7 +2146,7 @@ function _renderP5StatusTable(items, total) {
       onclick="_p5ToggleStatus('${item.status.replace(/'/g,"\\'")}',null,null,${i})">
       <td>
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle"></span>
-        <span style="font-weight:600">${item.status}</span>
+        <span style="font-weight:600">${_p5Label(item.status)}</span>
       </td>
       <td style="text-align:right;font-weight:700;color:${color}">${fmt(item.jumlah)}</td>
       <td style="text-align:right">${item.pct.toFixed(1)}%</td>
@@ -2394,11 +2417,11 @@ function _renderP5SummaryChart(rows) {
     data: {
       labels: rows.map(r => r.revision),
       datasets: [
-        { label: '② Dipenuhi dari Stock',  data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
-        { label: '⑤b Sudah On Site',       data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
-        { label: '⑤a Tunggu On Site',      data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
-        { label: '④ Sudah PR, Belum PO',   data: rows.map(r => r.sudah_pr),   backgroundColor: '#f59e0b', stack: 's' },
-        { label: '③ Belum PR',             data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
+        { label: '② Dipenuhi dari Stock',        data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
+        { label: '⑧ Sudah On Site',              data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
+        { label: '⑦ Tunggu On Site',             data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
+        { label: '④ Reservasi Sudah PR Belum PO', data: rows.map(r => r.sudah_pr),  backgroundColor: '#f59e0b', stack: 's' },
+        { label: '③ Reservasi Belum PR',         data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
       ]
     },
     options: {
@@ -2845,21 +2868,17 @@ async function loadP4JasaPlanning(proj) {
         <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
       </div>
       <!-- Legend Hierarchy -->
-      <div style="flex:1;min-width:280px;background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:11px;line-height:1.7">
+      <div style="flex:1;min-width:300px;background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:11px;line-height:1.9">
         <div style="font-weight:700;margin-bottom:4px;color:var(--text)">Legend Status Material:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px 20px">
-          <div><span style="font-weight:700;color:var(--blue)">① Total Item</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">
+          <div><span style="font-weight:700;color:#1a56db">① Total</span></div>
           <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">② Dipenuhi dari Stock</span></div>
           <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">③ Reservasi Belum PR</span></div>
-          <div>
-            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f59e0b;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">④ Sudah PR, Belum PO</span>
-            <span style="color:var(--text-sm);margin-left:4px">→ a. Outstanding PR &nbsp;|&nbsp; b. Penyusunan HPS/OE &nbsp;|&nbsp; c. Proses Tender</span>
-          </div>
-          <div>
-            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤a Tunggu On Site</span>
-            <span style="color:var(--text-sm);margin-left:4px">→ Proses LC | Approval Drawing | Proses Pengiriman | Tunggu Inspeksi | Tunggu BASTB</span>
-          </div>
-          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤b Sudah On Site</span></div>
+          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f59e0b;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">④ Reservasi Sudah PR Belum PO</span></div>
+          <div style="padding-left:14px;color:#92400e"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d97706;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤ Outstanding PR</span></div>
+          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#1d4ed8;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">⑥ Reservasi Sudah PO</span></div>
+          <div style="padding-left:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑦ Tunggu On Site</span></div>
+          <div style="padding-left:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑧ Sudah On Site</span></div>
         </div>
       </div>
     </div>
