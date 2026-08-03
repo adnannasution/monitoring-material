@@ -500,7 +500,7 @@ async function init() {
   }
 
   await initP4Projects();
-  await initP5Revisions();
+  await initP5Projects();
   loadP5Summary();
   loadP4();
 }
@@ -1935,8 +1935,8 @@ async function loadP4PlanningJobdetail(proj) {
 
 
 // ══════════════════════════════════════════════════════════════
-// PAGE 5 — MATERIAL TRACKING BY REVISION
-// Sumber: taex_reservasi.revision (tanpa join joblist_taex)
+// PAGE 5 — MATERIAL TRACKING BY PROJECT
+// Sumber: joblist_taex (project_number) → taex_reservasi
 // ══════════════════════════════════════════════════════════════
 let _p5ActiveStatus = '';
 let _p5DetailRows   = [];
@@ -1944,47 +1944,63 @@ let _p5MatPage      = 1;
 let _p5MatSearch    = '';
 const _p5MatPageSize = 25;
 
+// Urutan kategori: Point 2 → 3 → 4(a/b/c) → 5a → 5b
 const MAT_STATUS_COLORS = {
-  'Belum PR':               '#dc2626',
-  'PR-Proses Pengadaan':    '#f59e0b',
-  'PO-Material Belum Tiba': '#3b82f6',
-  'PO-Material Telah Tiba': '#16a34a',
-  'Stock On Hand':          '#16a34a',
+  'Dipenuhi dari Stock':       '#15803d',
+  'Belum PR':                  '#dc2626',
+  'PR - Outstanding PR':       '#f59e0b',
+  'PR - Penyusunan HPS/OE':    '#d97706',
+  'PR - Proses Tender':        '#b45309',
+  'Sudah PO - Tunggu On Site': '#3b82f6',
+  'Sudah PO - Sudah On Site':  '#16a34a',
 };
+const MAT_STATUS_ORDER = [
+  'Dipenuhi dari Stock',
+  'Belum PR',
+  'PR - Outstanding PR',
+  'PR - Penyusunan HPS/OE',
+  'PR - Proses Tender',
+  'Sudah PO - Tunggu On Site',
+  'Sudah PO - Sudah On Site',
+];
 function _p5Color(status, i) {
-  return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#6b7280'][i % 5];
+  return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#15803d','#d97706','#b45309'][i % 7];
 }
 
-async function initP5Revisions() {
+async function initP5Projects() {
   try {
-    const revs = await apiFetch('/api/dashboard/mat-revisions');
-    if (!revs) return;
-    const sel = document.getElementById('p5-revision-select');
-    revs.forEach(r => {
+    const projs = await apiFetch('/api/dashboard/mat-projects');
+    if (!projs) return;
+    const sel = document.getElementById('p5-project-select');
+    projs.forEach(p => {
       const o = document.createElement('option');
-      o.value = r; o.textContent = r;
+      o.value = p; o.textContent = p;
       sel.appendChild(o);
     });
   } catch(e) {}
 }
 
 async function loadP5() {
-  const rev = document.getElementById('p5-revision-select').value;
-  document.getElementById('p5-empty').style.display        = rev ? 'none' : '';
-  document.getElementById('p5-main').style.display         = rev ? '' : 'none';
-  document.getElementById('p5-cards').style.display        = rev ? 'grid' : 'none';
+  const proj = document.getElementById('p5-project-select').value;
+  document.getElementById('p5-empty').style.display  = proj ? 'none' : '';
+  document.getElementById('p5-main').style.display   = proj ? '' : 'none';
+  document.getElementById('p5-cards').style.display  = proj ? 'grid' : 'none';
 
-  if (!rev) {
-    return;
-  }
+  if (!proj) return;
 
   document.getElementById('p5-loading').style.display = '';
   _p5ActiveStatus = '';
   _closeP5Detail();
 
   try {
-    const d = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
+    const d = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
     if (!d) return;
+    // Urutkan items sesuai MAT_STATUS_ORDER
+    d.items.sort((a,b) => {
+      const ai = MAT_STATUS_ORDER.indexOf(a.status);
+      const bi = MAT_STATUS_ORDER.indexOf(b.status);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
     _renderP5Cards(d.summary);
     _renderP5Donut(d.items);
     _renderP5BarChart(d.items);
@@ -1999,32 +2015,36 @@ async function loadP5() {
 function _renderP5Cards(s) {
   document.getElementById('p5-cards').style.display = 'grid';
   document.getElementById('p5-donut-total').textContent = fmt(s.total);
-  const pctTiba = s.total ? ((s.po_tiba + s.stock) / s.total * 100).toFixed(1) : '0.0';
-  const pctBelum = s.total ? (s.belum_pr / s.total * 100).toFixed(1) : '0.0';
+  const pctOnsite = s.total ? ((s.po_onsite + s.stock) / s.total * 100).toFixed(1) : '0.0';
   document.getElementById('p5-cards').innerHTML = `
     <div class="stat-card blue">
       <div class="stat-card-val">${fmt(s.total)}</div>
-      <div class="stat-card-lbl">Total Material</div>
+      <div class="stat-card-lbl">① Total Item</div>
     </div>
-    <div class="stat-card" style="border-left:4px solid #16a34a">
-      <div class="stat-card-val" style="color:#16a34a">${fmt(s.po_tiba + s.stock)}</div>
-      <div class="stat-card-lbl">PO Telah Tiba / Stock</div>
-      <div class="stat-card-pct" style="color:#16a34a">${pctTiba}%</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #3b82f6">
-      <div class="stat-card-val" style="color:#3b82f6">${fmt(s.po_belum)}</div>
-      <div class="stat-card-lbl">PO Belum Tiba</div>
-      <div class="stat-card-pct" style="color:#3b82f6">${s.total ? (s.po_belum/s.total*100).toFixed(1) : 0}%</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #f59e0b">
-      <div class="stat-card-val" style="color:#f59e0b">${fmt(s.pr_proses)}</div>
-      <div class="stat-card-lbl">PR Proses Pengadaan</div>
-      <div class="stat-card-pct" style="color:#f59e0b">${s.total ? (s.pr_proses/s.total*100).toFixed(1) : 0}%</div>
+    <div class="stat-card" style="border-left:4px solid #15803d">
+      <div class="stat-card-val" style="color:#15803d">${fmt(s.stock)}</div>
+      <div class="stat-card-lbl">② Dipenuhi dari Stock</div>
+      <div class="stat-card-pct" style="color:#15803d">${s.total ? (s.stock/s.total*100).toFixed(1) : 0}%</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #dc2626">
       <div class="stat-card-val" style="color:#dc2626">${fmt(s.belum_pr)}</div>
-      <div class="stat-card-lbl">Belum PR</div>
-      <div class="stat-card-pct" style="color:#dc2626">${pctBelum}%</div>
+      <div class="stat-card-lbl">③ Belum PR</div>
+      <div class="stat-card-pct" style="color:#dc2626">${s.total ? (s.belum_pr/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #f59e0b">
+      <div class="stat-card-val" style="color:#f59e0b">${fmt(s.sudah_pr)}</div>
+      <div class="stat-card-lbl">④ Sudah PR, Belum PO</div>
+      <div class="stat-card-pct" style="color:#f59e0b">${s.total ? (s.sudah_pr/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #3b82f6">
+      <div class="stat-card-val" style="color:#3b82f6">${fmt(s.po_tunggu)}</div>
+      <div class="stat-card-lbl">⑤a Tunggu On Site</div>
+      <div class="stat-card-pct" style="color:#3b82f6">${s.total ? (s.po_tunggu/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #16a34a">
+      <div class="stat-card-val" style="color:#16a34a">${fmt(s.po_onsite)}</div>
+      <div class="stat-card-lbl">⑤b Sudah On Site</div>
+      <div class="stat-card-pct" style="color:#16a34a">${pctOnsite}%</div>
     </div>
   `;
 }
@@ -2138,16 +2158,21 @@ function _renderP5StatusTable(items, total) {
 }
 
 async function _p5ToggleStatus(status, colors, items, idx) {
-  const rev = document.getElementById('p5-revision-select').value;
-  if (!rev) return;
+  const proj = document.getElementById('p5-project-select').value;
+  if (!proj) return;
 
   // Toggle — klik sama = reset
   if (_p5ActiveStatus === status) {
     _p5ActiveStatus = '';
     _closeP5Detail();
     // Refresh status table tanpa highlight
-    const d = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
+    const d = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
     if (d) {
+      d.items.sort((a,b) => {
+        const ai = MAT_STATUS_ORDER.indexOf(a.status);
+        const bi = MAT_STATUS_ORDER.indexOf(b.status);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
       _renderP5Donut(d.items);
       _renderP5BarChart(d.items);
       _renderP5StatusTable(d.items, d.summary.total);
@@ -2174,20 +2199,27 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   }
 
   // Refresh row highlight in status table
-  const d2 = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
-  if (d2) _renderP5StatusTable(d2.items, d2.summary.total);
+  const d2 = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
+  if (d2) {
+    d2.items.sort((a,b) => {
+      const ai = MAT_STATUS_ORDER.indexOf(a.status);
+      const bi = MAT_STATUS_ORDER.indexOf(b.status);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+    _renderP5StatusTable(d2.items, d2.summary.total);
+  }
 
   // Load detail
-  _openP5Detail(rev, status);
+  _openP5Detail(proj, status);
 }
 
-async function _openP5Detail(rev, status) {
+async function _openP5Detail(proj, status) {
   const panel = document.getElementById('p5-detail-panel');
   panel.style.display = '';
   document.getElementById('p5-detail-title').textContent =
     'Detail Material — ' + status;
   document.getElementById('p5-detail-sub').textContent =
-    'Revision: ' + rev;
+    'Project: ' + proj;
   document.getElementById('p5-detail-table-wrap').innerHTML =
     '<div style="padding:32px;text-align:center;color:var(--text-sm)"><div class="spin" style="margin:0 auto 8px"></div>Memuat data...</div>';
 
@@ -2195,13 +2227,13 @@ async function _openP5Detail(rev, status) {
   try {
     const d = await apiFetch(
       '/api/dashboard/mat-tracking-detail'
-      + '?revision=' + encodeURIComponent(rev)
-      + '&status='   + encodeURIComponent(status)
+      + '?project=' + encodeURIComponent(proj)
+      + '&status='  + encodeURIComponent(status)
     );
     if (!d) return;
     _p5DetailRows = d.rows;
     document.getElementById('p5-detail-sub').textContent =
-      'Revision: ' + rev + ' · ' + fmt(d.total) + ' material';
+      'Project: ' + proj + ' · ' + fmt(d.total) + ' material';
     _renderP5DetailTable();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch(e) {
@@ -2241,11 +2273,13 @@ function _renderP5DetailTable() {
   const pageRows = filtered.slice(start, start + _p5MatPageSize);
 
   const statusColors = {
-    'Belum PR':               'background:#fef2f2;color:#dc2626',
-    'PR-Proses Pengadaan':    'background:#fffbeb;color:#d97706',
-    'PO-Material Belum Tiba': 'background:#eff6ff;color:#1e40af',
-    'PO-Material Telah Tiba': 'background:#f0fdf4;color:#15803d',
-    'Stock On Hand':          'background:#f0fdf4;color:#15803d',
+    'Belum PR':                  'background:#fef2f2;color:#dc2626',
+    'PR - Outstanding PR':       'background:#fffbeb;color:#d97706',
+    'PR - Penyusunan HPS/OE':    'background:#fef3c7;color:#b45309',
+    'PR - Proses Tender':        'background:#fef3c7;color:#92400e',
+    'Sudah PO - Tunggu On Site': 'background:#eff6ff;color:#1e40af',
+    'Sudah PO - Sudah On Site':  'background:#f0fdf4;color:#15803d',
+    'Dipenuhi dari Stock':       'background:#f0fdf4;color:#15803d',
   };
 
   let html = `<div style="display:flex;flex-direction:column;max-height:520px;overflow:hidden">
@@ -2272,6 +2306,7 @@ function _renderP5DetailTable() {
       <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Req</th>
       <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Deliv</th>
       <th style="padding:8px 12px;white-space:nowrap">PR</th>
+      <th style="padding:8px 12px;white-space:nowrap">PR Tracking</th>
       <th style="padding:8px 12px;white-space:nowrap">PO</th>
       <th style="padding:8px 12px;white-space:nowrap">Delivery Date</th>
       <th style="padding:8px 12px;white-space:nowrap">Reqmts Date</th>
@@ -2283,6 +2318,9 @@ function _renderP5DetailTable() {
     const prgBar = r.qty_reqmts > 0
       ? Math.min(100, (r.qty_deliv / r.qty_reqmts * 100)).toFixed(0)
       : 0;
+    const trackingBadge = (r.pr_tracking && r.pr_tracking !== '—')
+      ? `<span style="font-size:10px;padding:1px 6px;border-radius:99px;background:#fef3c7;color:#92400e;font-weight:600">${r.pr_tracking}</span>`
+      : '—';
     html += `<tr style="border-bottom:1px solid #f1f5f9;${i%2?'background:#fafafa':''}">
       <td style="padding:7px 12px;font-weight:700;color:var(--blue);white-space:nowrap">${r.order}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.itm}</td>
@@ -2297,6 +2335,7 @@ function _renderP5DetailTable() {
         </div>
       </td>
       <td style="padding:7px 12px;white-space:nowrap">${r.pr !== '—' ? r.pr + (r.pr_item !== '—' ? '/'+r.pr_item : '') : '—'}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${trackingBadge}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.po}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.delivery_date}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.reqmts_date}</td>
@@ -2333,14 +2372,14 @@ function _renderP5DetailTable() {
 
 function exportP5Excel() {
   if (!_p5DetailRows.length) return;
-  let csv = 'Order,Itm,Equipment,Material,Deskripsi,Qty Req,UoM,Qty Deliv,PR,PO,Delivery Date,Reqmts Date,Status\n';
+  let csv = 'Order,Itm,Equipment,Material,Deskripsi,Qty Req,UoM,Qty Deliv,PR,PR Tracking,PO,Delivery Date,Reqmts Date,Status\n';
   _p5DetailRows.forEach(r => {
-    csv += `${r.order},${r.itm},${r.equipment},${r.material},"${r.description}",${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},${r.po},${r.delivery_date},${r.reqmts_date},"${r.status_label}"\n`;
+    csv += `${r.order},${r.itm},${r.equipment},${r.material},"${r.description}",${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},"${r.pr_tracking}",${r.po},${r.delivery_date},${r.reqmts_date},"${r.status_label}"\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `material_tracking_${document.getElementById('p5-revision-select').value}_${Date.now()}.csv`;
+  a.download = `material_tracking_${document.getElementById('p5-project-select').value}_${Date.now()}.csv`;
   a.click();
 }
 
@@ -2359,19 +2398,20 @@ function _renderP5SummaryChart(rows) {
   if (!rows.length) { wrap.style.display = 'none'; return; }
   wrap.style.display = '';
 
-  const h = Math.max(300, rows.length * 40 + 80);
+  const h = Math.max(300, rows.length * 44 + 100);
   document.getElementById('p5-summary-bar-container').style.height = h + 'px';
   const ctx = document.getElementById('p5-summary-bar').getContext('2d');
 
   charts['p5-summary-bar'] = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: rows.map(r => r.revision),
+      labels: rows.map(r => r.project),
       datasets: [
-        { label: 'PO Telah Tiba / Stock', data: rows.map(r => r.po_tiba),   backgroundColor: '#16a34a', stack: 's' },
-        { label: 'PO Belum Tiba',         data: rows.map(r => r.po_belum),  backgroundColor: '#3b82f6', stack: 's' },
-        { label: 'PR Proses Pengadaan',   data: rows.map(r => r.pr_proses), backgroundColor: '#f59e0b', stack: 's' },
-        { label: 'Belum PR',              data: rows.map(r => r.belum_pr),  backgroundColor: '#dc2626', stack: 's' },
+        { label: '② Dipenuhi dari Stock',       data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
+        { label: '⑤b Sudah On Site',            data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
+        { label: '⑤a Tunggu On Site',           data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
+        { label: '④ Sudah PR, Belum PO',        data: rows.map(r => r.sudah_pr),   backgroundColor: '#f59e0b', stack: 's' },
+        { label: '③ Belum PR',                  data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
       ]
     },
     options: {
@@ -2384,7 +2424,7 @@ function _renderP5SummaryChart(rows) {
           label: c => ` ${c.dataset.label}: ${fmt(c.raw)}`,
           footer: items => {
             const total = rows[items[0].dataIndex].total;
-            return `Total: ${fmt(total)}`;
+            return `① Total Item: ${fmt(total)}`;
           }
         }}
       },
@@ -2394,8 +2434,8 @@ function _renderP5SummaryChart(rows) {
       },
       onClick: (evt, els) => {
         if (!els.length) return;
-        const rev = rows[els[0].index].revision;
-        document.getElementById('p5-revision-select').value = rev;
+        const proj = rows[els[0].index].project;
+        document.getElementById('p5-project-select').value = proj;
         loadP5();
       }
     }
@@ -2805,25 +2845,39 @@ async function loadP4JasaPlanning(proj) {
   </div>
 </div>
 
-<!-- ══ PAGE 5: MATERIAL TRACKING BY REVISION ══ -->
+<!-- ══ PAGE 5: MATERIAL TRACKING BY PROJECT ══ -->
 <div class="page-content" id="page-p5">
 <div class="content">
 
-  <!-- Revision filter -->
+  <!-- Project filter + Legend Hierarchy -->
   <div class="card" style="margin-bottom:16px;padding:16px">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span class="filter-label">Pilih Revision:</span>
-      <select class="filter-select" id="p5-revision-select" onchange="loadP5()"
-              style="min-width:220px;font-size:13px;padding:6px 12px">
-        <option value="">— Pilih Revision —</option>
-      </select>
-      <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
-      <div style="margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:11px;color:var(--text-sm)">
-        <span style="font-weight:700">Legend:</span>
-        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span>Belum PR</span>
-        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block"></span>PR-Proses Pengadaan</span>
-        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block"></span>PO-Material Belum Tiba</span>
-        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#16a34a;display:inline-block"></span>PO-Material Telah Tiba</span>
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <!-- Filter -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0">
+        <span class="filter-label">Pilih Project:</span>
+        <select class="filter-select" id="p5-project-select" onchange="loadP5()"
+                style="min-width:240px;font-size:13px;padding:6px 12px">
+          <option value="">— Pilih Project —</option>
+        </select>
+        <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
+      </div>
+      <!-- Legend Hierarchy -->
+      <div style="flex:1;min-width:280px;background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:11px;line-height:1.7">
+        <div style="font-weight:700;margin-bottom:4px;color:var(--text)">Legend Status Material:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 20px">
+          <div><span style="font-weight:700;color:var(--blue)">① Total Item</span></div>
+          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">② Dipenuhi dari Stock</span></div>
+          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">③ Reservasi Belum PR</span></div>
+          <div>
+            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f59e0b;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">④ Sudah PR, Belum PO</span>
+            <span style="color:var(--text-sm);margin-left:4px">→ a. Outstanding PR &nbsp;|&nbsp; b. Penyusunan HPS/OE &nbsp;|&nbsp; c. Proses Tender</span>
+          </div>
+          <div>
+            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤a Tunggu On Site</span>
+            <span style="color:var(--text-sm);margin-left:4px">→ Proses LC | Approval Drawing | Proses Pengiriman | Tunggu Inspeksi | Tunggu BASTB</span>
+          </div>
+          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤b Sudah On Site</span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2835,7 +2889,7 @@ async function loadP4JasaPlanning(proj) {
   <div id="p5-summary-wrap" style="margin-bottom:20px;display:none">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div class="card-title" style="margin-bottom:0">Overview Semua Revision — Klik bar untuk drill-down</div>
+        <div class="card-title" style="margin-bottom:0">Overview Semua Project — Klik bar untuk drill-down</div>
       </div>
       <div id="p5-summary-bar-container" style="position:relative;height:300px;overflow-y:auto">
         <canvas id="p5-summary-bar"></canvas>
@@ -2919,9 +2973,9 @@ async function loadP4JasaPlanning(proj) {
   <!-- Empty state -->
   <div id="p5-empty" style="text-align:center;padding:60px;color:var(--text-sm)">
     <div style="font-size:48px;margin-bottom:12px">📦</div>
-    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Material Tracking by Revision</div>
-    <div style="font-size:12px">Pilih Revision untuk tracking status material · Sumber langsung dari taex_reservasi (tanpa join joblist)</div>
-    <div style="margin-top:16px;font-size:11px;color:var(--text-sm)">↑ Overview semua revision tampil di atas setelah halaman dimuat</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Material Tracking by Project</div>
+    <div style="font-size:12px">Pilih Project untuk tracking status material · Hanya project terdaftar di joblist TAEX</div>
+    <div style="margin-top:16px;font-size:11px;color:var(--text-sm)">↑ Overview semua project tampil di atas setelah halaman dimuat</div>
   </div>
 
 </div>
