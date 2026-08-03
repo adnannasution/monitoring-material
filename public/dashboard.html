@@ -1977,7 +1977,8 @@ async function loadP5() {
   _closeP5Detail();
 
   try {
-    const d = await apiFetch('/api/dashboard/mat-tracking');
+    const rev = document.getElementById('p5-revision-select').value;
+    const d = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
     if (!d) return;
     // Urutkan items sesuai MAT_STATUS_ORDER
     d.items.sort((a,b) => {
@@ -2147,7 +2148,8 @@ async function _p5ToggleStatus(status, colors, items, idx) {
     _p5ActiveStatus = '';
     _closeP5Detail();
     // Refresh status table tanpa highlight
-    const d = await apiFetch('/api/dashboard/mat-tracking');
+    const rev = document.getElementById('p5-revision-select').value;
+    const d = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
     if (d) {
       d.items.sort((a,b) => {
         const ai = MAT_STATUS_ORDER.indexOf(a.status);
@@ -2180,7 +2182,8 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   }
 
   // Refresh row highlight in status table
-  const d2 = await apiFetch('/api/dashboard/mat-tracking');
+  const rev = document.getElementById('p5-revision-select').value;
+  const d2 = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
   if (d2) {
     d2.items.sort((a,b) => {
       const ai = MAT_STATUS_ORDER.indexOf(a.status);
@@ -2194,26 +2197,29 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   _openP5Detail(status);
 }
 
+const _P5_REV_LABELS = { 'TA6-2027': 'K601TA052027', 'PS042026': 'K301PS042026' };
+
 async function _openP5Detail(status) {
+  const rev = document.getElementById('p5-revision-select').value;
+  const revLabel = rev ? _P5_REV_LABELS[rev] : 'K601TA052027 & K301PS042026';
   const panel = document.getElementById('p5-detail-panel');
   panel.style.display = '';
   document.getElementById('p5-detail-title').textContent =
     'Detail Material — ' + status;
-  document.getElementById('p5-detail-sub').textContent =
-    'Revision: TA6-2027 & PS042026';
+  document.getElementById('p5-detail-sub').textContent = revLabel;
   document.getElementById('p5-detail-table-wrap').innerHTML =
     '<div style="padding:32px;text-align:center;color:var(--text-sm)"><div class="spin" style="margin:0 auto 8px"></div>Memuat data...</div>';
 
   _p5MatPage = 1; _p5MatSearch = '';
   try {
-    const d = await apiFetch(
-      '/api/dashboard/mat-tracking-detail'
-      + (status ? '?status=' + encodeURIComponent(status) : '')
-    );
+    const qs = new URLSearchParams();
+    if (rev) qs.set('revision', rev);
+    if (status) qs.set('status', status);
+    const d = await apiFetch('/api/dashboard/mat-tracking-detail' + (qs.toString() ? '?' + qs.toString() : ''));
     if (!d) return;
     _p5DetailRows = d.rows;
     document.getElementById('p5-detail-sub').textContent =
-      'Revision: TA6-2027 & PS042026 · ' + fmt(d.total) + ' material';
+      revLabel + ' · ' + fmt(d.total) + ' material';
     _renderP5DetailTable();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch(e) {
@@ -2359,7 +2365,8 @@ function exportP5Excel() {
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `material_tracking_TA6-2027_PS042026_${Date.now()}.csv`;
+  const _rev = document.getElementById('p5-revision-select').value || 'ALL';
+  a.download = `material_tracking_${_rev}_${Date.now()}.csv`;
   a.click();
 }
 
@@ -2826,12 +2833,15 @@ async function loadP4JasaPlanning(proj) {
   <!-- Project filter + Legend Hierarchy -->
   <div class="card" style="margin-bottom:16px;padding:16px">
     <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <!-- Filter: revision hardcoded -->
+      <!-- Filter: pilih revision -->
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0">
-        <span class="filter-label">Revision:</span>
-        <span style="font-size:13px;font-weight:600;background:#dbeafe;color:#1e3a8a;padding:5px 14px;border-radius:6px;border:1px solid #bfdbfe">
-          TA6-2027 &amp; PS042026
-        </span>
+        <span class="filter-label">Pilih Project:</span>
+        <select class="filter-select" id="p5-revision-select" onchange="loadP5()"
+                style="min-width:220px;font-size:13px;padding:6px 12px">
+          <option value="">— Semua Project —</option>
+          <option value="TA6-2027">K601TA052027</option>
+          <option value="PS042026">K301PS042026</option>
+        </select>
         <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
       </div>
       <!-- Legend Hierarchy -->
