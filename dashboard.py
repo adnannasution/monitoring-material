@@ -1338,10 +1338,10 @@ STATUS_EXPR_ACTUAL = """
              AND (t.po IS NULL OR t.po = '')
              THEN
                CASE
-                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%tender%'
+                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%%tender%%'
                       THEN 'PR - Proses Tender'
-                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%hps%'
-                      OR LOWER(COALESCE(spr.tracking, '')) LIKE '%oe%'
+                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%%hps%%'
+                      OR LOWER(COALESCE(spr.tracking, '')) LIKE '%%oe%%'
                       THEN 'PR - Penyusunan HPS/OE'
                  ELSE 'PR - Outstanding PR'
                END
