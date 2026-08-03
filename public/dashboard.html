@@ -2544,6 +2544,12 @@ async function loadP4JasaPlanning(proj) {
         <div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div> Kum. Plan</div>
         <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Kum. Actual</div>
       </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--text-sm);display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;border-top:1px solid var(--border);padding-top:10px">
+        <div><span style="font-weight:600;color:#3b82f6">Plan/Bulan</span> — jumlah material yang direncanakan butuh tiap bulan (dari kolom <code>reqmts_date</code> tabel <code>taex_reservasi</code>)</div>
+        <div><span style="font-weight:600;color:#22c55e">Actual/Bulan</span> — jumlah material yang sudah ada PO dan punya delivery date tiap bulan (dari kolom <code>delivery_date</code>, hanya row dengan <code>po</code> terisi)</div>
+        <div><span style="font-weight:600;color:#93c5fd">Kum. Plan</span> — akumulasi Plan/Bulan dari bulan pertama hingga bulan berjalan</div>
+        <div><span style="font-weight:600;color:#86efac">Kum. Actual</span> — akumulasi Actual/Bulan dari bulan pertama hingga bulan berjalan</div>
+      </div>
     </div>
   </div>
 
