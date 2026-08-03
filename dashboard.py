@@ -1336,10 +1336,29 @@ STATUS_EXPR_ACTUAL = """
              THEN 'Sudah PO - Tunggu On Site'
         WHEN t.pr IS NOT NULL AND t.pr != ''
              AND (t.po IS NULL OR t.po = '')
-             THEN 'Sudah PR, Belum PO'
+             THEN
+               CASE
+                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%tender%'
+                      THEN 'PR - Proses Tender'
+                 WHEN LOWER(COALESCE(spr.tracking, '')) LIKE '%hps%'
+                      OR LOWER(COALESCE(spr.tracking, '')) LIKE '%oe%'
+                      THEN 'PR - Penyusunan HPS/OE'
+                 ELSE 'PR - Outstanding PR'
+               END
         ELSE 'Belum PR'
     END
 """
+
+# LATERAL join ke sap_pr untuk mendapatkan tracking status PR
+STATUS_JOIN_PR = """
+    LEFT JOIN LATERAL (
+        SELECT tracking FROM sap_pr
+        WHERE pr = t.pr AND item = t.item
+        ORDER BY id LIMIT 1
+    ) spr ON TRUE
+"""
+
+_PR_STATUSES = ("'PR - Outstanding PR'", "'PR - Penyusunan HPS/OE'", "'PR - Proses Tender'")
 
 _ORDER_BY_PROJECT = """
     SELECT DISTINCT jt."order" FROM joblist_taex jt
@@ -1374,6 +1393,7 @@ def mat_tracking(request: Request, project: str = ""):
             ({STATUS_EXPR_ACTUAL}) AS status_material,
             COUNT(*) AS jumlah
         FROM taex_reservasi t
+        {STATUS_JOIN_PR}
         WHERE t."order" IN ({_ORDER_BY_PROJECT})
           AND COALESCE(t.qty_reqmts, 0) > 0
         GROUP BY status_material
@@ -1388,11 +1408,14 @@ def mat_tracking(request: Request, project: str = ""):
     } for r in rows]
 
     status_map = {i["status"]: i["jumlah"] for i in items}
+    sudah_pr = (status_map.get("PR - Outstanding PR", 0)
+                + status_map.get("PR - Penyusunan HPS/OE", 0)
+                + status_map.get("PR - Proses Tender", 0))
     return J({
         "summary": {
             "total":     total,
             "belum_pr":  status_map.get("Belum PR", 0),
-            "sudah_pr":  status_map.get("Sudah PR, Belum PO", 0),
+            "sudah_pr":  sudah_pr,
             "po_tunggu": status_map.get("Sudah PO - Tunggu On Site", 0),
             "po_onsite": status_map.get("Sudah PO - Sudah On Site", 0),
             "stock":     status_map.get("Dipenuhi dari Stock", 0),
@@ -1435,8 +1458,10 @@ def mat_tracking_detail(
             t.reqmts_date,
             t.sloc,
             t.cost_ctrs,
+            COALESCE(spr.tracking, '') AS pr_tracking,
             ({STATUS_EXPR_ACTUAL}) AS status_label
         FROM taex_reservasi t
+        {STATUS_JOIN_PR}
         WHERE t."order" IN ({_ORDER_BY_PROJECT})
           AND COALESCE(t.qty_reqmts, 0) > 0
           {status_filter}
@@ -1462,6 +1487,7 @@ def mat_tracking_detail(
             "reqmts_date":   str(r["reqmts_date"]      or "—"),
             "sloc":          r["sloc"]                 or "—",
             "cost_ctrs":     r["cost_ctrs"]            or "—",
+            "pr_tracking":   r["pr_tracking"]          or "—",
             "status_label":  r["status_label"]         or "—",
         } for r in rows]
     })
@@ -1475,12 +1501,13 @@ def mat_tracking_summary(request: Request):
         SELECT
             jt.project_number AS project,
             COUNT(*) AS total,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Dipenuhi dari Stock'     THEN 1 ELSE 0 END) AS dari_stock,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Dipenuhi dari Stock'      THEN 1 ELSE 0 END) AS dari_stock,
             SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PO - Sudah On Site' THEN 1 ELSE 0 END) AS po_onsite,
             SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PO - Tunggu On Site' THEN 1 ELSE 0 END) AS po_tunggu,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PR, Belum PO'      THEN 1 ELSE 0 END) AS sudah_pr,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'                THEN 1 ELSE 0 END) AS belum_pr
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) IN ({','.join(_PR_STATUSES)}) THEN 1 ELSE 0 END) AS sudah_pr,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'                 THEN 1 ELSE 0 END) AS belum_pr
         FROM taex_reservasi t
+        {STATUS_JOIN_PR}
         JOIN joblist_taex jt ON jt."order" = t."order"
         WHERE jt.project_number IS NOT NULL AND jt.project_number != ''
           AND COALESCE(t.qty_reqmts, 0) > 0

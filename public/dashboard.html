@@ -1944,23 +1944,27 @@ let _p5MatPage      = 1;
 let _p5MatSearch    = '';
 const _p5MatPageSize = 25;
 
-// Urutan kategori: Point 2 → 3 → 4 → 5a → 5b
+// Urutan kategori: Point 2 → 3 → 4(a/b/c) → 5a → 5b
 const MAT_STATUS_COLORS = {
   'Dipenuhi dari Stock':       '#15803d',
   'Belum PR':                  '#dc2626',
-  'Sudah PR, Belum PO':        '#f59e0b',
+  'PR - Outstanding PR':       '#f59e0b',
+  'PR - Penyusunan HPS/OE':    '#d97706',
+  'PR - Proses Tender':        '#b45309',
   'Sudah PO - Tunggu On Site': '#3b82f6',
   'Sudah PO - Sudah On Site':  '#16a34a',
 };
 const MAT_STATUS_ORDER = [
   'Dipenuhi dari Stock',
   'Belum PR',
-  'Sudah PR, Belum PO',
+  'PR - Outstanding PR',
+  'PR - Penyusunan HPS/OE',
+  'PR - Proses Tender',
   'Sudah PO - Tunggu On Site',
   'Sudah PO - Sudah On Site',
 ];
 function _p5Color(status, i) {
-  return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#15803d'][i % 5];
+  return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#15803d','#d97706','#b45309'][i % 7];
 }
 
 async function initP5Projects() {
@@ -2270,7 +2274,9 @@ function _renderP5DetailTable() {
 
   const statusColors = {
     'Belum PR':                  'background:#fef2f2;color:#dc2626',
-    'Sudah PR, Belum PO':        'background:#fffbeb;color:#d97706',
+    'PR - Outstanding PR':       'background:#fffbeb;color:#d97706',
+    'PR - Penyusunan HPS/OE':    'background:#fef3c7;color:#b45309',
+    'PR - Proses Tender':        'background:#fef3c7;color:#92400e',
     'Sudah PO - Tunggu On Site': 'background:#eff6ff;color:#1e40af',
     'Sudah PO - Sudah On Site':  'background:#f0fdf4;color:#15803d',
     'Dipenuhi dari Stock':       'background:#f0fdf4;color:#15803d',
@@ -2300,6 +2306,7 @@ function _renderP5DetailTable() {
       <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Req</th>
       <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Deliv</th>
       <th style="padding:8px 12px;white-space:nowrap">PR</th>
+      <th style="padding:8px 12px;white-space:nowrap">PR Tracking</th>
       <th style="padding:8px 12px;white-space:nowrap">PO</th>
       <th style="padding:8px 12px;white-space:nowrap">Delivery Date</th>
       <th style="padding:8px 12px;white-space:nowrap">Reqmts Date</th>
@@ -2311,6 +2318,9 @@ function _renderP5DetailTable() {
     const prgBar = r.qty_reqmts > 0
       ? Math.min(100, (r.qty_deliv / r.qty_reqmts * 100)).toFixed(0)
       : 0;
+    const trackingBadge = (r.pr_tracking && r.pr_tracking !== '—')
+      ? `<span style="font-size:10px;padding:1px 6px;border-radius:99px;background:#fef3c7;color:#92400e;font-weight:600">${r.pr_tracking}</span>`
+      : '—';
     html += `<tr style="border-bottom:1px solid #f1f5f9;${i%2?'background:#fafafa':''}">
       <td style="padding:7px 12px;font-weight:700;color:var(--blue);white-space:nowrap">${r.order}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.itm}</td>
@@ -2325,6 +2335,7 @@ function _renderP5DetailTable() {
         </div>
       </td>
       <td style="padding:7px 12px;white-space:nowrap">${r.pr !== '—' ? r.pr + (r.pr_item !== '—' ? '/'+r.pr_item : '') : '—'}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${trackingBadge}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.po}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.delivery_date}</td>
       <td style="padding:7px 12px;white-space:nowrap">${r.reqmts_date}</td>
@@ -2361,9 +2372,9 @@ function _renderP5DetailTable() {
 
 function exportP5Excel() {
   if (!_p5DetailRows.length) return;
-  let csv = 'Order,Itm,Equipment,Material,Deskripsi,Qty Req,UoM,Qty Deliv,PR,PO,Delivery Date,Reqmts Date,Status\n';
+  let csv = 'Order,Itm,Equipment,Material,Deskripsi,Qty Req,UoM,Qty Deliv,PR,PR Tracking,PO,Delivery Date,Reqmts Date,Status\n';
   _p5DetailRows.forEach(r => {
-    csv += `${r.order},${r.itm},${r.equipment},${r.material},"${r.description}",${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},${r.po},${r.delivery_date},${r.reqmts_date},"${r.status_label}"\n`;
+    csv += `${r.order},${r.itm},${r.equipment},${r.material},"${r.description}",${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},"${r.pr_tracking}",${r.po},${r.delivery_date},${r.reqmts_date},"${r.status_label}"\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
