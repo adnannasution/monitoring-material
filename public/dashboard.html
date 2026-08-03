@@ -1978,6 +1978,10 @@ function _p5Color(status, i) {
 function _p5Label(status) {
   return MAT_STATUS_DISPLAY[status] || status;
 }
+function _p5NormalizeItems(items) {
+  const map = Object.fromEntries(items.map(i => [i.status, i]));
+  return MAT_STATUS_ORDER.map(s => map[s] || { status: s, jumlah: 0, pct: 0 });
+}
 
 async function loadP5() {
   document.getElementById('p5-empty').style.display  = 'none';
@@ -1992,16 +1996,11 @@ async function loadP5() {
     const rev = document.getElementById('p5-revision-select').value;
     const d = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
     if (!d) return;
-    // Urutkan items sesuai MAT_STATUS_ORDER
-    d.items.sort((a,b) => {
-      const ai = MAT_STATUS_ORDER.indexOf(a.status);
-      const bi = MAT_STATUS_ORDER.indexOf(b.status);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
+    const items = _p5NormalizeItems(d.items);
     _renderP5Cards(d.summary);
-    _renderP5Donut(d.items);
-    _renderP5BarChart(d.items);
-    _renderP5StatusTable(d.items, d.summary.total);
+    _renderP5Donut(items);
+    _renderP5BarChart(items);
+    _renderP5StatusTable(items, d.summary.total);
   } catch(e) {
     console.error('loadP5:', e);
   } finally {
@@ -2173,14 +2172,10 @@ async function _p5ToggleStatus(status, colors, items, idx) {
     const rev = document.getElementById('p5-revision-select').value;
     const d = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
     if (d) {
-      d.items.sort((a,b) => {
-        const ai = MAT_STATUS_ORDER.indexOf(a.status);
-        const bi = MAT_STATUS_ORDER.indexOf(b.status);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      });
-      _renderP5Donut(d.items);
-      _renderP5BarChart(d.items);
-      _renderP5StatusTable(d.items, d.summary.total);
+      const items = _p5NormalizeItems(d.items);
+      _renderP5Donut(items);
+      _renderP5BarChart(items);
+      _renderP5StatusTable(items, d.summary.total);
     }
     return;
   }
@@ -2207,12 +2202,7 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   const rev = document.getElementById('p5-revision-select').value;
   const d2 = await apiFetch('/api/dashboard/mat-tracking' + (rev ? '?revision=' + encodeURIComponent(rev) : ''));
   if (d2) {
-    d2.items.sort((a,b) => {
-      const ai = MAT_STATUS_ORDER.indexOf(a.status);
-      const bi = MAT_STATUS_ORDER.indexOf(b.status);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
-    _renderP5StatusTable(d2.items, d2.summary.total);
+    _renderP5StatusTable(_p5NormalizeItems(d2.items), d2.summary.total);
   }
 
   // Load detail
