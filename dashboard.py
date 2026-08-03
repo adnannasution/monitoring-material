@@ -1360,45 +1360,23 @@ STATUS_JOIN_PR = """
 
 _PR_STATUSES = ("'PR - Outstanding PR'", "'PR - Penyusunan HPS/OE'", "'PR - Proses Tender'")
 
-_ORDER_BY_PROJECT = """
-    SELECT DISTINCT jt."order" FROM joblist_taex jt
-    WHERE jt.project_number = %s AND jt."order" IS NOT NULL
-"""
-
-
-@router.get("/mat-projects")
-def mat_projects(request: Request):
-    """Daftar project_number dari joblist_taex untuk filter Material Tracking."""
-    _require_admin(request)
-    rows = query("""
-        SELECT DISTINCT project_number
-        FROM joblist_taex
-        WHERE project_number IS NOT NULL AND project_number != ''
-        ORDER BY project_number
-    """)
-    return J([r["project_number"] for r in rows])
+_REVISION_FILTER = "t.revision IN ('TA6-2027', 'PS042026')"
 
 
 @router.get("/mat-tracking")
-def mat_tracking(request: Request, project: str = ""):
+def mat_tracking(request: Request):
     _require_admin(request)
-    if not project:
-        return J({
-            "summary": {"total": 0, "belum_pr": 0, "sudah_pr": 0, "po_tunggu": 0, "po_onsite": 0, "stock": 0},
-            "items": [],
-        })
-
     rows = query(f"""
         SELECT
             ({STATUS_EXPR_ACTUAL}) AS status_material,
             COUNT(*) AS jumlah
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        WHERE t."order" IN ({_ORDER_BY_PROJECT})
+        WHERE {_REVISION_FILTER}
           AND COALESCE(t.qty_reqmts, 0) > 0
         GROUP BY status_material
         ORDER BY jumlah DESC
-    """, [project])
+    """)
 
     total = sum(int(r["jumlah"] or 0) for r in rows)
     items = [{
@@ -1427,14 +1405,10 @@ def mat_tracking(request: Request, project: str = ""):
 @router.get("/mat-tracking-detail")
 def mat_tracking_detail(
     request: Request,
-    project: str = "",
     status: str = "",
 ):
     _require_admin(request)
-    if not project:
-        return J({"total": 0, "rows": []})
-
-    params = [project]
+    params = []
     status_filter = ""
     if status:
         status_filter = f"AND ({STATUS_EXPR_ACTUAL}) = %s"
@@ -1443,6 +1417,7 @@ def mat_tracking_detail(
     rows = query(f"""
         SELECT
             t."order",
+            t.revision,
             t.equipment,
             t.material,
             t.itm,
@@ -1462,16 +1437,17 @@ def mat_tracking_detail(
             ({STATUS_EXPR_ACTUAL}) AS status_label
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        WHERE t."order" IN ({_ORDER_BY_PROJECT})
+        WHERE {_REVISION_FILTER}
           AND COALESCE(t.qty_reqmts, 0) > 0
           {status_filter}
-        ORDER BY t."order", t.itm
+        ORDER BY t.revision, t."order", t.itm
     """, params)
 
     return J({
         "total": len(rows),
         "rows": [{
             "order":         r["order"]               or "—",
+            "revision":      r["revision"]             or "—",
             "equipment":     r["equipment"]            or "—",
             "material":      r["material"]             or "—",
             "itm":           r["itm"]                  or "—",
@@ -1495,27 +1471,26 @@ def mat_tracking_detail(
 
 @router.get("/mat-tracking-summary")
 def mat_tracking_summary(request: Request):
-    """Ringkasan semua project — total material per status."""
+    """Ringkasan per revision (TA6-2027, PS042026) — total material per status."""
     _require_admin(request)
     rows = query(f"""
         SELECT
-            jt.project_number AS project,
+            t.revision,
             COUNT(*) AS total,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Dipenuhi dari Stock'      THEN 1 ELSE 0 END) AS dari_stock,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PO - Sudah On Site' THEN 1 ELSE 0 END) AS po_onsite,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Dipenuhi dari Stock'       THEN 1 ELSE 0 END) AS dari_stock,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PO - Sudah On Site'  THEN 1 ELSE 0 END) AS po_onsite,
             SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Sudah PO - Tunggu On Site' THEN 1 ELSE 0 END) AS po_tunggu,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) IN ({','.join(_PR_STATUSES)}) THEN 1 ELSE 0 END) AS sudah_pr,
-            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'                 THEN 1 ELSE 0 END) AS belum_pr
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) IN ({','.join(_PR_STATUSES)})  THEN 1 ELSE 0 END) AS sudah_pr,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'                  THEN 1 ELSE 0 END) AS belum_pr
         FROM taex_reservasi t
         {STATUS_JOIN_PR}
-        JOIN joblist_taex jt ON jt."order" = t."order"
-        WHERE jt.project_number IS NOT NULL AND jt.project_number != ''
+        WHERE {_REVISION_FILTER}
           AND COALESCE(t.qty_reqmts, 0) > 0
-        GROUP BY jt.project_number
-        ORDER BY jt.project_number
+        GROUP BY t.revision
+        ORDER BY t.revision
     """)
     return J([{
-        "project":    r["project"],
+        "revision":   r["revision"],
         "total":      int(r["total"]      or 0),
         "dari_stock": int(r["dari_stock"] or 0),
         "po_onsite":  int(r["po_onsite"]  or 0),

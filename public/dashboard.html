@@ -500,8 +500,8 @@ async function init() {
   }
 
   await initP4Projects();
-  await initP5Projects();
   loadP5Summary();
+  loadP5();
   loadP4();
 }
 
@@ -1967,33 +1967,17 @@ function _p5Color(status, i) {
   return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#15803d','#d97706','#b45309'][i % 7];
 }
 
-async function initP5Projects() {
-  try {
-    const projs = await apiFetch('/api/dashboard/mat-projects');
-    if (!projs) return;
-    const sel = document.getElementById('p5-project-select');
-    projs.forEach(p => {
-      const o = document.createElement('option');
-      o.value = p; o.textContent = p;
-      sel.appendChild(o);
-    });
-  } catch(e) {}
-}
-
 async function loadP5() {
-  const proj = document.getElementById('p5-project-select').value;
-  document.getElementById('p5-empty').style.display  = proj ? 'none' : '';
-  document.getElementById('p5-main').style.display   = proj ? '' : 'none';
-  document.getElementById('p5-cards').style.display  = proj ? 'grid' : 'none';
-
-  if (!proj) return;
+  document.getElementById('p5-empty').style.display  = 'none';
+  document.getElementById('p5-main').style.display   = '';
+  document.getElementById('p5-cards').style.display  = 'grid';
 
   document.getElementById('p5-loading').style.display = '';
   _p5ActiveStatus = '';
   _closeP5Detail();
 
   try {
-    const d = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
+    const d = await apiFetch('/api/dashboard/mat-tracking');
     if (!d) return;
     // Urutkan items sesuai MAT_STATUS_ORDER
     d.items.sort((a,b) => {
@@ -2158,15 +2142,12 @@ function _renderP5StatusTable(items, total) {
 }
 
 async function _p5ToggleStatus(status, colors, items, idx) {
-  const proj = document.getElementById('p5-project-select').value;
-  if (!proj) return;
-
   // Toggle — klik sama = reset
   if (_p5ActiveStatus === status) {
     _p5ActiveStatus = '';
     _closeP5Detail();
     // Refresh status table tanpa highlight
-    const d = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
+    const d = await apiFetch('/api/dashboard/mat-tracking');
     if (d) {
       d.items.sort((a,b) => {
         const ai = MAT_STATUS_ORDER.indexOf(a.status);
@@ -2199,7 +2180,7 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   }
 
   // Refresh row highlight in status table
-  const d2 = await apiFetch('/api/dashboard/mat-tracking?project=' + encodeURIComponent(proj));
+  const d2 = await apiFetch('/api/dashboard/mat-tracking');
   if (d2) {
     d2.items.sort((a,b) => {
       const ai = MAT_STATUS_ORDER.indexOf(a.status);
@@ -2210,16 +2191,16 @@ async function _p5ToggleStatus(status, colors, items, idx) {
   }
 
   // Load detail
-  _openP5Detail(proj, status);
+  _openP5Detail(status);
 }
 
-async function _openP5Detail(proj, status) {
+async function _openP5Detail(status) {
   const panel = document.getElementById('p5-detail-panel');
   panel.style.display = '';
   document.getElementById('p5-detail-title').textContent =
     'Detail Material — ' + status;
   document.getElementById('p5-detail-sub').textContent =
-    'Project: ' + proj;
+    'Revision: TA6-2027 & PS042026';
   document.getElementById('p5-detail-table-wrap').innerHTML =
     '<div style="padding:32px;text-align:center;color:var(--text-sm)"><div class="spin" style="margin:0 auto 8px"></div>Memuat data...</div>';
 
@@ -2227,13 +2208,12 @@ async function _openP5Detail(proj, status) {
   try {
     const d = await apiFetch(
       '/api/dashboard/mat-tracking-detail'
-      + '?project=' + encodeURIComponent(proj)
-      + '&status='  + encodeURIComponent(status)
+      + (status ? '?status=' + encodeURIComponent(status) : '')
     );
     if (!d) return;
     _p5DetailRows = d.rows;
     document.getElementById('p5-detail-sub').textContent =
-      'Project: ' + proj + ' · ' + fmt(d.total) + ' material';
+      'Revision: TA6-2027 & PS042026 · ' + fmt(d.total) + ' material';
     _renderP5DetailTable();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch(e) {
@@ -2379,7 +2359,7 @@ function exportP5Excel() {
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `material_tracking_${document.getElementById('p5-project-select').value}_${Date.now()}.csv`;
+  a.download = `material_tracking_TA6-2027_PS042026_${Date.now()}.csv`;
   a.click();
 }
 
@@ -2405,13 +2385,13 @@ function _renderP5SummaryChart(rows) {
   charts['p5-summary-bar'] = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: rows.map(r => r.project),
+      labels: rows.map(r => r.revision),
       datasets: [
-        { label: '② Dipenuhi dari Stock',       data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
-        { label: '⑤b Sudah On Site',            data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
-        { label: '⑤a Tunggu On Site',           data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
-        { label: '④ Sudah PR, Belum PO',        data: rows.map(r => r.sudah_pr),   backgroundColor: '#f59e0b', stack: 's' },
-        { label: '③ Belum PR',                  data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
+        { label: '② Dipenuhi dari Stock',  data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
+        { label: '⑤b Sudah On Site',       data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
+        { label: '⑤a Tunggu On Site',      data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
+        { label: '④ Sudah PR, Belum PO',   data: rows.map(r => r.sudah_pr),   backgroundColor: '#f59e0b', stack: 's' },
+        { label: '③ Belum PR',             data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
       ]
     },
     options: {
@@ -2431,12 +2411,6 @@ function _renderP5SummaryChart(rows) {
       scales: {
         x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => fmt(v), font: { size: 10 } } },
         y: { stacked: true, ticks: { font: { size: 11 } } }
-      },
-      onClick: (evt, els) => {
-        if (!els.length) return;
-        const proj = rows[els[0].index].project;
-        document.getElementById('p5-project-select').value = proj;
-        loadP5();
       }
     }
   });
@@ -2852,13 +2826,12 @@ async function loadP4JasaPlanning(proj) {
   <!-- Project filter + Legend Hierarchy -->
   <div class="card" style="margin-bottom:16px;padding:16px">
     <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <!-- Filter -->
+      <!-- Filter: revision hardcoded -->
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0">
-        <span class="filter-label">Pilih Project:</span>
-        <select class="filter-select" id="p5-project-select" onchange="loadP5()"
-                style="min-width:240px;font-size:13px;padding:6px 12px">
-          <option value="">— Pilih Project —</option>
-        </select>
+        <span class="filter-label">Revision:</span>
+        <span style="font-size:13px;font-weight:600;background:#dbeafe;color:#1e3a8a;padding:5px 14px;border-radius:6px;border:1px solid #bfdbfe">
+          TA6-2027 &amp; PS042026
+        </span>
         <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
       </div>
       <!-- Legend Hierarchy -->
