@@ -1966,7 +1966,6 @@ const MAT_STATUS_DISPLAY = {
 const MAT_STATUS_ORDER = [
   'Dipenuhi dari Stock',
   'Belum PR',
-  'PR - Outstanding PR',
   'Sudah PO - Tunggu On Site',
   'Sudah PO - Sudah On Site',
 ];
@@ -2029,11 +2028,6 @@ function _renderP5Cards(s) {
       <div class="stat-card-val" style="color:#f59e0b">${fmt(s.sudah_pr)}</div>
       <div class="stat-card-lbl">④ Reservasi Sudah PR Belum PO</div>
       <div class="stat-card-pct" style="color:#f59e0b">${s.total ? (s.sudah_pr/s.total*100).toFixed(1) : 0}%</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #d97706">
-      <div class="stat-card-val" style="color:#d97706">${fmt(s.pr_outstanding)}</div>
-      <div class="stat-card-lbl">⑤ Outstanding PR</div>
-      <div class="stat-card-pct" style="color:#d97706">${s.total ? (s.pr_outstanding/s.total*100).toFixed(1) : 0}%</div>
     </div>
     <div class="stat-card" style="border-left:4px solid #1d4ed8">
       <div class="stat-card-val" style="color:#1d4ed8">${fmt(s.sudah_po)}</div>
