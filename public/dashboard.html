@@ -500,7 +500,6 @@ async function init() {
   }
 
   await initP4Projects();
-  loadP5Summary();
   loadP5();
   loadP4();
 }
@@ -2393,59 +2392,6 @@ function exportP5Excel() {
   a.click();
 }
 
-// ── Overview: semua revision (stacked bar) ─────────────────────
-async function loadP5Summary() {
-  try {
-    const rows = await apiFetch('/api/dashboard/mat-tracking-summary');
-    if (!rows || !rows.length) return;
-    _renderP5SummaryChart(rows);
-  } catch(e) {}
-}
-
-function _renderP5SummaryChart(rows) {
-  destroyChart('p5-summary-bar');
-  const wrap = document.getElementById('p5-summary-wrap');
-  if (!rows.length) { wrap.style.display = 'none'; return; }
-  wrap.style.display = '';
-
-  const h = Math.max(300, rows.length * 44 + 100);
-  document.getElementById('p5-summary-bar-container').style.height = h + 'px';
-  const ctx = document.getElementById('p5-summary-bar').getContext('2d');
-
-  charts['p5-summary-bar'] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: rows.map(r => r.revision),
-      datasets: [
-        { label: '② Dipenuhi dari Stock',        data: rows.map(r => r.dari_stock), backgroundColor: '#15803d', stack: 's' },
-        { label: '⑧ Sudah On Site',              data: rows.map(r => r.po_onsite),  backgroundColor: '#16a34a', stack: 's' },
-        { label: '⑦ Tunggu On Site',             data: rows.map(r => r.po_tunggu),  backgroundColor: '#3b82f6', stack: 's' },
-        { label: '④ Reservasi Sudah PR Belum PO', data: rows.map(r => r.sudah_pr),  backgroundColor: '#f59e0b', stack: 's' },
-        { label: '③ Reservasi Belum PR',         data: rows.map(r => r.belum_pr),   backgroundColor: '#dc2626', stack: 's' },
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
-        tooltip: { callbacks: {
-          label: c => ` ${c.dataset.label}: ${fmt(c.raw)}`,
-          footer: items => {
-            const total = rows[items[0].dataIndex].total;
-            return `① Total Item: ${fmt(total)}`;
-          }
-        }}
-      },
-      scales: {
-        x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => fmt(v), font: { size: 10 } } },
-        y: { stacked: true, ticks: { font: { size: 11 } } }
-      }
-    }
-  });
-}
-
 async function loadP4JasaPlanning(proj) {
   document.getElementById('p4-jasa-section').style.display = proj ? '' : 'none';
   if (!proj) return;
@@ -2853,51 +2799,41 @@ async function loadP4JasaPlanning(proj) {
 <div class="page-content" id="page-p5">
 <div class="content">
 
-  <!-- Project filter + Legend Hierarchy -->
-  <div class="card" style="margin-bottom:16px;padding:16px">
-    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <!-- Filter: pilih revision -->
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0">
-        <span class="filter-label">Pilih Project:</span>
-        <select class="filter-select" id="p5-revision-select" onchange="loadP5()"
-                style="min-width:220px;font-size:13px;padding:6px 12px">
-          <option value="">— Semua Project —</option>
-          <option value="TA6-2027">K601TA052027</option>
-          <option value="PS042026">K301PS042026</option>
-        </select>
-        <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
-      </div>
-      <!-- Legend Hierarchy -->
-      <div style="flex:1;min-width:300px;background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:11px;line-height:1.9">
-        <div style="font-weight:700;margin-bottom:4px;color:var(--text)">Legend Status Material:</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">
-          <div><span style="font-weight:700;color:#1a56db">① Total</span></div>
-          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">② Dipenuhi dari Stock</span></div>
-          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">③ Reservasi Belum PR</span></div>
-          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f59e0b;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">④ Reservasi Sudah PR Belum PO</span></div>
-          <div style="padding-left:14px;color:#92400e"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d97706;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤ Outstanding PR</span></div>
-          <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#1d4ed8;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">⑥ Reservasi Sudah PO</span></div>
-          <div style="padding-left:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑦ Tunggu On Site</span></div>
-          <div style="padding-left:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑧ Sudah On Site</span></div>
-        </div>
-      </div>
+  <!-- Filter: select sendiri -->
+  <div class="card" style="margin-bottom:12px;padding:12px 16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="filter-label">Pilih Project:</span>
+      <select class="filter-select" id="p5-revision-select" onchange="loadP5()"
+              style="min-width:220px;font-size:13px;padding:6px 12px">
+        <option value="">— Semua Project —</option>
+        <option value="TA6-2027">K601TA052027</option>
+        <option value="PS042026">K301PS042026</option>
+      </select>
+      <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
+    </div>
+  </div>
+
+  <!-- Legend: card sendiri -->
+  <div class="card" style="margin-bottom:16px;padding:12px 16px;font-size:11px;line-height:1.9">
+    <div style="font-weight:700;margin-bottom:6px;color:var(--text)">Legend Status Material:</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px 16px">
+      <div><span style="font-weight:700;color:#1a56db">① Total</span></div>
+      <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">② Dipenuhi dari Stock</span></div>
+      <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#dc2626;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">③ Reservasi Belum PR</span></div>
+      <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#f59e0b;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">④ Reservasi Sudah PR Belum PO</span></div>
+      <div></div>
+      <div style="padding-left:12px;color:#92400e"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d97706;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑤ Outstanding PR</span></div>
+      <div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#1d4ed8;vertical-align:middle;margin-right:4px"></span><span style="font-weight:700">⑥ Reservasi Sudah PO</span></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div style="padding-left:12px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑦ Tunggu On Site</span></div>
+      <div style="padding-left:12px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;vertical-align:middle;margin-right:4px"></span><span style="font-weight:600">⑧ Sudah On Site</span></div>
     </div>
   </div>
 
   <!-- Summary Cards (muncul saat revision dipilih) -->
-  <div id="p5-cards" class="stat-cards" style="display:none;margin-bottom:20px"></div>
-
-  <!-- OVERVIEW: Semua revision (stacked bar) — selalu tampil -->
-  <div id="p5-summary-wrap" style="margin-bottom:20px;display:none">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div class="card-title" style="margin-bottom:0">Overview Semua Project — Klik bar untuk drill-down</div>
-      </div>
-      <div id="p5-summary-bar-container" style="position:relative;height:300px;overflow-y:auto">
-        <canvas id="p5-summary-bar"></canvas>
-      </div>
-    </div>
-  </div>
+  <div id="p5-cards" style="display:none;margin-bottom:20px;grid-template-columns:repeat(4,1fr);gap:14px"></div>
 
   <!-- Main section (muncul setelah revision dipilih) -->
   <div id="p5-main" style="display:none">
