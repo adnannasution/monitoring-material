@@ -252,6 +252,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div class="page-tabs">
   <div class="page-tab active" onclick="switchPage('p4')">📊 Readiness by Project</div>
   <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
+  <div class="page-tab" onclick="switchPage('p5')">📦 Material Tracking</div>
   <div class="page-tab" onclick="switchPage('p1')" style="display:none">📦 Readiness Equipment</div>
   <div class="page-tab" onclick="switchPage('p2')" style="display:none">🧾 Readiness Material</div>
 </div>
@@ -499,6 +500,8 @@ async function init() {
   }
 
   await initP4Projects();
+  await initP5Revisions();
+  loadP5Summary();
   loadP4();
 }
 
@@ -534,21 +537,21 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p1','p2'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p5','p1','p2'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  const hideRU = id === 'p3' || id === 'p4';
+  const hideRU = id === 'p3' || id === 'p4' || id === 'p5';
   const rl = document.getElementById('ru-filter-label');
   const rb = document.getElementById('ru-btns');
   const rd = document.getElementById('ru-filter-divider');
   if (rl) rl.style.display = hideRU ? 'none' : '';
   if (rb) rb.style.display = hideRU ? 'none' : '';
   if (rd) rd.style.display = hideRU ? 'none' : '';
-  // Tutup detail panel saat pindah tab
   document.getElementById('p4-detail-panel').style.display = 'none';
   if (id === 'p1') loadP1();
   else if (id === 'p2') loadP2();
   else if (id === 'p3') loadP3();
+  else if (id === 'p5') loadP5();
   else loadP4();
 }
 
@@ -1931,6 +1934,474 @@ async function loadP4PlanningJobdetail(proj) {
 
 
 
+// ══════════════════════════════════════════════════════════════
+// PAGE 5 — MATERIAL TRACKING BY REVISION
+// Sumber: taex_reservasi.revision (tanpa join joblist_taex)
+// ══════════════════════════════════════════════════════════════
+let _p5ActiveStatus = '';
+let _p5DetailRows   = [];
+let _p5MatPage      = 1;
+let _p5MatSearch    = '';
+const _p5MatPageSize = 25;
+
+const MAT_STATUS_COLORS = {
+  'Belum PR':               '#dc2626',
+  'PR-Proses Pengadaan':    '#f59e0b',
+  'PO-Material Belum Tiba': '#3b82f6',
+  'PO-Material Telah Tiba': '#16a34a',
+  'Stock On Hand':          '#16a34a',
+};
+function _p5Color(status, i) {
+  return MAT_STATUS_COLORS[status] || ['#dc2626','#f59e0b','#3b82f6','#16a34a','#6b7280'][i % 5];
+}
+
+async function initP5Revisions() {
+  try {
+    const revs = await apiFetch('/api/dashboard/mat-revisions');
+    if (!revs) return;
+    const sel = document.getElementById('p5-revision-select');
+    revs.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r; o.textContent = r;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
+}
+
+async function loadP5() {
+  const rev = document.getElementById('p5-revision-select').value;
+  document.getElementById('p5-empty').style.display        = rev ? 'none' : '';
+  document.getElementById('p5-main').style.display         = rev ? '' : 'none';
+  document.getElementById('p5-cards').style.display        = rev ? 'grid' : 'none';
+
+  if (!rev) {
+    return;
+  }
+
+  document.getElementById('p5-loading').style.display = '';
+  _p5ActiveStatus = '';
+  _closeP5Detail();
+
+  try {
+    const d = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
+    if (!d) return;
+    _renderP5Cards(d.summary);
+    _renderP5Donut(d.items);
+    _renderP5BarChart(d.items);
+    _renderP5StatusTable(d.items, d.summary.total);
+  } catch(e) {
+    console.error('loadP5:', e);
+  } finally {
+    document.getElementById('p5-loading').style.display = 'none';
+  }
+}
+
+function _renderP5Cards(s) {
+  document.getElementById('p5-cards').style.display = 'grid';
+  document.getElementById('p5-donut-total').textContent = fmt(s.total);
+  const pctTiba = s.total ? ((s.po_tiba + s.stock) / s.total * 100).toFixed(1) : '0.0';
+  const pctBelum = s.total ? (s.belum_pr / s.total * 100).toFixed(1) : '0.0';
+  document.getElementById('p5-cards').innerHTML = `
+    <div class="stat-card blue">
+      <div class="stat-card-val">${fmt(s.total)}</div>
+      <div class="stat-card-lbl">Total Material</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #16a34a">
+      <div class="stat-card-val" style="color:#16a34a">${fmt(s.po_tiba + s.stock)}</div>
+      <div class="stat-card-lbl">PO Telah Tiba / Stock</div>
+      <div class="stat-card-pct" style="color:#16a34a">${pctTiba}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #3b82f6">
+      <div class="stat-card-val" style="color:#3b82f6">${fmt(s.po_belum)}</div>
+      <div class="stat-card-lbl">PO Belum Tiba</div>
+      <div class="stat-card-pct" style="color:#3b82f6">${s.total ? (s.po_belum/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #f59e0b">
+      <div class="stat-card-val" style="color:#f59e0b">${fmt(s.pr_proses)}</div>
+      <div class="stat-card-lbl">PR Proses Pengadaan</div>
+      <div class="stat-card-pct" style="color:#f59e0b">${s.total ? (s.pr_proses/s.total*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #dc2626">
+      <div class="stat-card-val" style="color:#dc2626">${fmt(s.belum_pr)}</div>
+      <div class="stat-card-lbl">Belum PR</div>
+      <div class="stat-card-pct" style="color:#dc2626">${pctBelum}%</div>
+    </div>
+  `;
+}
+
+function _renderP5Donut(items) {
+  destroyChart('p5-donut');
+  const colors = items.map((item, i) => _p5Color(item.status, i));
+  const total  = items.reduce((s,i) => s + i.jumlah, 0);
+  const ctx    = document.getElementById('p5-donut').getContext('2d');
+
+  charts['p5-donut'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: items.map(i => i.status),
+      datasets: [{ data: items.map(i => i.jumlah), backgroundColor: [...colors], borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }]
+    },
+    options: {
+      cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${fmt(c.raw)} (${total ? (c.raw/total*100).toFixed(1) : 0}%)` }}
+      },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const idx = els[0].index;
+        _p5ToggleStatus(items[idx].status, colors, items, idx);
+      }
+    }
+  });
+
+  // Legend clickable
+  document.getElementById('p5-donut-legend').innerHTML = items.map((item, i) =>
+    `<div class="legend-item" style="cursor:pointer" onclick="_p5ToggleStatus('${item.status.replace(/'/g,"\\'")}',null,null,${i})">
+      <div class="legend-dot" style="background:${colors[i]}"></div>${item.status}
+    </div>`
+  ).join('');
+}
+
+function _renderP5BarChart(items) {
+  destroyChart('p5-bar');
+  if (!items.length) return;
+  const colors = items.map((item, i) => _p5Color(item.status, i));
+  const ctx = document.getElementById('p5-bar').getContext('2d');
+
+  charts['p5-bar'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: items.map(i => i.status),
+      datasets: [{
+        label: 'Jumlah Material',
+        data: items.map(i => i.jumlah),
+        backgroundColor: colors.map(c => c + 'cc'),
+        borderColor: colors,
+        borderWidth: 2,
+        borderRadius: 6,
+        barThickness: 40,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => ` ${fmt(c.raw)} material`,
+          afterLabel: c => {
+            const total = items.reduce((s,i) => s + i.jumlah, 0);
+            return total ? `${(c.raw/total*100).toFixed(1)}% dari total` : '';
+          }
+        }}
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => fmt(v), font: { size: 11 } } }
+      },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const idx = els[0].index;
+        _p5ToggleStatus(items[idx].status, null, null, idx);
+      }
+    }
+  });
+}
+
+function _renderP5StatusTable(items, total) {
+  document.getElementById('p5-status-tbody').innerHTML = items.map((item, i) => {
+    const color = _p5Color(item.status, i);
+    const barW  = total ? (item.jumlah / total * 100).toFixed(1) : 0;
+    const isActive = _p5ActiveStatus === item.status;
+    return `<tr style="cursor:pointer;${isActive ? 'background:#eff6ff;outline:2px solid #3b82f6;' : ''}"
+      onclick="_p5ToggleStatus('${item.status.replace(/'/g,"\\'")}',null,null,${i})">
+      <td>
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle"></span>
+        <span style="font-weight:600">${item.status}</span>
+      </td>
+      <td style="text-align:right;font-weight:700;color:${color}">${fmt(item.jumlah)}</td>
+      <td style="text-align:right">${item.pct.toFixed(1)}%</td>
+      <td style="width:120px">
+        <div class="pct-bar">
+          <div class="pct-track"><div class="pct-fill" style="width:${barW}%;background:${color}"></div></div>
+          <div class="pct-num" style="color:${color}">${barW}%</div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') + `<tr style="font-weight:700;background:#f8fafc">
+    <td>Total</td>
+    <td style="text-align:right">${fmt(total)}</td>
+    <td style="text-align:right">100%</td>
+    <td></td>
+  </tr>`;
+}
+
+async function _p5ToggleStatus(status, colors, items, idx) {
+  const rev = document.getElementById('p5-revision-select').value;
+  if (!rev) return;
+
+  // Toggle — klik sama = reset
+  if (_p5ActiveStatus === status) {
+    _p5ActiveStatus = '';
+    _closeP5Detail();
+    // Refresh status table tanpa highlight
+    const d = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
+    if (d) {
+      _renderP5Donut(d.items);
+      _renderP5BarChart(d.items);
+      _renderP5StatusTable(d.items, d.summary.total);
+    }
+    return;
+  }
+
+  _p5ActiveStatus = status;
+
+  // Highlight donut
+  const c = charts['p5-donut'];
+  if (c) {
+    const colArr = c.data.datasets[0].backgroundColor;
+    const base   = colArr.map((col, i) => i === idx ? col.substring(0,7) : col.substring(0,7) + '44');
+    c.data.datasets[0].backgroundColor = base;
+    c.update();
+  }
+  // Highlight bar
+  const bc = charts['p5-bar'];
+  if (bc) {
+    const orig = bc.data.datasets[0].borderColor;
+    bc.data.datasets[0].backgroundColor = orig.map((col, i) => i === idx ? col + 'cc' : col + '22');
+    bc.update();
+  }
+
+  // Refresh row highlight in status table
+  const d2 = await apiFetch('/api/dashboard/mat-tracking?revision=' + encodeURIComponent(rev));
+  if (d2) _renderP5StatusTable(d2.items, d2.summary.total);
+
+  // Load detail
+  _openP5Detail(rev, status);
+}
+
+async function _openP5Detail(rev, status) {
+  const panel = document.getElementById('p5-detail-panel');
+  panel.style.display = '';
+  document.getElementById('p5-detail-title').textContent =
+    'Detail Material — ' + status;
+  document.getElementById('p5-detail-sub').textContent =
+    'Revision: ' + rev;
+  document.getElementById('p5-detail-table-wrap').innerHTML =
+    '<div style="padding:32px;text-align:center;color:var(--text-sm)"><div class="spin" style="margin:0 auto 8px"></div>Memuat data...</div>';
+
+  _p5MatPage = 1; _p5MatSearch = '';
+  try {
+    const d = await apiFetch(
+      '/api/dashboard/mat-tracking-detail'
+      + '?revision=' + encodeURIComponent(rev)
+      + '&status='   + encodeURIComponent(status)
+    );
+    if (!d) return;
+    _p5DetailRows = d.rows;
+    document.getElementById('p5-detail-sub').textContent =
+      'Revision: ' + rev + ' · ' + fmt(d.total) + ' material';
+    _renderP5DetailTable();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) {
+    document.getElementById('p5-detail-table-wrap').innerHTML =
+      `<div style="padding:20px;color:red">Gagal: ${e.message}</div>`;
+  }
+}
+
+function _closeP5Detail() {
+  _p5ActiveStatus = '';
+  _p5DetailRows   = [];
+  document.getElementById('p5-detail-panel').style.display = 'none';
+}
+
+function _renderP5DetailTable() {
+  const wrap = document.getElementById('p5-detail-table-wrap');
+  const rows = _p5DetailRows;
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-sm)">Tidak ada data</div>';
+    return;
+  }
+
+  const q = _p5MatSearch.toLowerCase();
+  const filtered = q ? rows.filter(r =>
+    (r.order||'').toLowerCase().includes(q) ||
+    (r.material||'').toLowerCase().includes(q) ||
+    (r.description||'').toLowerCase().includes(q) ||
+    (r.equipment||'').toLowerCase().includes(q) ||
+    (r.pr||'').toLowerCase().includes(q) ||
+    (r.po||'').toLowerCase().includes(q)
+  ) : rows;
+
+  const total      = filtered.length;
+  const totalPages = Math.ceil(total / _p5MatPageSize) || 1;
+  if (_p5MatPage > totalPages) _p5MatPage = totalPages;
+  const start    = (_p5MatPage - 1) * _p5MatPageSize;
+  const pageRows = filtered.slice(start, start + _p5MatPageSize);
+
+  const statusColors = {
+    'Belum PR':               'background:#fef2f2;color:#dc2626',
+    'PR-Proses Pengadaan':    'background:#fffbeb;color:#d97706',
+    'PO-Material Belum Tiba': 'background:#eff6ff;color:#1e40af',
+    'PO-Material Telah Tiba': 'background:#f0fdf4;color:#15803d',
+    'Stock On Hand':          'background:#f0fdf4;color:#15803d',
+  };
+
+  let html = `<div style="display:flex;flex-direction:column;max-height:520px;overflow:hidden">
+  <div style="flex-shrink:0;padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <input id="p5-mat-search" type="text" placeholder="🔍 Cari Order, Material, Equipment, PR, PO..."
+      value="${_p5MatSearch.replace(/"/g,'&quot;')}"
+      oninput="_p5MatSearch=this.value;_p5MatPage=1;_renderP5DetailTable()"
+      style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+    <button onclick="exportP5Excel()"
+      style="padding:5px 14px;border:1px solid var(--border);border-radius:6px;background:#fff;font-size:12px;cursor:pointer;font-weight:600">⬇ Export CSV</button>
+    <span style="font-size:11px;color:var(--text-sm);white-space:nowrap">
+      ${start+1}–${Math.min(start+_p5MatPageSize,total)} dari ${fmt(total)} baris
+      ${q ? '(difilter dari ' + fmt(rows.length) + ')' : ''}
+    </span>
+  </div>
+  <div style="flex:1;overflow-y:auto;overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#1a56db;color:#fff;position:sticky;top:0;z-index:5">
+      <th style="padding:8px 12px;white-space:nowrap">Order</th>
+      <th style="padding:8px 12px;white-space:nowrap">Itm</th>
+      <th style="padding:8px 12px;white-space:nowrap">Equipment</th>
+      <th style="padding:8px 12px;white-space:nowrap">Material</th>
+      <th style="padding:8px 12px">Deskripsi</th>
+      <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Req</th>
+      <th style="padding:8px 12px;text-align:right;white-space:nowrap">Qty Deliv</th>
+      <th style="padding:8px 12px;white-space:nowrap">PR</th>
+      <th style="padding:8px 12px;white-space:nowrap">PO</th>
+      <th style="padding:8px 12px;white-space:nowrap">Delivery Date</th>
+      <th style="padding:8px 12px;white-space:nowrap">Reqmts Date</th>
+      <th style="padding:8px 12px;white-space:nowrap">Status</th>
+    </tr></thead><tbody>`;
+
+  pageRows.forEach((r, i) => {
+    const sc = statusColors[r.status_label] || 'background:#f8fafc;color:#64748b';
+    const prgBar = r.qty_reqmts > 0
+      ? Math.min(100, (r.qty_deliv / r.qty_reqmts * 100)).toFixed(0)
+      : 0;
+    html += `<tr style="border-bottom:1px solid #f1f5f9;${i%2?'background:#fafafa':''}">
+      <td style="padding:7px 12px;font-weight:700;color:var(--blue);white-space:nowrap">${r.order}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.itm}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.equipment}</td>
+      <td style="padding:7px 12px;font-weight:600;white-space:nowrap">${r.material}</td>
+      <td style="padding:7px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.description}">${r.description}</td>
+      <td style="padding:7px 12px;text-align:right">${r.qty_reqmts} ${r.uom}</td>
+      <td style="padding:7px 12px;text-align:right">
+        <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
+          <span>${r.qty_deliv} ${r.uom}</span>
+          ${r.qty_reqmts > 0 ? `<div style="width:40px;height:4px;background:#e2e8f0;border-radius:99px;overflow:hidden"><div style="width:${prgBar}%;height:100%;background:${prgBar>=100?'#16a34a':'#3b82f6'};border-radius:99px"></div></div>` : ''}
+        </div>
+      </td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.pr !== '—' ? r.pr + (r.pr_item !== '—' ? '/'+r.pr_item : '') : '—'}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.po}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.delivery_date}</td>
+      <td style="padding:7px 12px;white-space:nowrap">${r.reqmts_date}</td>
+      <td style="padding:7px 12px;white-space:nowrap">
+        <span style="${sc};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">${r.status_label}</span>
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+
+  if (totalPages > 1) {
+    html += `<div style="flex-shrink:0;padding:10px 12px;background:#f8fafc;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:6px">
+      <button onclick="_p5MatPage=Math.max(1,_p5MatPage-1);_renderP5DetailTable()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_p5MatPage===1?';opacity:.4;cursor:default':''}">‹ Prev</button>`;
+    const sp = Math.max(1, _p5MatPage-2), ep = Math.min(totalPages, sp+4);
+    for (let p = sp; p <= ep; p++) {
+      html += `<button onclick="_p5MatPage=${p};_renderP5DetailTable()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;${p===_p5MatPage?'background:var(--blue);color:#fff;':'background:#fff;'}">${p}</button>`;
+    }
+    html += `<button onclick="_p5MatPage=Math.min(${totalPages},_p5MatPage+1);_renderP5DetailTable()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:12px${_p5MatPage===totalPages?';opacity:.4;cursor:default':''}">Next ›</button>
+      <span style="font-size:11px;color:var(--text-sm);margin-left:8px">Hal ${_p5MatPage}/${totalPages}</span>
+    </div>`;
+  }
+
+  html += '</div>';
+  wrap.innerHTML = html;
+  if (q) {
+    const el = document.getElementById('p5-mat-search');
+    if (el) { el.focus(); const len = el.value.length; el.setSelectionRange(len,len); }
+  }
+}
+
+function exportP5Excel() {
+  if (!_p5DetailRows.length) return;
+  let csv = 'Order,Itm,Equipment,Material,Deskripsi,Qty Req,UoM,Qty Deliv,PR,PO,Delivery Date,Reqmts Date,Status\n';
+  _p5DetailRows.forEach(r => {
+    csv += `${r.order},${r.itm},${r.equipment},${r.material},"${r.description}",${r.qty_reqmts},${r.uom},${r.qty_deliv},${r.pr},${r.po},${r.delivery_date},${r.reqmts_date},"${r.status_label}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `material_tracking_${document.getElementById('p5-revision-select').value}_${Date.now()}.csv`;
+  a.click();
+}
+
+// ── Overview: semua revision (stacked bar) ─────────────────────
+async function loadP5Summary() {
+  try {
+    const rows = await apiFetch('/api/dashboard/mat-tracking-summary');
+    if (!rows || !rows.length) return;
+    _renderP5SummaryChart(rows);
+  } catch(e) {}
+}
+
+function _renderP5SummaryChart(rows) {
+  destroyChart('p5-summary-bar');
+  const wrap = document.getElementById('p5-summary-wrap');
+  if (!rows.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const h = Math.max(300, rows.length * 40 + 80);
+  document.getElementById('p5-summary-bar-container').style.height = h + 'px';
+  const ctx = document.getElementById('p5-summary-bar').getContext('2d');
+
+  charts['p5-summary-bar'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.revision),
+      datasets: [
+        { label: 'PO Telah Tiba / Stock', data: rows.map(r => r.po_tiba),   backgroundColor: '#16a34a', stack: 's' },
+        { label: 'PO Belum Tiba',         data: rows.map(r => r.po_belum),  backgroundColor: '#3b82f6', stack: 's' },
+        { label: 'PR Proses Pengadaan',   data: rows.map(r => r.pr_proses), backgroundColor: '#f59e0b', stack: 's' },
+        { label: 'Belum PR',              data: rows.map(r => r.belum_pr),  backgroundColor: '#dc2626', stack: 's' },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: {
+          label: c => ` ${c.dataset.label}: ${fmt(c.raw)}`,
+          footer: items => {
+            const total = rows[items[0].dataIndex].total;
+            return `Total: ${fmt(total)}`;
+          }
+        }}
+      },
+      scales: {
+        x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => fmt(v), font: { size: 10 } } },
+        y: { stacked: true, ticks: { font: { size: 11 } } }
+      },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const rev = rows[els[0].index].revision;
+        document.getElementById('p5-revision-select').value = rev;
+        loadP5();
+      }
+    }
+  });
+}
+
 async function loadP4JasaPlanning(proj) {
   document.getElementById('p4-jasa-section').style.display = proj ? '' : 'none';
   if (!proj) return;
@@ -2332,6 +2803,128 @@ async function loadP4JasaPlanning(proj) {
       <div id="p4-detail-table-wrap" style="overflow-x:auto;max-height:480px;overflow-y:auto"></div>
     </div>
   </div>
+</div>
+
+<!-- ══ PAGE 5: MATERIAL TRACKING BY REVISION ══ -->
+<div class="page-content" id="page-p5">
+<div class="content">
+
+  <!-- Revision filter -->
+  <div class="card" style="margin-bottom:16px;padding:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="filter-label">Pilih Revision:</span>
+      <select class="filter-select" id="p5-revision-select" onchange="loadP5()"
+              style="min-width:220px;font-size:13px;padding:6px 12px">
+        <option value="">— Pilih Revision —</option>
+      </select>
+      <span id="p5-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
+      <div style="margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:11px;color:var(--text-sm)">
+        <span style="font-weight:700">Legend:</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#dc2626;display:inline-block"></span>Belum PR</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block"></span>PR-Proses Pengadaan</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block"></span>PO-Material Belum Tiba</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#16a34a;display:inline-block"></span>PO-Material Telah Tiba</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Cards (muncul saat revision dipilih) -->
+  <div id="p5-cards" class="stat-cards" style="display:none;margin-bottom:20px"></div>
+
+  <!-- OVERVIEW: Semua revision (stacked bar) — selalu tampil -->
+  <div id="p5-summary-wrap" style="margin-bottom:20px;display:none">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">Overview Semua Revision — Klik bar untuk drill-down</div>
+      </div>
+      <div id="p5-summary-bar-container" style="position:relative;height:300px;overflow-y:auto">
+        <canvas id="p5-summary-bar"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main section (muncul setelah revision dipilih) -->
+  <div id="p5-main" style="display:none">
+
+    <!-- Charts row: Donut + Bar -->
+    <div class="grid-2" style="margin-bottom:20px">
+      <!-- Donut -->
+      <div class="card">
+        <div class="card-title">Distribusi Status Material</div>
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div class="donut-wrap" style="flex-shrink:0">
+            <canvas id="p5-donut"></canvas>
+            <div class="donut-center">
+              <div class="donut-num" id="p5-donut-total">—</div>
+              <div class="donut-sub">Total Mat.</div>
+            </div>
+          </div>
+          <div id="p5-donut-legend" class="legend" style="flex:1;justify-content:flex-start;flex-direction:column;gap:8px"></div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:var(--text-sm);text-align:center">
+          ← Klik segmen donut / legend untuk lihat detail material
+        </div>
+      </div>
+
+      <!-- Bar chart vertikal -->
+      <div class="card">
+        <div class="card-title">Jumlah Material per Status</div>
+        <div style="position:relative;height:240px">
+          <canvas id="p5-bar"></canvas>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text-sm);text-align:center">
+          ← Klik batang untuk lihat detail material
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Table -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">Tabel Status Material</div>
+        <div style="font-size:11px;color:var(--text-sm)">Klik baris untuk lihat daftar material</div>
+      </div>
+      <table class="mini-table">
+        <thead>
+          <tr>
+            <th>Status Material</th>
+            <th style="text-align:right">Jumlah</th>
+            <th style="text-align:right">%</th>
+            <th style="width:160px">Progress</th>
+          </tr>
+        </thead>
+        <tbody id="p5-status-tbody">
+          <tr><td colspan="4" class="loading"><div class="spin"></div> Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Detail Panel (drill-through) -->
+    <div id="p5-detail-panel" style="display:none;margin-bottom:20px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:14px 20px;background:linear-gradient(135deg,#1e3a8a,#1a56db);display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div id="p5-detail-title" style="font-size:14px;font-weight:700;color:#fff">Detail Material</div>
+            <div id="p5-detail-sub" style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px"></div>
+          </div>
+          <button onclick="_closeP5Detail()"
+            style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:14px">✕</button>
+        </div>
+        <div id="p5-detail-table-wrap" style="overflow-x:auto"></div>
+      </div>
+    </div>
+
+  </div><!-- /p5-main -->
+
+  <!-- Empty state -->
+  <div id="p5-empty" style="text-align:center;padding:60px;color:var(--text-sm)">
+    <div style="font-size:48px;margin-bottom:12px">📦</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px">Material Tracking by Revision</div>
+    <div style="font-size:12px">Pilih Revision untuk tracking status material · Sumber langsung dari taex_reservasi (tanpa join joblist)</div>
+    <div style="margin-top:16px;font-size:11px;color:var(--text-sm)">↑ Overview semua revision tampil di atas setelah halaman dimuat</div>
+  </div>
+
+</div>
 </div>
 
 </body>
