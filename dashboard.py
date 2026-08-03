@@ -1312,3 +1312,175 @@ def project_planning_rows(request: Request, project_number: str = "",
             "is_material":     int(r["is_material"] or 0),
         } for r in rows],
     })
+
+
+# ═══════════════════════════════════════════════════════════════
+# MATERIAL TRACKING BY REVISION — Tab 5
+# Source: taex_reservasi.revision (langsung, tanpa join joblist_taex)
+# ═══════════════════════════════════════════════════════════════
+
+STATUS_EXPR_ACTUAL = """
+    CASE
+        WHEN COALESCE(t.qty_stock, 0) >= COALESCE(t.qty_reqmts, 0)
+             AND COALESCE(t.qty_reqmts, 0) > 0
+             THEN 'Stock On Hand'
+        WHEN t.po IS NOT NULL AND t.po != ''
+             AND COALESCE(t.qty_deliv, 0) >= COALESCE(t.qty_reqmts, 0)
+             AND COALESCE(t.qty_reqmts, 0) > 0
+             THEN 'PO-Material Telah Tiba'
+        WHEN t.po IS NOT NULL AND t.po != ''
+             AND COALESCE(t.qty_deliv, 0) < COALESCE(t.qty_reqmts, 0)
+             THEN 'PO-Material Belum Tiba'
+        WHEN t.pr IS NOT NULL AND t.pr != ''
+             AND (t.po IS NULL OR t.po = '')
+             THEN 'PR-Proses Pengadaan'
+        ELSE 'Belum PR'
+    END
+"""
+
+
+@router.get("/mat-revisions")
+def mat_revisions(request: Request):
+    _require_admin(request)
+    rows = query("""
+        SELECT DISTINCT revision
+        FROM taex_reservasi
+        WHERE revision IS NOT NULL AND revision != ''
+        ORDER BY revision
+    """)
+    return J([r["revision"] for r in rows])
+
+
+@router.get("/mat-tracking")
+def mat_tracking(request: Request, revision: str = ""):
+    _require_admin(request)
+    if not revision:
+        return J({
+            "summary": {"total": 0, "belum_pr": 0, "pr_proses": 0, "po_belum": 0, "po_tiba": 0, "stock": 0},
+            "items": [],
+        })
+
+    rows = query(f"""
+        SELECT
+            ({STATUS_EXPR_ACTUAL}) AS status_material,
+            COUNT(*) AS jumlah
+        FROM taex_reservasi t
+        WHERE t.revision = %s
+          AND COALESCE(t.qty_reqmts, 0) > 0
+        GROUP BY status_material
+        ORDER BY jumlah DESC
+    """, [revision])
+
+    total = sum(int(r["jumlah"] or 0) for r in rows)
+    items = [{
+        "status": r["status_material"],
+        "jumlah": int(r["jumlah"] or 0),
+        "pct":    round(int(r["jumlah"] or 0) / total * 100, 2) if total else 0,
+    } for r in rows]
+
+    status_map = {i["status"]: i["jumlah"] for i in items}
+    return J({
+        "summary": {
+            "total":    total,
+            "belum_pr": status_map.get("Belum PR", 0),
+            "pr_proses": status_map.get("PR-Proses Pengadaan", 0),
+            "po_belum": status_map.get("PO-Material Belum Tiba", 0),
+            "po_tiba":  status_map.get("PO-Material Telah Tiba", 0),
+            "stock":    status_map.get("Stock On Hand", 0),
+        },
+        "items": items,
+    })
+
+
+@router.get("/mat-tracking-detail")
+def mat_tracking_detail(
+    request: Request,
+    revision: str = "",
+    status: str = "",
+):
+    _require_admin(request)
+    if not revision:
+        return J({"total": 0, "rows": []})
+
+    params = [revision]
+    status_filter = ""
+    if status:
+        status_filter = f"AND ({STATUS_EXPR_ACTUAL}) = %s"
+        params.append(status)
+
+    rows = query(f"""
+        SELECT
+            t."order",
+            t.equipment,
+            t.material,
+            t.itm,
+            t.material_description,
+            t.qty_reqmts,
+            t.qty_stock,
+            COALESCE(t.qty_deliv, 0) AS qty_deliv,
+            t.uom,
+            t.pr,
+            t.item AS pr_item,
+            t.po,
+            t.delivery_date,
+            t.reqmts_date,
+            t.sloc,
+            t.cost_ctrs,
+            ({STATUS_EXPR_ACTUAL}) AS status_label
+        FROM taex_reservasi t
+        WHERE t.revision = %s
+          AND COALESCE(t.qty_reqmts, 0) > 0
+          {status_filter}
+        ORDER BY t."order", t.itm
+    """, params)
+
+    return J({
+        "total": len(rows),
+        "rows": [{
+            "order":         r["order"]               or "—",
+            "equipment":     r["equipment"]            or "—",
+            "material":      r["material"]             or "—",
+            "itm":           r["itm"]                  or "—",
+            "description":   r["material_description"] or "—",
+            "qty_reqmts":    float(r["qty_reqmts"]    or 0),
+            "qty_stock":     float(r["qty_stock"]      or 0),
+            "qty_deliv":     float(r["qty_deliv"]      or 0),
+            "uom":           r["uom"]                  or "—",
+            "pr":            r["pr"]                   or "—",
+            "pr_item":       r["pr_item"]              or "—",
+            "po":            r["po"]                   or "—",
+            "delivery_date": str(r["delivery_date"]    or "—"),
+            "reqmts_date":   str(r["reqmts_date"]      or "—"),
+            "sloc":          r["sloc"]                 or "—",
+            "cost_ctrs":     r["cost_ctrs"]            or "—",
+            "status_label":  r["status_label"]         or "—",
+        } for r in rows]
+    })
+
+
+@router.get("/mat-tracking-summary")
+def mat_tracking_summary(request: Request):
+    """Ringkasan semua revision — total material per status."""
+    _require_admin(request)
+    rows = query(f"""
+        SELECT
+            t.revision,
+            COUNT(*) AS total,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'PO-Material Telah Tiba' OR ({STATUS_EXPR_ACTUAL}) = 'Stock On Hand' THEN 1 ELSE 0 END) AS po_tiba,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'PO-Material Belum Tiba' THEN 1 ELSE 0 END) AS po_belum,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'PR-Proses Pengadaan'    THEN 1 ELSE 0 END) AS pr_proses,
+            SUM(CASE WHEN ({STATUS_EXPR_ACTUAL}) = 'Belum PR'               THEN 1 ELSE 0 END) AS belum_pr
+        FROM taex_reservasi t
+        WHERE t.revision IS NOT NULL AND t.revision != ''
+          AND COALESCE(t.qty_reqmts, 0) > 0
+        GROUP BY t.revision
+        ORDER BY t.revision
+    """)
+    return J([{
+        "revision":  r["revision"],
+        "total":     int(r["total"]    or 0),
+        "po_tiba":   int(r["po_tiba"]  or 0),
+        "po_belum":  int(r["po_belum"] or 0),
+        "pr_proses": int(r["pr_proses"]or 0),
+        "belum_pr":  int(r["belum_pr"] or 0),
+    } for r in rows])
