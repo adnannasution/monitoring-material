@@ -2370,18 +2370,24 @@ def get_tracking_summary(request: Request):
 # TRACKING COUNTS — angka untuk summary card di halaman tracking
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/tracking/counts")
-def get_tracking_counts(request: Request):
+def get_tracking_counts(request: Request, plant: str = ""):
     """
     Hitung semua angka card tracking dalam satu query:
     - total_material, total_order
     - sudah_pr, sudah_po, belum_pr
     - partial, complete
     - total_nilai_po
+    Plant filter menggunakan effective plant = COALESCE(sap_pr.plant, sap_po.plnt, taex.plant)
+    sehingga rows yang plant-nya ada di PR/PO tetap ikut dihitung.
     """
     check_api_key(request)
 
-    # Query cepat — tidak butuh JOIN (index scan saja)
-    fast = query_one("""
+    plant_where     = "WHERE COALESCE(spr.plant, spo.plnt, t.plant) = %s" if plant else ""
+    plant_where_po  = "AND COALESCE(spr.plant, spo.plnt, t.plant) = %s"  if plant else ""
+    plant_param     = [plant] if plant else []
+
+    # Query cepat — join ke sap_pr & sap_po untuk mendapatkan effective plant
+    fast = query_one(f"""
         SELECT
             COUNT(*)                                                AS total_material,
             COUNT(DISTINCT t."order")                               AS total_order,
@@ -2389,30 +2395,48 @@ def get_tracking_counts(request: Request):
             COUNT(*) FILTER (WHERE t.po IS NOT NULL AND t.po <> '') AS sudah_po,
             COUNT(*) FILTER (WHERE t.pr IS NULL OR t.pr = '')       AS belum_pr
         FROM taex_reservasi t
-    """)
+        LEFT JOIN LATERAL (
+            SELECT sp.plant FROM sap_pr sp
+            WHERE sp.pr = t.pr AND sp.material = t.material
+            ORDER BY sp.id LIMIT 1
+        ) spr ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT po.plnt FROM sap_po po
+            WHERE po.po = t.po AND po.material = t.material
+            ORDER BY po.id LIMIT 1
+        ) spo ON TRUE
+        {plant_where}
+    """, plant_param)
 
-    # Query lambat — butuh JOIN ke sap_po (dipisah agar tidak blok load awal)
-    slow = query_one("""
+    # Query lambat — butuh JOIN ke sap_po untuk partial/complete/nilai
+    slow = query_one(f"""
         SELECT
             COUNT(*) FILTER (
-                WHERE COALESCE(po.po_qty_delivered, 0) > 0
-                  AND COALESCE(po.po_qty_delivered, 0) < COALESCE(po.po_quantity, 0)
+                WHERE COALESCE(spo.po_qty_delivered, 0) > 0
+                  AND COALESCE(spo.po_qty_delivered, 0) < COALESCE(spo.po_quantity, 0)
             )                               AS partial,
             COUNT(*) FILTER (
-                WHERE COALESCE(po.po_quantity, 0) > 0
-                  AND COALESCE(po.po_qty_delivered, 0) >= COALESCE(po.po_quantity, 0)
+                WHERE COALESCE(spo.po_quantity, 0) > 0
+                  AND COALESCE(spo.po_qty_delivered, 0) >= COALESCE(spo.po_quantity, 0)
             )                               AS complete,
-            COALESCE(SUM(po.po_net_price), 0) AS total_nilai_po
+            COALESCE(SUM(spo.po_net_price), 0) AS total_nilai_po
         FROM taex_reservasi t
         LEFT JOIN LATERAL (
-            SELECT po.po_quantity, po.qty_delivered AS po_qty_delivered,
-                   po.net_price AS po_net_price
+            SELECT sp.plant FROM sap_pr sp
+            WHERE sp.pr = t.pr AND sp.material = t.material
+            ORDER BY sp.id LIMIT 1
+        ) spr ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT po.plnt, po.po_quantity,
+                   po.qty_delivered AS po_qty_delivered,
+                   po.net_price     AS po_net_price
             FROM sap_po po
             WHERE po.po = t.po AND po.material = t.material
             ORDER BY po.id LIMIT 1
-        ) po ON TRUE
+        ) spo ON TRUE
         WHERE t.po IS NOT NULL AND t.po <> ''
-    """)
+          {plant_where_po}
+    """, plant_param)
 
     return jsonify({
         "total_material": int(fast["total_material"] or 0),
