@@ -501,6 +501,7 @@ async function init() {
   }
 
   await initP4Projects();
+  await initP6Projects();
   loadP5();
   loadP4();
 }
@@ -510,7 +511,6 @@ async function loadPlants() {
     const plants = await apiFetch('/api/dashboard/plants');
     if (!plants) return;
     const wrap = document.getElementById('ru-btns');
-    const p6sel = document.getElementById('p6-plant-select');
     plants.forEach(p => {
       const btn = document.createElement('div');
       btn.className = 'ru-btn';
@@ -518,9 +518,6 @@ async function loadPlants() {
       btn.dataset.code = p.code;
       btn.onclick = () => setPlant(p.code);
       wrap.appendChild(btn);
-      const opt = document.createElement('option');
-      opt.value = p.code; opt.textContent = p.name;
-      p6sel.appendChild(opt);
     });
   } catch(e) {}
 }
@@ -1428,6 +1425,19 @@ async function initP4Projects() {
     const projects = await apiFetch('/api/dashboard/projects');
     if (!projects) return;
     const sel = document.getElementById('p4-project-select');
+    projects.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
+}
+
+async function initP6Projects() {
+  try {
+    const projects = await apiFetch('/api/dashboard/projects');
+    if (!projects) return;
+    const sel = document.getElementById('p6-project-select');
     projects.forEach(p => {
       const o = document.createElement('option');
       o.value = p; o.textContent = p;
@@ -2387,8 +2397,8 @@ function exportP5Excel() {
 async function loadP6() {
   document.getElementById('p6-loading').style.display = '';
   try {
-    const plant = document.getElementById('p6-plant-select').value;
-    const d = await apiFetch('/api/dashboard/readiness-jasa' + (plant ? '?plant=' + encodeURIComponent(plant) : ''));
+    const proj = document.getElementById('p6-project-select').value;
+    const d = await apiFetch('/api/dashboard/readiness-jasa' + (proj ? '?project_number=' + encodeURIComponent(proj) : ''));
     if (!d) return;
 
     const s = d.summary;
@@ -2419,11 +2429,11 @@ async function loadP6() {
 
     // Bar per plant
     destroyChart('p6-bar');
-    const rows = d.by_plant;
+    const rows = d.by_project;
     charts['p6-bar'] = new Chart(document.getElementById('p6-bar').getContext('2d'), {
       type: 'bar',
       data: {
-        labels: rows.map(r => r.plant),
+        labels: rows.map(r => r.project_number),
         datasets: [
           { label: 'Ready',     data: rows.map(r => r.ready),     backgroundColor: '#16a34acc', borderColor: '#16a34a', borderWidth: 2, borderRadius: 4, stack: 's' },
           { label: 'Not Ready', data: rows.map(r => r.not_ready), backgroundColor: '#dc2626cc', borderColor: '#dc2626', borderWidth: 2, borderRadius: 4, stack: 's' },
@@ -2444,7 +2454,7 @@ async function loadP6() {
     document.getElementById('p6-tbody').innerHTML = rows.map(r => {
       const color = r.pct_ready === 100 ? '#16a34a' : r.pct_ready >= 50 ? '#f59e0b' : '#dc2626';
       return `<tr>
-        <td>${r.plant}</td>
+        <td>${r.project_number}</td>
         <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
         <td style="text-align:right;color:#16a34a;font-weight:700">${fmt(r.ready)}</td>
         <td style="text-align:right;color:#dc2626">${fmt(r.not_ready)}</td>
@@ -2994,9 +3004,9 @@ async function loadP4JasaPlanning(proj) {
   <!-- Filter plant -->
   <div class="card" style="margin-bottom:12px;padding:12px 16px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span class="filter-label">Pilih Plant:</span>
-      <select class="filter-select" id="p6-plant-select" onchange="loadP6()" style="min-width:200px;font-size:13px;padding:6px 12px">
-        <option value="">— Semua Plant —</option>
+      <span class="filter-label">Pilih Project:</span>
+      <select class="filter-select" id="p6-project-select" onchange="loadP6()" style="min-width:220px;font-size:13px;padding:6px 12px">
+        <option value="">— Semua Project —</option>
       </select>
       <span id="p6-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
     </div>
@@ -3055,7 +3065,7 @@ async function loadP4JasaPlanning(proj) {
 
     <!-- Bar chart per plant -->
     <div class="card">
-      <div class="card-title">Readiness Jasa per Plant</div>
+      <div class="card-title">Readiness Jasa per Project</div>
       <div style="position:relative;height:260px">
         <canvas id="p6-bar"></canvas>
       </div>
@@ -3064,11 +3074,11 @@ async function loadP4JasaPlanning(proj) {
 
   <!-- Table per plant -->
   <div class="card">
-    <div class="card-title">Detail per Plant</div>
+    <div class="card-title">Detail per Project</div>
     <table class="mini-table">
       <thead>
         <tr>
-          <th>Plant</th>
+          <th>Project</th>
           <th style="text-align:right">Total</th>
           <th style="text-align:right">Ready</th>
           <th style="text-align:right">Not Ready</th>
