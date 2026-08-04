@@ -5512,13 +5512,14 @@ function setTrkView(mode) {
 }
 
 function trkSort(key) { setSort('trk', key); renderTracking(); }
-function trkApplyFilter() { trkServerMeta.total = 0; resetPg('trk'); renderTracking(); }
+function trkApplyFilter() { trkServerMeta.total = 0; resetPg('trk'); renderTracking(); updateTrackingCards(); }
 function trkSearch() { resetPg('trk'); renderTracking(); }
 function trkResetFilter() {
   document.getElementById('trk-search').value = '';
   document.getElementById('trk-filterStatus').value = '';
   document.getElementById('trk-filterPlant').value = '';
   renderTracking();
+  updateTrackingCards();
 }
 
 // ── STATUS LOGIC ──
@@ -5876,7 +5877,9 @@ function toggleTrkL2(l2key) {
 async function updateTrackingCards() {
   // Fetch angka card dari server — akurat dari DB, tidak bergantung pada data halaman
   try {
-    const c = await apiFetch('/tracking/counts');
+    const plant = document.getElementById('trk-filterPlant')?.value || '';
+    const qs = plant ? '?plant=' + encodeURIComponent(plant) : '';
+    const c = await apiFetch('/tracking/counts' + qs);
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('trk-total-order',    c.total_order.toLocaleString('id-ID'));
     set('trk-total-material', c.total_material.toLocaleString('id-ID'));
