@@ -606,6 +606,17 @@ const P4_DISPLAY = {
   'PO-DT Melebihi MD':          'Tunggu On Site',
 };
 
+// Urutan & normalisasi kategori p4 — selalu tampil meski 0
+const P4_NORM_ORDER = [
+  'Dipenuhi dari Stock', 'Reservasi Belum PR', 'Reservasi Sudah PR Belum PO',
+  'Tunggu On Site', 'Sudah On Site',
+];
+function _p4Normalize(items) {
+  const map = Object.fromEntries(items.map(i => [i.displayStatus || i.status, i]));
+  const total = items.reduce((s, i) => s + i.jumlah, 0);
+  return P4_NORM_ORDER.map(s => map[s] || { status: s, displayStatus: s, jumlah: 0, pct: 0 });
+}
+
 // ══════════════════════════════════════════════════════════════
 // PAGE 1
 // ══════════════════════════════════════════════════════════════
@@ -1561,8 +1572,8 @@ function renderP4Material(d) {
   const mapDisp = items => items.map(item => ({
     ...item, displayStatus: P4_DISPLAY[item.status] || item.status
   }));
-  const actualD   = { ...d.actual,   items: mapDisp(d.actual.items)   };
-  const prognosad = { ...d.prognosa, items: mapDisp(d.prognosa.items) };
+  const actualD   = { ...d.actual,   items: _p4Normalize(mapDisp(d.actual.items))   };
+  const prognosad = { ...d.prognosa, items: _p4Normalize(mapDisp(d.prognosa.items)) };
   const CA = actualD.items.map((item, i)   => getStatusColor(item.displayStatus, i));
   const CP = prognosad.items.map((item, i) => getStatusColor(item.displayStatus, i));
   _renderP4Donut('p4-donut-actual',   'p4-donut-actual-total',   'p4-legend-actual',   'p4-tbody-actual',   actualD,   CA);
