@@ -1208,13 +1208,11 @@ def project_jasa_planning(request: Request, project_number: str = ""):
     rows = query("""
         SELECT
             COUNT(*)                                                                AS total,
-            SUM(CASE WHEN COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
+            SUM(CASE WHEN dp3 IS NOT NULL AND dp3 != ''
                      THEN 1 ELSE 0 END)                                             AS planning_complete,
-            SUM(CASE WHEN COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+            SUM(CASE WHEN dp3 IS NULL OR dp3 = ''
                      THEN 1 ELSE 0 END)                                             AS not_planned,
-            SUM(CASE WHEN COALESCE(planning_jasa_status_name,'') != 'Planning Complete'
-                      AND COALESCE(planning_jasa_status_name,'Not Planned') != 'Not Planned'
-                     THEN 1 ELSE 0 END)                                             AS others
+            0                                                                       AS others
         FROM joblist_taex
         WHERE project_number = %s
           AND is_jasa = 1
@@ -1225,9 +1223,9 @@ def project_jasa_planning(request: Request, project_number: str = ""):
         SELECT
             COALESCE(area_name, '(Tanpa Area)')                                     AS area,
             COUNT(*)                                                                AS total,
-            SUM(CASE WHEN COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
+            SUM(CASE WHEN dp3 IS NOT NULL AND dp3 != ''
                      THEN 1 ELSE 0 END)                                             AS planning_complete,
-            SUM(CASE WHEN COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'
+            SUM(CASE WHEN dp3 IS NULL OR dp3 = ''
                      THEN 1 ELSE 0 END)                                             AS not_planned
         FROM joblist_taex
         WHERE project_number = %s
@@ -1265,8 +1263,8 @@ def project_planning_rows(request: Request, project_number: str = "",
 
     if kind == "jasa":
         where.append('is_jasa = 1')
-        complete_expr     = "COALESCE(planning_jasa_status_name,'') = 'Planning Complete'"
-        not_planned_expr  = "COALESCE(planning_jasa_status_name,'Not Planned') = 'Not Planned'"
+        complete_expr     = "(dp3 IS NOT NULL AND dp3 != '')"
+        not_planned_expr  = "(dp3 IS NULL OR dp3 = '')"
     else:
         complete_expr = """(
             COALESCE(planning_jasa_status_name,'') = 'Planning Complete'
