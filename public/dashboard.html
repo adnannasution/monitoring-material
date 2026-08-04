@@ -251,9 +251,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <div class="page-tabs">
   <div class="page-tab active" onclick="switchPage('p4')">📊 Readiness by Project</div>
-  <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
+  <div class="page-tab" onclick="switchPage('p3')">🔍 Drilldown Readiness Material</div>
   <div class="page-tab" onclick="switchPage('p5')">📦 Material Tracking</div>
   <div class="page-tab" onclick="switchPage('p6')">🔧 Readiness Jasa</div>
+  <div class="page-tab" onclick="switchPage('p7')">🔩 Drilldown Readiness Jasa</div>
   <div class="page-tab" onclick="switchPage('p1')" style="display:none">📦 Readiness Equipment</div>
   <div class="page-tab" onclick="switchPage('p2')" style="display:none">🧾 Readiness Material</div>
 </div>
@@ -538,7 +539,7 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p5','p6','p1','p2'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p5','p6','p7','p1','p2'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   const hideRU = id === 'p3' || id === 'p4' || id === 'p5' || id === 'p6';
@@ -554,6 +555,7 @@ function switchPage(id) {
   else if (id === 'p3') loadP3();
   else if (id === 'p5') loadP5();
   else if (id === 'p6') loadP6();
+  else if (id === 'p7') loadP7();
   else loadP4();
 }
 
@@ -2580,6 +2582,170 @@ async function loadP4JasaPlanning(proj) {
   } catch(e) { console.error('loadP4JasaPlanning:', e); }
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// PAGE 7 — DRILLDOWN READINESS JASA
+// ══════════════════════════════════════════════════════════════
+const DDJ_LEVELS = ['project', 'area', 'item'];
+const DDJ_LABELS = {
+  project: '📁 Project',
+  area:    '🗺 Area',
+  item:    '🔧 Item Jasa',
+};
+
+let ddJasaStack    = [];
+let ddJasaCurLevel = 'project';
+
+async function loadP7() {
+  const params = buildDdJasaParams();
+  const qs = new URLSearchParams(params);
+  qs.set('level', ddJasaCurLevel);
+  try {
+    const d = await apiFetch('/api/dashboard/drilldown-jasa?' + qs);
+    if (!d) return;
+    renderDdJasaSummary(d.data);
+    renderDdJasaChart(d.data);
+    renderDdJasaList(d.data);
+    renderBreadcrumbJasa();
+  } catch(e) {
+    document.getElementById('ddj-chart-wrap').innerHTML =
+      '<div style="color:red;padding:20px">Gagal: ' + e.message + '</div>';
+  }
+}
+
+function buildDdJasaParams() {
+  const p = {};
+  ddJasaStack.forEach(s => {
+    if (s.level === 'project') p.project_id = s.id;
+    if (s.level === 'area')    p.area_id    = s.id;
+  });
+  return p;
+}
+
+function renderBreadcrumbJasa() {
+  const bc = document.getElementById('breadcrumb-jasa');
+  let html = `<span style="color:var(--blue);font-weight:700;cursor:pointer" onclick="ddJasaReset()">🏠 All</span>`;
+  ddJasaStack.forEach((s, i) => {
+    html += `<span style="color:var(--text-sm)"> › </span>
+             <span style="color:${i===ddJasaStack.length-1?'var(--text)':'var(--blue)'};font-weight:600;cursor:pointer"
+                   onclick="ddJasaJumpTo(${i})">${s.name}</span>`;
+  });
+  html += `<span style="color:var(--text-sm)"> › </span>
+           <span style="color:var(--text);font-weight:700">${DDJ_LABELS[ddJasaCurLevel]}</span>`;
+  bc.innerHTML = html;
+  document.getElementById('ddj-chart-title').textContent = DDJ_LABELS[ddJasaCurLevel];
+}
+
+function renderDdJasaSummary(data) {
+  const total    = data.length;
+  const ready    = data.filter(r => r.pct_ready === 100).length;
+  const notReady = total - ready;
+  const avgPct   = total ? (data.reduce((s,r) => s + r.pct_ready, 0) / total).toFixed(1) : 0;
+  const totalJ   = data.reduce((s,r) => s + r.total_jasa, 0);
+  const readyJ   = data.reduce((s,r) => s + r.ready_jasa, 0);
+  document.getElementById('ddj-summary').innerHTML = `
+    <div class="stat-card blue"><div class="stat-card-val">${total}</div><div class="stat-card-lbl">Total ${DDJ_LABELS[ddJasaCurLevel]}</div></div>
+    <div class="stat-card green"><div class="stat-card-val">${ready}</div><div class="stat-card-lbl">100% Ready</div></div>
+    <div class="stat-card red"><div class="stat-card-val">${notReady}</div><div class="stat-card-lbl">Not Ready</div></div>
+    <div class="stat-card orange"><div class="stat-card-val">${avgPct}%</div><div class="stat-card-lbl">Avg Readiness</div></div>
+    <div class="stat-card blue"><div class="stat-card-val">${fmt(readyJ)}</div><div class="stat-card-lbl">Jasa Ready (SP)</div><div class="stat-card-pct">${totalJ ? (readyJ/totalJ*100).toFixed(1) : 0}% dari ${fmt(totalJ)}</div></div>
+  `;
+}
+
+function renderDdJasaChart(data) {
+  destroyChart('ddj-chart');
+  const wrap = document.getElementById('ddj-chart-wrap');
+  const h = Math.max(300, data.length * 44 + 80);
+  wrap.innerHTML = `<div style="position:relative;height:${h}px"><canvas id="ddj-chart" style="cursor:pointer"></canvas></div>`;
+  const isLastLevel = ddJasaCurLevel === 'item';
+  const labels = data.map(r => r.name + (r.description && r.description !== r.name ? ' — ' + r.description.substring(0,30) : ''));
+  const pcts   = data.map(r => r.pct_ready);
+  const colors = pcts.map(p => p === 100 ? '#16a34a' : p >= 70 ? '#3b82f6' : p >= 40 ? '#f59e0b' : '#ef4444');
+  charts['ddj-chart'] = new Chart(document.getElementById('ddj-chart').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'% Ready (SP)', data: pcts, backgroundColor: colors, borderRadius: 4, barThickness: 28 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => {
+        const pts = charts['ddj-chart'].getElementsAtEventForMode(evt.native, 'nearest', { intersect:false, axis:'y' }, false);
+        const idx = pts.length ? pts[0].index : (els.length ? els[0].index : -1);
+        if (idx < 0 || isLastLevel) return;
+        ddJasaDrillDown(data[idx]);
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => ` ${c.raw.toFixed(1)}% Ready`,
+          afterLabel: c => {
+            const r = data[c.dataIndex];
+            return [`SP Terisi: ${r.ready_jasa} / ${r.total_jasa}`, isLastLevel ? '' : '← Klik untuk drill-down'].filter(Boolean);
+          }
+        }}
+      },
+      scales: {
+        x: { min:0, max:100, ticks:{ callback: v => v+'%', font:{size:11} }, grid:{color:'#f1f5f9'} },
+        y: { ticks:{ font:{size:11}, callback:(v,i) => { const s=labels[i]; return s.length>40?s.substring(0,40)+'…':s; } } }
+      }
+    }
+  });
+}
+
+let _ddJasaListData = [];
+function renderDdJasaList(data) {
+  _ddJasaListData = data || [];
+  const isItem = ddJasaCurLevel === 'item';
+  const thead = document.getElementById('ddj-list-thead');
+  thead.innerHTML = isItem
+    ? '<th>Item Jasa</th><th style="text-align:center">Status SP</th>'
+    : '<th>Nama</th><th style="text-align:right">SP Ready</th><th style="text-align:right">Total</th><th style="text-align:right">% Ready</th><th style="text-align:center">Drill-down</th>';
+  const tbody = document.getElementById('ddj-list-tbody');
+  if (!_ddJasaListData.length) {
+    tbody.innerHTML = `<tr><td colspan="${isItem?2:5}" style="text-align:center;padding:20px;color:var(--text-sm)">Tidak ada data</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _ddJasaListData.map((r, i) => {
+    const pctColor = r.pct_ready === 100 ? '#16a34a' : r.pct_ready >= 70 ? '#3b82f6' : r.pct_ready >= 40 ? '#d97706' : '#dc2626';
+    const label = r.description && r.description !== r.name ? r.name + ' — ' + r.description.substring(0,50) : r.name;
+    if (isItem) {
+      const badge = r.ready_jasa
+        ? '<span class="badge ready">✅ SP Terisi</span>'
+        : '<span class="badge not-ready">❌ Belum SP</span>';
+      return `<tr><td style="font-size:12px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${label}</td><td style="text-align:center">${badge}</td></tr>`;
+    }
+    return `<tr>
+      <td style="font-size:12px;font-weight:600;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${label}</td>
+      <td style="text-align:right;font-size:12px;color:var(--green);font-weight:700">${fmt(r.ready_jasa)}</td>
+      <td style="text-align:right;font-size:12px">${fmt(r.total_jasa)}</td>
+      <td style="text-align:right;font-size:12px;font-weight:700;color:${pctColor}">${r.pct_ready.toFixed(1)}%</td>
+      <td style="text-align:center">
+        <button onclick="ddJasaDrillDown(_ddJasaListData[${i}])"
+          style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--blue)" title="Drill-down">🔍</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function ddJasaDrillDown(item) {
+  ddJasaStack.push({ level: ddJasaCurLevel, id: item.id, name: item.name });
+  const nextIdx = DDJ_LEVELS.indexOf(ddJasaCurLevel) + 1;
+  if (nextIdx < DDJ_LEVELS.length) { ddJasaCurLevel = DDJ_LEVELS[nextIdx]; loadP7(); }
+}
+
+function ddJasaJumpTo(stackIdx) {
+  if (stackIdx === -1) {
+    ddJasaStack = []; ddJasaCurLevel = 'project';
+  } else {
+    ddJasaStack = ddJasaStack.slice(0, stackIdx + 1);
+    const nextIdx = DDJ_LEVELS.indexOf(ddJasaStack[stackIdx].level) + 1;
+    ddJasaCurLevel = DDJ_LEVELS[nextIdx] || DDJ_LEVELS[DDJ_LEVELS.length - 1];
+  }
+  loadP7();
+}
+
+function ddJasaReset() {
+  ddJasaStack = []; ddJasaCurLevel = 'project'; loadP7();
+}
+
 </script>
 
 <!-- ══ PAGE 4: PER PROJECT ══ -->
@@ -3128,6 +3294,58 @@ async function loadP4JasaPlanning(proj) {
         <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
       </tbody>
     </table>
+  </div>
+
+</div>
+</div>
+
+<!-- ══ PAGE 7: DRILLDOWN READINESS JASA ══ -->
+<div class="page-content" id="page-p7">
+<div class="content">
+
+  <!-- Breadcrumb -->
+  <div style="background:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div id="breadcrumb-jasa" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="ddJasaReset()" style="padding:5px 14px;border-radius:6px;border:1px solid var(--border);background:#f8fafc;font-size:12px;cursor:pointer;font-weight:600">🔄 Reset</button>
+    </div>
+  </div>
+
+  <!-- Summary mini cards -->
+  <div id="ddj-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px"></div>
+
+  <!-- Bar chart horizontal -->
+  <div class="card" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="card-title" id="ddj-chart-title" style="margin-bottom:0">Project</div>
+      <div style="font-size:11px;color:var(--text-sm)">Klik → drill-down | Ready = SP terisi</div>
+    </div>
+    <div id="ddj-chart-wrap" style="overflow-y:auto;max-height:520px">
+      <canvas id="ddj-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Table daftar item -->
+  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+      <div class="card-title" style="margin-bottom:0">Daftar Item</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="mini-table" id="ddj-list-table">
+        <thead>
+          <tr id="ddj-list-thead">
+            <th>Nama</th>
+            <th style="text-align:right">SP Ready</th>
+            <th style="text-align:right">Total</th>
+            <th style="text-align:right">% Ready</th>
+            <th style="text-align:center">Drill-down</th>
+          </tr>
+        </thead>
+        <tbody id="ddj-list-tbody">
+          <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
 </div>
