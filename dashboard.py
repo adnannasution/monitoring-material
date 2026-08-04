@@ -1593,6 +1593,46 @@ def readiness_jasa(request: Request, project_number: str = ""):
     })
 
 
+@router.get("/project-readiness-jasa")
+def project_readiness_jasa(request: Request, project_number: str = ""):
+    _require_admin(request)
+    if not project_number:
+        return J({"summary": {"total": 0, "ready": 0, "not_ready": 0, "pct_ready": 0}, "by_area": []})
+
+    rows = query("""
+        SELECT
+            COALESCE(area_name, '(Tanpa Area)') AS area_name,
+            COUNT(*)                                     AS total,
+            SUM(CASE WHEN sp IS NOT NULL AND sp != '' THEN 1 ELSE 0 END) AS ready,
+            SUM(CASE WHEN sp IS NULL  OR  sp = ''     THEN 1 ELSE 0 END) AS not_ready
+        FROM joblist_taex
+        WHERE is_jasa = 1 AND project_number = %s
+        GROUP BY area_name
+        ORDER BY area_name
+    """, [project_number])
+
+    total     = sum(int(r["total"]     or 0) for r in rows)
+    ready     = sum(int(r["ready"]     or 0) for r in rows)
+    not_ready = sum(int(r["not_ready"] or 0) for r in rows)
+
+    return J({
+        "summary": {
+            "total":     total,
+            "ready":     ready,
+            "not_ready": not_ready,
+            "pct_ready": round(ready / total * 100, 2) if total else 0,
+        },
+        "by_area": [{
+            "area_name":  r["area_name"],
+            "total":      int(r["total"]     or 0),
+            "ready":      int(r["ready"]     or 0),
+            "not_ready":  int(r["not_ready"] or 0),
+            "pct_ready":  round(int(r["ready"] or 0) / int(r["total"] or 0) * 100, 2)
+                          if int(r["total"] or 0) else 0,
+        } for r in rows],
+    })
+
+
 @router.get("/mat-tracking-summary")
 def mat_tracking_summary(request: Request):
     """Ringkasan per revision (TA6-2027, PS042026) — total material per status."""

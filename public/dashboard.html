@@ -1482,18 +1482,32 @@ async function initP6Projects() {
   } catch(e) {}
 }
 
+let p4ActiveSubTab = 'material';
+
+function switchP4Tab(tab) {
+  p4ActiveSubTab = tab;
+  document.getElementById('p4-subtab-material').style.display = tab === 'material' ? '' : 'none';
+  document.getElementById('p4-subtab-jasa').style.display     = tab === 'jasa'     ? '' : 'none';
+  const mTab = document.getElementById('p4-stab-material');
+  const jTab = document.getElementById('p4-stab-jasa');
+  mTab.style.borderBottomColor = tab === 'material' ? '#3b82f6' : 'transparent';
+  mTab.style.color             = tab === 'material' ? '#3b82f6' : 'var(--text-sm)';
+  jTab.style.borderBottomColor = tab === 'jasa'     ? '#3b82f6' : 'transparent';
+  jTab.style.color             = tab === 'jasa'     ? '#3b82f6' : 'var(--text-sm)';
+}
+
 async function loadP4() {
   const proj = document.getElementById('p4-project-select').value;
-  document.getElementById('p4-empty').style.display       = proj ? 'none' : '';
-  document.getElementById('p4-eq-section').style.display  = proj ? '' : 'none';
-  document.getElementById('p4-mat-section').style.display = proj ? '' : 'none';
-  document.getElementById('p4-planning-section').style.display = proj ? '' : 'none';
-  document.getElementById('p4-jasa-section').style.display     = proj ? '' : 'none'; // ← tambah di sini
+  document.getElementById('p4-empty').style.display           = proj ? 'none' : '';
+  document.getElementById('p4-top-cards').style.display       = proj ? '' : 'none';
+  document.getElementById('p4-subtabs-container').style.display = proj ? '' : 'none';
+  document.getElementById('p4-eq-section').style.display      = proj ? '' : 'none';
+  document.getElementById('p4-mat-section').style.display     = proj ? '' : 'none';
+  document.getElementById('p4-monthly-section').style.display = proj ? '' : 'none';
 
   if (!proj) return;
 
   document.getElementById('p4-loading').style.display = '';
-  document.getElementById('p4-monthly-section').style.display = proj ? '' : 'none';
   try {
     const [eq, mat, mon] = await Promise.all([
       apiFetch('/api/dashboard/project-equipment?project_number=' + encodeURIComponent(proj)),
@@ -1504,7 +1518,8 @@ async function loadP4() {
     if (mat) renderP4Material(mat);
     if (mon) renderP4MonthlyChart(mon.monthly);
     loadP4PlanningJobdetail(proj);
-    loadP4JasaPlanning(proj); // ← tambah di sini
+    loadP4JasaPlanning(proj);
+    loadP4JasaReadiness(proj);
   } catch(e) {
     console.error('loadP4 error:', e);
   } finally {
@@ -1929,7 +1944,6 @@ function renderMaterialTablePaged(rows) {
 
 
 async function loadP4PlanningJobdetail(proj) {
-  document.getElementById('p4-planning-section').style.display = proj ? '' : 'none';
   if (!proj) return;
 
   try {
@@ -2521,7 +2535,6 @@ async function loadP6() {
 }
 
 async function loadP4JasaPlanning(proj) {
-  document.getElementById('p4-jasa-section').style.display = proj ? '' : 'none';
   if (!proj) return;
 
   try {
@@ -2580,6 +2593,58 @@ async function loadP4JasaPlanning(proj) {
     }).join('');
 
   } catch(e) { console.error('loadP4JasaPlanning:', e); }
+}
+
+async function loadP4JasaReadiness(proj) {
+  if (!proj) return;
+  try {
+    const d = await apiFetch('/api/dashboard/project-readiness-jasa?project_number=' + encodeURIComponent(proj));
+    if (!d) return;
+
+    document.getElementById('p4-jasa-ready-total').textContent = fmt(d.summary.total);
+
+    destroyChart('p4-donut-jasa-ready');
+    const ctx = document.getElementById('p4-donut-jasa-ready').getContext('2d');
+    charts['p4-donut-jasa-ready'] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Ready','Not Ready'],
+        datasets: [{ data: [d.summary.ready, d.summary.not_ready],
+                     backgroundColor: ['#16a34a','#cbd5e1'], borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: {
+        cutout: '72%',
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: c => ' ' + c.label + ': ' + fmt(c.raw) +
+            ' (' + pct(d.summary.total ? c.raw / d.summary.total * 100 : 0) + ')'
+        }}}
+      }
+    });
+
+    const totalPct = d.summary.total ? d.summary.ready / d.summary.total * 100 : 0;
+    let html = d.by_area.map(r => `
+      <tr>
+        <td style="font-weight:600">${r.area_name}</td>
+        <td style="text-align:right;color:var(--red)">${fmt(r.not_ready)}</td>
+        <td style="text-align:right;color:var(--green)">${fmt(r.ready)}</td>
+        <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
+        <td><div class="pct-bar">
+          <div class="pct-track"><div class="pct-fill green" style="width:${r.pct_ready}%"></div></div>
+          <div class="pct-num">${r.pct_ready.toFixed(1)}%</div>
+        </div></td>
+      </tr>`).join('');
+    html += `<tr style="background:#f8fafc;font-weight:700">
+      <td>Total</td>
+      <td style="text-align:right;color:var(--red)">${fmt(d.summary.not_ready)}</td>
+      <td style="text-align:right;color:var(--green)">${fmt(d.summary.ready)}</td>
+      <td style="text-align:right">${fmt(d.summary.total)}</td>
+      <td><div class="pct-bar">
+        <div class="pct-track"><div class="pct-fill green" style="width:${totalPct}%"></div></div>
+        <div class="pct-num">${totalPct.toFixed(1)}%</div>
+      </div></td>
+    </tr>`;
+    document.getElementById('p4-jasa-ready-tbody').innerHTML = html;
+  } catch(e) { console.error('loadP4JasaReadiness:', e); }
 }
 
 
@@ -2764,6 +2829,133 @@ function ddJasaReset() {
     </div>
   </div>
 
+  <!-- Planning Status cards — top, side-by-side -->
+  <div id="p4-top-cards" style="display:none;margin-bottom:20px">
+    <div class="grid-2">
+
+<!-- Planning Jobdetail card -->
+<div id="p4-planning-section" class="card">
+  <div class="card-title">Planning Status Jobdetail</div>
+  <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex-shrink:0;text-align:center">
+      <div style="position:relative;width:160px;height:160px;margin:0 auto 12px">
+        <canvas id="p4-donut-planning"></canvas>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+          <div id="p4-planning-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
+          <div style="font-size:10px;color:var(--text-sm);font-weight:600">Total JD</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;font-weight:600">
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#dc2626"></div> Not Planned</div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div> Not Complete</div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#16a34a"></div> Planning Complete</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jobdetail','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
+        <div id="p4-planning-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
+        <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jobdetail','others','Not Complete','#d97706')" title="Klik untuk lihat detail baris">
+        <div id="p4-planning-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
+        <div style="font-size:11px;color:#d97706;font-weight:600">Not Complete</div>
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jobdetail','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
+        <div id="p4-planning-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
+        <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:280px;max-height:200px;overflow-y:auto">
+      <table class="mini-table" style="font-size:11px">
+        <thead><tr>
+          <th>Area</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Not Planned</th>
+          <th style="text-align:right">Not Complete</th>
+          <th style="text-align:right">Complete</th>
+          <th>Progress</th>
+        </tr></thead>
+        <tbody id="p4-planning-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Planning Jasa card -->
+<div id="p4-jasa-section" class="card">
+  <div class="card-title">Planning Status Jasa</div>
+  <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex-shrink:0;text-align:center">
+      <div style="position:relative;width:160px;height:160px;margin:0 auto 12px">
+        <canvas id="p4-donut-jasa"></canvas>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+          <div id="p4-jasa-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
+          <div style="font-size:10px;color:var(--text-sm);font-weight:600">Total JD</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;font-weight:600">
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#dc2626"></div> Not Planned</div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div> Not Complete</div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:50%;background:#16a34a"></div> Planning Complete</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jasa','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
+        <div id="p4-jasa-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
+        <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jasa','others','Not Complete','#d97706')" title="Klik untuk lihat detail baris">
+        <div id="p4-jasa-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
+        <div style="font-size:11px;color:#d97706;font-weight:600">Not Complete</div>
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
+           onclick="openPlanRowsSheet('jasa','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
+        <div id="p4-jasa-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
+        <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:280px;max-height:200px;overflow-y:auto">
+      <table class="mini-table" style="font-size:11px">
+        <thead><tr>
+          <th>Area</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Not Planned</th>
+          <th style="text-align:right">Not Complete</th>
+          <th style="text-align:right">Complete</th>
+          <th>Progress</th>
+        </tr></thead>
+        <tbody id="p4-jasa-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+    </div><!-- /grid-2 -->
+  </div><!-- /p4-top-cards -->
+
+  <!-- Sub-tabs container -->
+  <div id="p4-subtabs-container" style="display:none">
+
+    <!-- Sub-tab nav -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px">
+      <div id="p4-stab-material" onclick="switchP4Tab('material')"
+           style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid #3b82f6;margin-bottom:-2px;color:#3b82f6">
+        Readiness Material
+      </div>
+      <div id="p4-stab-jasa" onclick="switchP4Tab('jasa')"
+           style="padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text-sm)">
+        Readiness Jasa
+      </div>
+    </div>
+
+    <!-- Readiness Material sub-tab -->
+    <div id="p4-subtab-material">
+
   <!-- Equipment section -->
   <div id="p4-eq-section" style="display:none">
     <div class="grid-3" style="margin-bottom:20px">
@@ -2866,146 +3058,6 @@ function ddJasaReset() {
 
 
 
-<!-- Planning Jobdetail Section -->
-<div id="p4-planning-section" style="display:none;margin-bottom:20px">
-  <div class="card">
-    <div class="card-title">Planning Status Jobdetail</div>
-    <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
-
-      <!-- Donut -->
-      <div style="flex-shrink:0;text-align:center">
-        <div style="position:relative;width:160px;height:160px;margin:0 auto 12px">
-          <canvas id="p4-donut-planning"></canvas>
-          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
-            <div id="p4-planning-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
-            <div style="font-size:10px;color:var(--text-sm);font-weight:600">Total JD</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;font-weight:600">
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#dc2626"></div> Not Planned
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div> Not Complete
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#16a34a"></div> Planning Complete
-          </div>
-        </div>
-      </div>
-
-      <!-- Summary cards -->
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jobdetail','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
-          <div id="p4-planning-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
-          <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
-        </div>
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jobdetail','others','Not Complete','#d97706')" title="Klik untuk lihat detail baris">
-          <div id="p4-planning-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
-          <div style="font-size:11px;color:#d97706;font-weight:600">Not Complete</div>
-        </div>
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jobdetail','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
-          <div id="p4-planning-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
-          <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
-        </div>
-      </div>
-
-      <!-- Table per area -->
-      <div style="flex:1;min-width:280px;max-height:200px;overflow-y:auto">
-        <table class="mini-table" style="font-size:11px">
-          <thead>
-            <tr>
-              <th>Area</th>
-              <th style="text-align:right">Total</th>
-              <th style="text-align:right">Not Planned</th>
-              <th style="text-align:right">Not Complete</th>
-              <th style="text-align:right">Complete</th>
-              <th>Progress</th>
-            </tr>
-          </thead>
-          <tbody id="p4-planning-tbody"></tbody>
-        </table>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-
-
-
-<!-- Planning Jasa Section -->
-<div id="p4-jasa-section" style="display:none;margin-bottom:20px">
-  <div class="card">
-    <div class="card-title">Planning Status Jasa</div>
-    <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
-
-      <!-- Donut -->
-      <div style="flex-shrink:0;text-align:center">
-        <div style="position:relative;width:160px;height:160px;margin:0 auto 12px">
-          <canvas id="p4-donut-jasa"></canvas>
-          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
-            <div id="p4-jasa-total" style="font-size:22px;font-weight:800;color:var(--text)">—</div>
-            <div style="font-size:10px;color:var(--text-sm);font-weight:600">Total JD</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;font-weight:600">
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#dc2626"></div> Not Planned
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div> Not Complete
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:10px;height:10px;border-radius:50%;background:#16a34a"></div> Planning Complete
-          </div>
-        </div>
-      </div>
-
-      <!-- Summary cards -->
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jasa','not_planned','Not Planned','#dc2626')" title="Klik untuk lihat detail baris">
-          <div id="p4-jasa-notplanned" style="font-size:24px;font-weight:800;color:#dc2626">—</div>
-          <div style="font-size:11px;color:#dc2626;font-weight:600">Not Planned</div>
-        </div>
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jasa','others','Not Complete','#d97706')" title="Klik untuk lihat detail baris">
-          <div id="p4-jasa-others" style="font-size:24px;font-weight:800;color:#d97706">—</div>
-          <div style="font-size:11px;color:#d97706;font-weight:600">Not Complete</div>
-        </div>
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center;cursor:pointer"
-             onclick="openPlanRowsSheet('jasa','complete','Planning Complete','#16a34a')" title="Klik untuk lihat detail baris">
-          <div id="p4-jasa-complete" style="font-size:24px;font-weight:800;color:#16a34a">—</div>
-          <div style="font-size:11px;color:#16a34a;font-weight:600">Planning Complete</div>
-        </div>
-      </div>
-
-      <!-- Table per area -->
-      <div style="flex:1;min-width:280px;max-height:200px;overflow-y:auto">
-        <table class="mini-table" style="font-size:11px">
-          <thead>
-            <tr>
-              <th>Area</th>
-              <th style="text-align:right">Total</th>
-              <th style="text-align:right">Not Planned</th>
-              <th style="text-align:right">Not Complete</th>
-              <th style="text-align:right">Complete</th>
-              <th>Progress</th>
-            </tr>
-          </thead>
-          <tbody id="p4-jasa-tbody"></tbody>
-        </table>
-      </div>
-
-    </div>
-  </div>
-</div>
-  
-
   <!-- Material section -->
   <div id="p4-mat-section" style="display:none">
     <div class="grid-2">
@@ -3055,6 +3107,45 @@ function ddJasaReset() {
       </div>
     </div>
   </div>
+
+    </div><!-- /p4-subtab-material -->
+
+    <!-- Readiness Jasa sub-tab -->
+    <div id="p4-subtab-jasa" style="display:none">
+      <div class="grid-3" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-title">Readiness Jasa</div>
+          <div class="donut-wrap">
+            <canvas id="p4-donut-jasa-ready"></canvas>
+            <div class="donut-center">
+              <div class="donut-num" id="p4-jasa-ready-total">—</div>
+              <div class="donut-sub">Total Jasa</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Ready</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#cbd5e1"></div> Not Ready</div>
+          </div>
+        </div>
+        <div class="card" style="grid-column:span 2">
+          <div class="card-title">Detail per Area</div>
+          <table class="mini-table">
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th style="text-align:right">Not Ready</th>
+                <th style="text-align:right">Ready</th>
+                <th style="text-align:right">Total</th>
+                <th>% Ready</th>
+              </tr>
+            </thead>
+            <tbody id="p4-jasa-ready-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div><!-- /p4-subtab-jasa -->
+
+  </div><!-- /p4-subtabs-container -->
 
   <!-- Empty state -->
   <div id="p4-empty" style="text-align:center;padding:60px;color:var(--text-sm)">
