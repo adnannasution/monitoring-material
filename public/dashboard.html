@@ -253,6 +253,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div class="page-tab active" onclick="switchPage('p4')">📊 Readiness by Project</div>
   <div class="page-tab" onclick="switchPage('p3')">🔍 Drill-down Readiness</div>
   <div class="page-tab" onclick="switchPage('p5')">📦 Material Tracking</div>
+  <div class="page-tab" onclick="switchPage('p6')">🔧 Readiness Jasa</div>
   <div class="page-tab" onclick="switchPage('p1')" style="display:none">📦 Readiness Equipment</div>
   <div class="page-tab" onclick="switchPage('p2')" style="display:none">🧾 Readiness Material</div>
 </div>
@@ -509,6 +510,7 @@ async function loadPlants() {
     const plants = await apiFetch('/api/dashboard/plants');
     if (!plants) return;
     const wrap = document.getElementById('ru-btns');
+    const p6sel = document.getElementById('p6-plant-select');
     plants.forEach(p => {
       const btn = document.createElement('div');
       btn.className = 'ru-btn';
@@ -516,6 +518,9 @@ async function loadPlants() {
       btn.dataset.code = p.code;
       btn.onclick = () => setPlant(p.code);
       wrap.appendChild(btn);
+      const opt = document.createElement('option');
+      opt.value = p.code; opt.textContent = p.name;
+      p6sel.appendChild(opt);
     });
   } catch(e) {}
 }
@@ -536,10 +541,10 @@ function reload() {
 }
 
 function switchPage(id) {
-  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p5','p1','p2'][i] === id));
+  document.querySelectorAll('.page-tab').forEach((t,i) => t.classList.toggle('active', ['p4','p3','p5','p6','p1','p2'][i] === id));
   document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
-  const hideRU = id === 'p3' || id === 'p4' || id === 'p5';
+  const hideRU = id === 'p3' || id === 'p4' || id === 'p5' || id === 'p6';
   const rl = document.getElementById('ru-filter-label');
   const rb = document.getElementById('ru-btns');
   const rd = document.getElementById('ru-filter-divider');
@@ -551,6 +556,7 @@ function switchPage(id) {
   else if (id === 'p2') loadP2();
   else if (id === 'p3') loadP3();
   else if (id === 'p5') loadP5();
+  else if (id === 'p6') loadP6();
   else loadP4();
 }
 
@@ -2377,6 +2383,92 @@ function exportP5Excel() {
   a.click();
 }
 
+// ── Readiness Jasa (P6) ───────────────────────────────────────
+async function loadP6() {
+  document.getElementById('p6-loading').style.display = '';
+  try {
+    const plant = document.getElementById('p6-plant-select').value;
+    const d = await apiFetch('/api/dashboard/readiness-jasa' + (plant ? '?plant=' + encodeURIComponent(plant) : ''));
+    if (!d) return;
+
+    const s = d.summary;
+    document.getElementById('p6-total').textContent      = fmt(s.total);
+    document.getElementById('p6-ready').textContent      = fmt(s.ready);
+    document.getElementById('p6-not-ready').textContent  = fmt(s.not_ready);
+    document.getElementById('p6-pct-ready').textContent  = s.total ? (s.ready / s.total * 100).toFixed(1) + '%' : '0%';
+    document.getElementById('p6-pct-not-ready').textContent = s.total ? (s.not_ready / s.total * 100).toFixed(1) + '%' : '0%';
+    document.getElementById('p6-pct-card').textContent   = s.pct_ready.toFixed(1) + '%';
+    document.getElementById('p6-donut-total').textContent = fmt(s.total);
+
+    // Donut
+    destroyChart('p6-donut');
+    charts['p6-donut'] = new Chart(document.getElementById('p6-donut').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Ready', 'Not Ready'],
+        datasets: [{ data: [s.ready, s.not_ready], backgroundColor: ['#16a34a', '#dc2626'], borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }]
+      },
+      options: {
+        cutout: '68%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.label}: ${fmt(c.raw)} (${s.total ? (c.raw/s.total*100).toFixed(1) : 0}%)` }}
+        }
+      }
+    });
+
+    // Bar per plant
+    destroyChart('p6-bar');
+    const rows = d.by_plant;
+    charts['p6-bar'] = new Chart(document.getElementById('p6-bar').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: rows.map(r => r.plant),
+        datasets: [
+          { label: 'Ready',     data: rows.map(r => r.ready),     backgroundColor: '#16a34acc', borderColor: '#16a34a', borderWidth: 2, borderRadius: 4, stack: 's' },
+          { label: 'Not Ready', data: rows.map(r => r.not_ready), backgroundColor: '#dc2626cc', borderColor: '#dc2626', borderWidth: 2, borderRadius: 4, stack: 's' },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
+          tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.raw)}` }}},
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => fmt(v), font: { size: 11 } } }
+        }
+      }
+    });
+
+    // Table
+    document.getElementById('p6-tbody').innerHTML = rows.map(r => {
+      const color = r.pct_ready === 100 ? '#16a34a' : r.pct_ready >= 50 ? '#f59e0b' : '#dc2626';
+      return `<tr>
+        <td>${r.plant}</td>
+        <td style="text-align:right;font-weight:700">${fmt(r.total)}</td>
+        <td style="text-align:right;color:#16a34a;font-weight:700">${fmt(r.ready)}</td>
+        <td style="text-align:right;color:#dc2626">${fmt(r.not_ready)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="flex:1;background:#e5e7eb;border-radius:99px;height:6px;overflow:hidden">
+              <div style="width:${r.pct_ready}%;height:100%;background:${color};border-radius:99px"></div>
+            </div>
+            <span style="font-size:10px;font-weight:700;color:${color}">${r.pct_ready.toFixed(1)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('') + `<tr style="font-weight:700;background:#f8fafc">
+      <td>Total</td>
+      <td style="text-align:right">${fmt(s.total)}</td>
+      <td style="text-align:right;color:#16a34a">${fmt(s.ready)}</td>
+      <td style="text-align:right;color:#dc2626">${fmt(s.not_ready)}</td>
+      <td><span style="font-size:11px;font-weight:700;color:${s.pct_ready >= 50 ? '#16a34a' : '#dc2626'}">${s.pct_ready.toFixed(1)}%</span></td>
+    </tr>`;
+
+  } catch(e) { console.error('loadP6:', e); }
+  finally { document.getElementById('p6-loading').style.display = 'none'; }
+}
+
 async function loadP4JasaPlanning(proj) {
   document.getElementById('p4-jasa-section').style.display = proj ? '' : 'none';
   if (!proj) return;
@@ -2890,6 +2982,103 @@ async function loadP4JasaPlanning(proj) {
     <div style="font-size:14px;font-weight:600;margin-bottom:4px">Material Tracking by Project</div>
     <div style="font-size:12px">Pilih Project untuk tracking status material · Hanya project terdaftar di joblist TAEX</div>
     <div style="margin-top:16px;font-size:11px;color:var(--text-sm)">↑ Overview semua project tampil di atas setelah halaman dimuat</div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══ PAGE 6: READINESS JASA ══ -->
+<div class="page-content" id="page-p6">
+<div class="content">
+
+  <!-- Filter plant -->
+  <div class="card" style="margin-bottom:12px;padding:12px 16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="filter-label">Pilih Plant:</span>
+      <select class="filter-select" id="p6-plant-select" onchange="loadP6()" style="min-width:200px;font-size:13px;padding:6px 12px">
+        <option value="">— Semua Plant —</option>
+      </select>
+      <span id="p6-loading" style="font-size:12px;color:var(--text-sm);display:none">⏳ Memuat...</span>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="p6-cards">
+    <div class="stat-card blue">
+      <div class="stat-card-val" id="p6-total">—</div>
+      <div class="stat-card-lbl">Total Jasa</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #16a34a">
+      <div class="stat-card-val" style="color:#16a34a" id="p6-ready">—</div>
+      <div class="stat-card-lbl">Ready (SP Terisi)</div>
+      <div class="stat-card-pct" style="color:#16a34a" id="p6-pct-ready">—</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #dc2626">
+      <div class="stat-card-val" style="color:#dc2626" id="p6-not-ready">—</div>
+      <div class="stat-card-lbl">Not Ready (SP Kosong)</div>
+      <div class="stat-card-pct" style="color:#dc2626" id="p6-pct-not-ready">—</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #3b82f6">
+      <div class="stat-card-val" style="color:#3b82f6" id="p6-pct-card">—</div>
+      <div class="stat-card-lbl">% Readiness</div>
+    </div>
+  </div>
+
+  <!-- Donut + Table -->
+  <div class="grid-2" style="margin-bottom:20px">
+    <!-- Donut -->
+    <div class="card">
+      <div class="card-title">Distribusi Readiness Jasa</div>
+      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+        <div class="donut-wrap" style="flex-shrink:0">
+          <canvas id="p6-donut"></canvas>
+          <div class="donut-center">
+            <div class="donut-num" id="p6-donut-total">—</div>
+            <div class="donut-sub">Total Jasa</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:12px;height:12px;border-radius:50%;background:#16a34a;flex-shrink:0"></div>
+            <span>Ready — SP Terisi</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:12px;height:12px;border-radius:50%;background:#dc2626;flex-shrink:0"></div>
+            <span>Not Ready — SP Kosong</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-sm)">
+        Sumber: <code>joblist_taex</code> · filter <code>is_jasa = 1</code> · Ready = kolom <code>sp</code> terisi
+      </div>
+    </div>
+
+    <!-- Bar chart per plant -->
+    <div class="card">
+      <div class="card-title">Readiness Jasa per Plant</div>
+      <div style="position:relative;height:260px">
+        <canvas id="p6-bar"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table per plant -->
+  <div class="card">
+    <div class="card-title">Detail per Plant</div>
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Plant</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Ready</th>
+          <th style="text-align:right">Not Ready</th>
+          <th>% Ready</th>
+        </tr>
+      </thead>
+      <tbody id="p6-tbody">
+        <tr><td colspan="5" class="loading"><div class="spin"></div> Memuat...</td></tr>
+      </tbody>
+    </table>
   </div>
 
 </div>
