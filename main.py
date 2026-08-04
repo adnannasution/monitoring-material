@@ -2370,7 +2370,7 @@ def get_tracking_summary(request: Request):
 # TRACKING COUNTS — angka untuk summary card di halaman tracking
 # ═══════════════════════════════════════════════════════════════
 @app.get("/api/tracking/counts")
-def get_tracking_counts(request: Request):
+def get_tracking_counts(request: Request, plant: str = ""):
     """
     Hitung semua angka card tracking dalam satu query:
     - total_material, total_order
@@ -2380,8 +2380,11 @@ def get_tracking_counts(request: Request):
     """
     check_api_key(request)
 
+    plant_cond  = "AND t.plant = %s" if plant else ""
+    plant_param = [plant] if plant else []
+
     # Query cepat — tidak butuh JOIN (index scan saja)
-    fast = query_one("""
+    fast = query_one(f"""
         SELECT
             COUNT(*)                                                AS total_material,
             COUNT(DISTINCT t."order")                               AS total_order,
@@ -2389,7 +2392,8 @@ def get_tracking_counts(request: Request):
             COUNT(*) FILTER (WHERE t.po IS NOT NULL AND t.po <> '') AS sudah_po,
             COUNT(*) FILTER (WHERE t.pr IS NULL OR t.pr = '')       AS belum_pr
         FROM taex_reservasi t
-    """)
+        WHERE TRUE {plant_cond}
+    """, plant_param)
 
     # Query lambat — butuh JOIN ke sap_po (dipisah agar tidak blok load awal)
     slow = query_one(f"""
@@ -2411,8 +2415,8 @@ def get_tracking_counts(request: Request):
             WHERE po.po = t.po AND po.material = t.material
             ORDER BY po.id LIMIT 1
         ) po ON TRUE
-        WHERE t.po IS NOT NULL AND t.po <> ''
-    """)
+        WHERE t.po IS NOT NULL AND t.po <> '' {plant_cond}
+    """, plant_param)
 
     return jsonify({
         "total_material": int(fast["total_material"] or 0),
