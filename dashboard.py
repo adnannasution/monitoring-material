@@ -485,7 +485,7 @@ def drilldown_jasa(
     if level not in VALID:
         raise HTTPException(400, f"level harus salah satu dari: {VALID}")
 
-    conds  = ["is_jasa = 1", "COALESCE(is_deleted, 0) = 0"]
+    conds  = ["is_jasa = 1"]
     params = []
     if project_id:
         conds.append("project_number = %s"); params.append(project_id)
@@ -1234,7 +1234,6 @@ def project_jobdetail_planning(request: Request, project_number: str = ""):
                 THEN 1 ELSE 0 END)                                         AS others
         FROM joblist_taex
         WHERE project_number = %s
-          AND COALESCE(is_deleted, 0) = 0
     """, [project_number])
 
     # Per area breakdown
@@ -1252,7 +1251,6 @@ def project_jobdetail_planning(request: Request, project_number: str = ""):
                 THEN 1 ELSE 0 END)               AS not_planned
         FROM joblist_taex
         WHERE project_number = %s
-          AND COALESCE(is_deleted, 0) = 0
         GROUP BY area_name
         ORDER BY planning_complete DESC
     """, [project_number])
@@ -1288,7 +1286,6 @@ def project_jasa_planning(request: Request, project_number: str = ""):
         FROM joblist_taex
         WHERE project_number = %s
           AND is_jasa = 1
-          AND COALESCE(is_deleted, 0) = 0
     """, [project_number])
 
     area_rows = query("""
@@ -1302,7 +1299,6 @@ def project_jasa_planning(request: Request, project_number: str = ""):
         FROM joblist_taex
         WHERE project_number = %s
           AND is_jasa = 1
-          AND COALESCE(is_deleted, 0) = 0
         GROUP BY area_name
         ORDER BY planning_complete DESC
     """, [project_number])
@@ -1330,7 +1326,7 @@ def project_planning_rows(request: Request, project_number: str = "",
     if not project_number:
         return J({"total": 0, "rows": []})
 
-    where = ['project_number = %s', 'COALESCE(is_deleted, 0) = 0']
+    where = ['project_number = %s']
     params = [project_number]
 
     if kind == "jasa":
