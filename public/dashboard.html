@@ -570,21 +570,41 @@ const COLORS_PROGNOSA = ['#3b82f6','#22c55e','#f59e0b','#f97316','#dc2626','#8b5
 
 // Warna berdasarkan nama status (konsisten di semua chart)
 const STATUS_COLORS = {
-  'PR-Proses Pengadaan':        '#f59e0b',
-  'PO-Material Belum Tiba':     '#3b82f6',
-  'Belum PR':                   '#dc2626',
-  'PO-Material Telah Tiba':     '#16a34a',
-  'Stock On Hand':              '#16a34a',
-  'PO-DT Sebelum MD':           '#16a34a',
-  'PO-DT MD':                   '#3b82f6',
-  'PO-DT Melebihi MD':          '#f59e0b',
-  'PR-Prognosa DT sebelum MD':  '#3b82f6',
-  'PR-Prognosa DT Melebihi MD': '#f59e0b',
-  'Create PR':                  '#dc2626',
+  'PR-Proses Pengadaan':          '#f59e0b',
+  'PO-Material Belum Tiba':       '#3b82f6',
+  'Belum PR':                     '#dc2626',
+  'PO-Material Telah Tiba':       '#16a34a',
+  'Stock On Hand':                '#15803d',
+  'PO-DT Sebelum MD':             '#3b82f6',
+  'PO-DT MD':                     '#3b82f6',
+  'PO-DT Melebihi MD':            '#f59e0b',
+  'PR-Prognosa DT sebelum MD':    '#f59e0b',
+  'PR-Prognosa DT Melebihi MD':   '#f59e0b',
+  'Create PR':                    '#dc2626',
+  // display names used in p4 after mapping
+  'Dipenuhi dari Stock':          '#15803d',
+  'Reservasi Belum PR':           '#dc2626',
+  'Reservasi Sudah PR Belum PO':  '#f59e0b',
+  'Tunggu On Site':               '#3b82f6',
+  'Sudah On Site':                '#16a34a',
 };
 function getStatusColor(status, idx) {
   return STATUS_COLORS[status] || ['#3b82f6','#f59e0b','#dc2626','#16a34a','#6b7280'][idx % 5];
 }
+
+// Mapping nama status p4 → label ramah untuk legend & tabel
+const P4_DISPLAY = {
+  'Stock On Hand':               'Dipenuhi dari Stock',
+  'Belum PR':                    'Reservasi Belum PR',
+  'PR-Proses Pengadaan':        'Reservasi Sudah PR Belum PO',
+  'PO-Material Belum Tiba':     'Tunggu On Site',
+  'PO-Material Telah Tiba':     'Sudah On Site',
+  'Create PR':                   'Reservasi Belum PR',
+  'PR-Prognosa DT Melebihi MD': 'Reservasi Sudah PR Belum PO',
+  'PR-Prognosa DT sebelum MD':  'Reservasi Sudah PR Belum PO',
+  'PO-DT Sebelum MD':           'Tunggu On Site',
+  'PO-DT Melebihi MD':          'Tunggu On Site',
+};
 
 // ══════════════════════════════════════════════════════════════
 // PAGE 1
@@ -758,7 +778,7 @@ function renderDonutMat(key, data, colors, canvasId, totalId, legendId, tbodyId,
   charts[canvasId] = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: data.items.map(i => i.status),
+      labels: data.items.map(i => i.displayStatus || i.status),
       datasets: [{ data: data.items.map(i => i.jumlah), backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }]
     },
     options: {
@@ -1538,10 +1558,15 @@ function renderP4Equipment(d) {
 }
 
 function renderP4Material(d) {
-  const CA = d.actual.items.map((item, i)   => getStatusColor(item.status, i));
-  const CP = d.prognosa.items.map((item, i) => getStatusColor(item.status, i));
-  _renderP4Donut('p4-donut-actual',   'p4-donut-actual-total',   'p4-legend-actual',   'p4-tbody-actual',   d.actual,   CA);
-  _renderP4Donut('p4-donut-prognosa', 'p4-donut-prognosa-total', 'p4-legend-prognosa', 'p4-tbody-prognosa', d.prognosa, CP);
+  const mapDisp = items => items.map(item => ({
+    ...item, displayStatus: P4_DISPLAY[item.status] || item.status
+  }));
+  const actualD   = { ...d.actual,   items: mapDisp(d.actual.items)   };
+  const prognosad = { ...d.prognosa, items: mapDisp(d.prognosa.items) };
+  const CA = actualD.items.map((item, i)   => getStatusColor(item.displayStatus, i));
+  const CP = prognosad.items.map((item, i) => getStatusColor(item.displayStatus, i));
+  _renderP4Donut('p4-donut-actual',   'p4-donut-actual-total',   'p4-legend-actual',   'p4-tbody-actual',   actualD,   CA);
+  _renderP4Donut('p4-donut-prognosa', 'p4-donut-prognosa-total', 'p4-legend-prognosa', 'p4-tbody-prognosa', prognosad, CP);
 }
 
 function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
@@ -1556,7 +1581,7 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   charts[canvasId] = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: data.items.map(i => i.status),
+      labels: data.items.map(i => i.displayStatus || i.status),
       datasets: [{ data: data.items.map(i => i.jumlah),
                    backgroundColor: [...usedColors], borderWidth: 0, hoverOffset: 6 }]
     },
@@ -1578,14 +1603,14 @@ function _renderP4Donut(canvasId, totalId, legendId, tbodyId, data, colors) {
   document.getElementById(legendId).innerHTML = data.items.map((item, i) =>
     `<div class="legend-item" style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
       onclick="_donutToggle(this.dataset.cid,+this.dataset.idx)">` +
-    `<div class="legend-dot" style="background:${usedColors[i%usedColors.length]}"></div>${item.status}</div>`
+    `<div class="legend-dot" style="background:${usedColors[i%usedColors.length]}"></div>${item.displayStatus || item.status}</div>`
   ).join('');
 
   // Tabel row — clickable
   document.getElementById(tbodyId).innerHTML = data.items.map((item, i) =>
     `<tr style="cursor:pointer" data-cid="${canvasId}" data-idx="${i}"
       onclick="_donutToggle(this.dataset.cid,+this.dataset.idx)">` +
-    `<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${usedColors[i%usedColors.length]};margin-right:6px"></span>${item.status}</td>` +
+    `<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${usedColors[i%usedColors.length]};margin-right:6px"></span>${item.displayStatus || item.status}</td>` +
     `<td style="text-align:right;font-weight:700">${fmt(item.jumlah)}</td>` +
     `<td style="text-align:right">${item.pct.toFixed(2)}%</td></tr>`
   ).join('') +
