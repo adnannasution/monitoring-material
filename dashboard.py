@@ -1487,22 +1487,22 @@ def mat_tracking_detail(
 # Readiness Jasa — dari joblist_taex, is_jasa=1, ready = sp terisi
 # ═══════════════════════════════════════════════════════════════
 @router.get("/readiness-jasa")
-def readiness_jasa(request: Request, plant: str = ""):
+def readiness_jasa(request: Request, project_number: str = ""):
     _require_admin(request)
-    plant_cond = "AND plant = %s" if plant else ""
-    params = [plant] if plant else []
+    proj_cond = "AND project_number = %s" if project_number else ""
+    params = [project_number] if project_number else []
 
     rows = query(f"""
         SELECT
-            COALESCE(plant, '(Tanpa Plant)') AS plant,
-            COUNT(*)                          AS total,
+            COALESCE(project_number, '(Tanpa Project)') AS project_number,
+            COUNT(*)                                     AS total,
             SUM(CASE WHEN sp IS NOT NULL AND sp != '' THEN 1 ELSE 0 END) AS ready,
             SUM(CASE WHEN sp IS NULL  OR  sp = ''     THEN 1 ELSE 0 END) AS not_ready
         FROM joblist_taex
         WHERE is_jasa = 1
-          {plant_cond}
-        GROUP BY plant
-        ORDER BY plant
+          {proj_cond}
+        GROUP BY project_number
+        ORDER BY project_number
     """, params)
 
     total     = sum(int(r["total"]     or 0) for r in rows)
@@ -1516,8 +1516,8 @@ def readiness_jasa(request: Request, plant: str = ""):
             "not_ready": not_ready,
             "pct_ready": round(ready / total * 100, 2) if total else 0,
         },
-        "by_plant": [{
-            "plant":     r["plant"],
+        "by_project": [{
+            "project_number": r["project_number"],
             "total":     int(r["total"]     or 0),
             "ready":     int(r["ready"]     or 0),
             "not_ready": int(r["not_ready"] or 0),
