@@ -471,6 +471,78 @@ def drilldown(
 
 
 # ═══════════════════════════════════════════════════════════════
+# DRILLDOWN JASA
+# ═══════════════════════════════════════════════════════════════
+@router.get("/drilldown-jasa")
+def drilldown_jasa(
+    request: Request,
+    level:      str = "project",
+    project_id: str = "",
+    area_id:    str = "",
+):
+    _require_admin(request)
+    VALID = ["project", "area", "item"]
+    if level not in VALID:
+        raise HTTPException(400, f"level harus salah satu dari: {VALID}")
+
+    conds  = ["is_jasa = 1", "COALESCE(is_deleted, 0) = 0"]
+    params = []
+    if project_id:
+        conds.append("project_number = %s"); params.append(project_id)
+    if area_id:
+        conds.append("COALESCE(area_name, '(Tanpa Area)') = %s"); params.append(area_id)
+    where = " AND ".join(conds)
+
+    ready_expr = "CASE WHEN sp IS NOT NULL AND sp != '' THEN 1 ELSE 0 END"
+
+    if level == "project":
+        rows = query(f"""
+            SELECT
+                COALESCE(project_number, '(Tanpa Project)') AS id,
+                COALESCE(project_number, '(Tanpa Project)') AS name,
+                '' AS description,
+                COUNT(*)              AS total_jasa,
+                SUM({ready_expr})     AS ready_jasa,
+                ROUND(SUM({ready_expr}) * 100.0 / NULLIF(COUNT(*), 0), 1) AS pct_ready
+            FROM joblist_taex WHERE {where}
+            GROUP BY project_number ORDER BY pct_ready DESC, project_number
+        """, params)
+    elif level == "area":
+        rows = query(f"""
+            SELECT
+                COALESCE(area_name, '(Tanpa Area)') AS id,
+                COALESCE(area_name, '(Tanpa Area)') AS name,
+                '' AS description,
+                COUNT(*)              AS total_jasa,
+                SUM({ready_expr})     AS ready_jasa,
+                ROUND(SUM({ready_expr}) * 100.0 / NULLIF(COUNT(*), 0), 1) AS pct_ready
+            FROM joblist_taex WHERE {where}
+            GROUP BY area_name ORDER BY pct_ready DESC, area_name
+        """, params)
+    else:  # item
+        rows = query(f"""
+            SELECT
+                COALESCE(no_document, no_joblist, id::text)                  AS id,
+                COALESCE(joblist_detail_description, joblist_description, no_document) AS name,
+                COALESCE(no_document, no_joblist, '')                        AS description,
+                1               AS total_jasa,
+                {ready_expr}    AS ready_jasa,
+                ({ready_expr})  * 100.0 AS pct_ready
+            FROM joblist_taex WHERE {where}
+            ORDER BY name
+        """, params)
+
+    return J({"level": level, "data": [{
+        "id":          str(r["id"]          or ""),
+        "name":        str(r["name"]        or "—"),
+        "description": str(r["description"] or ""),
+        "total_jasa":  int(r["total_jasa"]  or 0),
+        "ready_jasa":  int(r["ready_jasa"]  or 0),
+        "pct_ready":   float(r["pct_ready"] or 0),
+    } for r in rows if r["id"]]})
+
+
+# ═══════════════════════════════════════════════════════════════
 # DETAIL PANEL — system_status & planner_group DIHAPUS
 # karena kolom tersebut tidak ada di tabel joblist_taex
 # ═══════════════════════════════════════════════════════════════
