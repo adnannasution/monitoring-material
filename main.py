@@ -949,6 +949,13 @@ async def append_taex(request: Request):
     cnt = bulk_replace_taex(df, mode="append")
     return {"ok": True, "count": cnt}
 
+@app.delete("/api/taex")
+def delete_all_taex(request: Request):
+    check_api_key(request)
+    user = require_admin(request)
+    execute("DELETE FROM taex_reservasi")
+    return {"ok": True}
+
 @app.delete("/api/taex/{row_id}")
 def delete_taex(row_id: int, request: Request):
     check_api_key(request)
