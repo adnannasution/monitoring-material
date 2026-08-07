@@ -953,6 +953,7 @@ input.row-check { cursor: pointer; accent-color: #1a56db; width: 14px; height: 1
     <button class="btn btn-purple" onclick="syncWithTaex()" style="margin-left:8px">🔄 Get from TA-ex</button>
     <button class="btn btn-warning" onclick="openKertasKerjaModal()" style="margin-left:8px">📝 Buat Kertas Kerja</button>
     <button class="btn btn-export" onclick="exportPrismaExcel()" style="margin-left:4px">📤 Export Excel</button>
+    <button class="btn admin-only" onclick="deleteAllPrisma()" style="background:#dc2626;color:white;margin-left:4px">🗑 Hapus Semua</button>
     <button class="col-toggle-btn" onclick="toggleColPanel('prisma')" style="margin-left:4px">⚙ Kolom</button>
     <span class="filter-right" id="pr-rowCount"></span>
   </div>
@@ -9324,6 +9325,31 @@ async function deleteAllTaex() {
     document.getElementById('taex-tbody').innerHTML =
       '<tr class="loading-row"><td colspan="30">Upload file Excel untuk memulai</td></tr>';
     toast('Semua data TA-ex Reservasi berhasil dihapus', 'ok');
+  } catch(e) {
+    toast('Gagal hapus: ' + e.message, 'err');
+  }
+}
+
+async function deleteAllPrisma() {
+  const ok = await showConfirm({
+    title: 'Hapus Semua Data PRISMA Reservasi',
+    msg: 'Hapus <b>seluruh data</b> PRISMA Reservasi dari database?',
+    sub: 'Tindakan ini tidak dapat dibatalkan. Semua ' + (prServerMeta.total||state._totalPrisma||0).toLocaleString() + ' baris akan dihapus permanen.',
+    icon: '🗑', okLabel: 'Ya, Hapus Semua', okColor: '#dc2626', headerColor: '#dc2626',
+  });
+  if (!ok) return;
+  try {
+    await apiFetch('/prisma', { method: 'DELETE' });
+    prFiltered = [];
+    prServerMeta = { total:0, totalPages:1, page:1, limit:100 };
+    state.prismaReservasiData = [];
+    state._totalPrisma = 0;
+    resetPg('prisma-reservasi');
+    document.getElementById('badge-prisma').textContent = 0;
+    document.getElementById('pr-rowCount').textContent = '';
+    document.getElementById('pr-tbody').innerHTML =
+      '<tr class="loading-row"><td colspan="23">Upload file Excel untuk memulai</td></tr>';
+    toast('Semua data PRISMA Reservasi berhasil dihapus', 'ok');
   } catch(e) {
     toast('Gagal hapus: ' + e.message, 'err');
   }

@@ -966,6 +966,13 @@ def delete_taex(row_id: int, request: Request):
 # ═══════════════════════════════════════════════════════════════
 # PRISMA
 # ═══════════════════════════════════════════════════════════════
+@app.delete("/api/prisma")
+def delete_all_prisma(request: Request):
+    check_api_key(request)
+    user = require_admin(request)
+    execute("DELETE FROM prisma_reservasi")
+    return {"ok": True}
+
 @app.get("/api/prisma")
 def get_prisma(request: Request):
     check_api_key(request)
